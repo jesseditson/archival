@@ -1,0 +1,14 @@
+name: 'The Simplest CMS'
+description: 'Packages a website built with The Simplest CMS'
+author: 'Jesse Ditson'
+branding:
+  color: green
+  icon: box
+runs:
+  using: 'composite'
+  steps:
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: 3.0
+        bundler-cache: true
+    - run: ${{ github.action_path }}/build.rb
