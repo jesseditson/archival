@@ -1,6 +1,6 @@
 require 'liquid'
-require 'open-uri'
-require 'pathname'
+
+Liquid::Template.error_mode = :strict
 
 class Build
     def initialize(*args)
