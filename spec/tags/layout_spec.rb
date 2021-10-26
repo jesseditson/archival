@@ -67,7 +67,7 @@ and this is below it
 END_THEME
 """
 
-RSpec.describe Layout, "#render" do
+RSpec.describe Layout do
     before(:all) do
         @cwd = Dir.mktmpdir
         Dir.chdir @cwd
@@ -80,12 +80,13 @@ RSpec.describe Layout, "#render" do
         }
         Liquid::Template.error_mode = :strict
         Liquid::Template.register_tag("layout", Layout)
+        Layout.reset_cache()
         Liquid::Template.file_system = Liquid::LocalFileSystem.new(@cwd)
     end
 
     after(:all) do
         # puts "tmpdir: #{@cwd}"
-        FileUtils.rm_r(@cwd)
+        # FileUtils.rm_r(@cwd)
     end
 
     context "loading layouts" do

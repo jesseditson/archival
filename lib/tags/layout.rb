@@ -9,6 +9,10 @@ class Layout < Liquid::Tag
 
   attr_reader :layout_name_expr, :attributes
 
+  def self.reset_cache()
+    @@layout_cache = {}
+  end
+
   def initialize(tag_name, markup, tokens)
       super
 
@@ -78,9 +82,8 @@ class Layout < Liquid::Tag
         @attributes.each do |key, value|
           context[key] = context.evaluate(value)
         end
-        context['page_content'] = @page_content.map { |content|
-          Liquid::Template.parse(content).render(context)
-        }
+        rendered_page = Liquid::Template.parse(@page_content.join).render(context)
+        context['page_content'] = rendered_page
         layout.render_to_output_buffer(context, output)
       end
     ensure

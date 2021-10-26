@@ -1,0 +1,16 @@
+{% layout 'theme', name: "foo" %}
+
+Test Content
+
+<ol>
+{% for item in objects.item %}
+    <li>
+        <h3>Name: {{ item.name }}</h3>
+        {% if item.description %}
+        <p>
+            Description: {{ item.description }}
+        </p>
+        {% endif %}
+    </li>
+{% endfor %}
+</ol>
