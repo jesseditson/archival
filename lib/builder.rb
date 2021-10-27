@@ -1,17 +1,18 @@
 require 'liquid'
 require 'tomlrb'
-require 'tags/layout'
+require_relative 'tags/layout'
 
 Liquid::Template.error_mode = :strict
 Liquid::Template.register_tag("layout", Layout)
 
-class Build
+class Builder
     attr_reader :page_templates
 
     def initialize(config, *args)
         @pages_dir = config["pages"] || "pages"
         @objects_dir = config["objects"] || "objects"
         @root = config["root"] || Dir.pwd
+        @build_dir = config["build_dir"] || File.join(@root, "dist")
 
         @file_system = Liquid::LocalFileSystem.new(@root, "%s.liquid")
         @variables = {}
@@ -78,5 +79,21 @@ class Build
     def render(page)
         template = @page_templates[page]
         template.render(@variables)
+    end
+
+    def write_all()
+        if !File.exist? @build_dir
+            Dir.mkdir(@build_dir)
+        end
+        for template in @page_templates.keys
+            out_dir = File.join(@build_dir, File.dirname(template))
+            if !File.exist? out_dir
+                Dir.mkdir(out_dir)
+            end
+            out_path = File.join(@build_dir, template + ".html")
+            File.open(out_path, "w+") { |file|
+                file.write(render(template))
+            }
+        end
     end
 end
