@@ -1,0 +1,19 @@
+{
+  "name": "archival",
+  "version": "0.0.0",
+  "description": "An incredibly simple CMS for durable websites",
+  "bin": "build.rb",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jesseditson/archival.git"
+  },
+  "author": "Jesse Ditson <jesse.ditson@gmail.com>",
+  "license": "Unlicense",
+  "bugs": {
+    "url": "https://github.com/jesseditson/archival/issues"
+  },
+  "homepage": "https://github.com/jesseditson/archival#readme"
+}
