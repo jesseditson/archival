@@ -1,6 +1,6 @@
-# the-simplest-cms
+# Archival
 
-[![Rspec tests](https://github.com/jesseditson/the-simplest-cms/actions/workflows/rspec.yml/badge.svg)](https://github.com/jesseditson/the-simplest-cms/actions/workflows/rspec.yml)
+[![Rspec tests](https://github.com/jesseditson/archival/actions/workflows/rspec.yml/badge.svg)](https://github.com/jesseditson/archival/actions/workflows/rspec.yml)
 
 https://jesseditson.com/the-simplest-cms-part-1
 
