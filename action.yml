@@ -11,4 +11,4 @@ runs:
       with:
         ruby-version: 3.0
         bundler-cache: true
-    - run: ${{ github.action_path }}/build.rb
+    - run: bin/archival build
