@@ -27,8 +27,10 @@ class RakeTasks
     build_dir = Dir.pwd
 
     task 'build' do
-      builder = Archival::Builder.new('root' => build_dir)
-      builder.write_all
+      Archival::Logger.benchmark('built') do
+        builder = Archival::Builder.new('root' => build_dir)
+        builder.write_all
+      end
     end
 
     task 'run' do
