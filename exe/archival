@@ -1,0 +1,30 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'archival'
+
+VALID_COMMANDS = %w[
+  build
+  run
+].freeze
+
+command = ARGV[0]
+
+unless VALID_COMMANDS.include? command
+  raise StandardError,
+        "Invalid command #{command}"
+end
+
+build_dir = Dir.pwd
+
+archival = Archival.new('root' => build_dir)
+
+case command
+when 'build'
+  archival.builder.write_all
+when 'run'
+  archival.listen
+  sleep
+else
+  # print help
+end

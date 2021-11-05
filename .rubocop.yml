@@ -1,0 +1,36 @@
+AllCops:
+  NewCops: enable
+  Exclude:
+    - bin/bundle
+
+# Customize rules
+Layout/LineLength:
+  Max: 80
+  Exclude:
+    - archival.gemspec
+    - bin/*
+    - spec/spec_helper.rb
+
+Metrics/MethodLength:
+  Max: 35
+
+Metrics/AbcSize:
+   Enabled: false
+
+Metrics/BlockLength:
+  Max: 150
+
+Metrics/ClassLength:
+  Max: 150
+
+Lint/ImplicitStringConcatenation:
+  Exclude:
+    - spec/tags/layout_spec.rb
+
+# A nice idea, but some code is self-documenting and cops aren't human.
+Style/Documentation:
+  Enabled: false
+
+# In Layout we use class vars as a global cache.
+Style/ClassVars:
+  Enabled: false

@@ -1,8 +1,10 @@
-source 'https://rubygems.org'
-gem 'liquid'
-gem 'tomlrb'
+# frozen_string_literal: true
 
-group :test do
-    gem 'rspec'
-    gem 'rspec-snapshot'
-end
+source 'https://rubygems.org'
+
+# Specify your gem's dependencies in archival.gemspec
+gemspec
+
+gem 'rake', '~> 13.0'
+gem 'rspec', '~> 3.0'
+gem 'rubocop', '~> 1.22', require: false
