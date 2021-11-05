@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |s|
   s.name = 'archival'
-  s.version     = '0.0.0'
+  s.version     = '0.0.1'
   s.summary     = 'An incredibly simple CMS for durable websites'
   s.description = 'https://jesseditson.com/the-simplest-cms-part-1'
   s.authors     = ['Jesse Ditson']
