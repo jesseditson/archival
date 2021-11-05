@@ -7,7 +7,7 @@ RSpec.describe Archival do
     it 'getting a listener works' do
       root = File.join(FIXTURES_DIR,
                        'simple_website')
-      listener = Archival.listen(root)
+      listener = Archival.listen('root' => root)
       expect(listener).to be_a(Listen::Listener)
     end
   end

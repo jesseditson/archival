@@ -5,5 +5,6 @@ module Archival
 end
 
 require 'archival/version'
+require 'archival/config'
 require 'archival/builder'
 require 'archival/listen'

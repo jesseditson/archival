@@ -12,19 +12,13 @@ module Archival
     attr_reader :page_templates
 
     def initialize(config, *_args)
-      refresh_config(config)
+      @config = Config.new(config)
+      refresh_config
     end
 
-    def refresh_config(config)
-      @pages_dir = config['pages'] || 'pages'
-      @objects_dir = config['objects'] || 'objects'
-      @root = config['root'] || Dir.pwd
-      @build_dir = config['build_dir'] || File.join(
-        @root, 'dist'
-      )
-
+    def refresh_config
       @file_system = Liquid::LocalFileSystem.new(
-        @root, '%s.liquid'
+        @config.root, '%s.liquid'
       )
       @variables = {}
       @object_types = {}
@@ -32,18 +26,21 @@ module Archival
 
       Liquid::Template.file_system = @file_system
 
-      objects_definition_file = File.join(@root,
+      objects_definition_file = File.join(@config.root,
                                           'objects.toml')
       if File.file? objects_definition_file
         @object_types = read_toml(objects_definition_file)
       end
 
-      update_pages(File.join(@root, @pages_dir))
-      update_objects(File.join(@root,
-                               @objects_dir))
+      update_pages
+      update_objects
     end
 
-    def update_pages(dir, prefix = nil)
+    def update_pages
+      do_update_pages(File.join(@config.root, @config.pages_dir))
+    end
+
+    def do_update_pages(dir, prefix = nil)
       add_prefix = lambda { |entry|
         prefix ? File.join(prefix, entry) : entry
       }
@@ -60,7 +57,7 @@ module Archival
             page_name = File.basename(entry,
                                       '.liquid')
             template_file = File.join(
-              @pages_dir,
+              @config.pages_dir,
               add_prefix.call(page_name)
             )
             content = @file_system.read_template_file(template_file)
@@ -71,7 +68,12 @@ module Archival
       end
     end
 
-    def update_objects(dir)
+    def update_objects
+      do_update_objects(File.join(@config.root,
+                                  @config.objects_dir))
+    end
+
+    def do_update_objects(dir)
       objects = {}
       @object_types.each do |name, _definition|
         objects[name] = []
@@ -109,12 +111,12 @@ module Archival
     end
 
     def write_all
-      Dir.mkdir(@build_dir) unless File.exist? @build_dir
+      Dir.mkdir(@config.build_dir) unless File.exist? @config.build_dir
       @page_templates.each_key do |template|
-        out_dir = File.join(@build_dir,
+        out_dir = File.join(@config.build_dir,
                             File.dirname(template))
         Dir.mkdir(out_dir) unless File.exist? out_dir
-        out_path = File.join(@build_dir,
+        out_path = File.join(@config.build_dir,
                              "#{template}.html")
         File.open(out_path, 'w+') do |file|
           file.write(render(template))

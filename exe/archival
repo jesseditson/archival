@@ -10,21 +10,31 @@ VALID_COMMANDS = %w[
 
 command = ARGV[0]
 
-unless VALID_COMMANDS.include? command
+unless !command || VALID_COMMANDS.include?(command)
   raise StandardError,
         "Invalid command #{command}"
 end
 
 build_dir = Dir.pwd
 
-archival = Archival.new('root' => build_dir)
-
 case command
 when 'build'
-  archival.builder.write_all
+  builder = Archival::Builder('root' => build_dir)
+  builder.write_all
 when 'run'
-  archival.listen
-  sleep
+  Archival.listen(build_dir)
+  begin
+    sleep
+  rescue Interrupt
+    # Don't print a stack when a user interrupts, as this is the right way to
+    # stop the development server.
+    puts ''
+  end
 else
   # print help
+  puts 'archival [command]'
+  puts ''
+  puts 'Commands:'
+  puts '      build     Builds the current directory as an archival website.'
+  puts '      run       Runs the current directory in development mode, recompiling when files change.'
 end
