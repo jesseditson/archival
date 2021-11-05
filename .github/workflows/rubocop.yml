@@ -15,5 +15,5 @@ jobs:
       with:
         ruby-version: ${{ matrix.ruby-version }}
         bundler-cache: true # runs 'bundle install' and caches installed gems automatically
-    - name: RuboCop
-      uses: andrewmcodes/rubocop-linter-action@v3.3.0
+    - name: Rubocop
+      run: rake lint
