@@ -36,8 +36,8 @@ class RakeTasks
       begin
         sleep
       rescue Interrupt
-        # Don't print a stack when a user interrupts, as this is the right way to
-        # stop the development server.
+        # Don't print a stack when a user interrupts, as this is the right way
+        # to stop the development server.
         puts ''
       end
     end

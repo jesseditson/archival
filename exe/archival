@@ -36,5 +36,6 @@ else
   puts ''
   puts 'Commands:'
   puts '      build     Builds the current directory as an archival website.'
-  puts '      run       Runs the current directory in development mode, recompiling when files change.'
+  puts '      run       Runs the current directory in development mode, '
+  + 'recompiling when files change.'
 end
