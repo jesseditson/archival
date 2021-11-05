@@ -14,7 +14,7 @@ PARTIAL_CONTENT
 {{ name }}
 "
 basic_content = "
-THEME_FILE
+THEME_FILE 
 
 END_THEME
 "
@@ -29,7 +29,7 @@ THEME_FILE foo_var
 END_THEME
 "
 wrapped_content = "
-THEME_FILE
+THEME_FILE 
  page content
 END_THEME
 "
