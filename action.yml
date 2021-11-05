@@ -12,3 +12,4 @@ runs:
         ruby-version: 3.0
         bundler-cache: true
     - run: bin/archival build
+      shell: bash

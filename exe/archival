@@ -19,7 +19,7 @@ build_dir = Dir.pwd
 
 case command
 when 'build'
-  builder = Archival::Builder('root' => build_dir)
+  builder = Archival::Builder.new('root' => build_dir)
   builder.write_all
 when 'run'
   Archival.listen(build_dir)
