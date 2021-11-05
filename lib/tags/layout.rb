@@ -36,7 +36,7 @@ class Layout < Liquid::Tag
     end
   end
 
-  def get_layout_path(layout_name)
+  def layout_path
     base_path = Dir.pwd
     layout_dir = 'layout'
     layout_path = File.join(base_path, layout_dir)
@@ -45,12 +45,8 @@ class Layout < Liquid::Tag
     layout_path
   end
 
-  def load_layout(context)
-    layout_name = context.evaluate(@layout_name_expr)
-    raise 'Bad layout name argument' unless layout_name
+  def load_layout(layout_name)
     return @@layout_cache[layout_name] if @@layout_cache[layout_name]
-
-    layout_path = get_layout_path(layout_name)
 
     found_layout = nil
     Dir.entries(layout_path).each do |f|
@@ -60,6 +56,7 @@ class Layout < Liquid::Tag
 
       next unless File.basename(f, '.*') == layout_name
       raise "More than one layout named #{layout_name} found." if found_layout
+
       found_layout = File.join(layout_path, f)
     end
     raise "No layouts named #{layout_name} found." if found_layout.nil?
@@ -80,7 +77,9 @@ class Layout < Liquid::Tag
 
   def render_to_output_buffer(context, output)
     layout_name = context.evaluate(@layout_name_expr)
-    layout = load_layout(context)
+    raise 'Bad layout name argument' unless layout_name
+
+    layout = load_layout(layout_name)
 
     old_template_name = context.template_name
     old_partial       = context.partial

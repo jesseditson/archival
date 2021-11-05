@@ -3,13 +3,18 @@ AllCops:
   Exclude:
     - bin/bundle
 
-# Customize rules
 Layout/LineLength:
   Max: 80
   Exclude:
     - archival.gemspec
     - bin/*
     - spec/spec_helper.rb
+
+Layout/TrailingWhitespace:
+  Exclude:
+    # This file has a lot of templates and includes
+    # intentional trailing whitespace.
+    - spec/tags/layout_spec.rb
 
 Metrics/MethodLength:
   Max: 35
