@@ -8,7 +8,7 @@ RSpec.describe Archival do
       root = File.join(FIXTURES_DIR,
                        'simple_website')
       listener = Archival.listen(root)
-      expect(listener).to exist?
+      expect(listener).to be_a(Listen::Listener)
     end
   end
 end
