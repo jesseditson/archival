@@ -4,8 +4,8 @@ require 'listen'
 require 'pathname'
 
 module Archival
-  def listen(config)
-    @config = Config.new(config, dev_mode: true)
+  def listen(config = {})
+    @config = Config.new(config.merge(dev_mode: true))
     builder = Builder.new(@config)
     Logger.benchmark('built') do
       builder.write_all

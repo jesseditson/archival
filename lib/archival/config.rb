@@ -5,7 +5,7 @@ module Archival
     attr_reader :pages_dir, :objects_dir, :root, :build_dir, :helper_port,
                 :dev_mode
 
-    def initialize(config, dev_mode: false)
+    def initialize(config = {})
       @pages_dir = config['pages'] || 'pages'
       @objects_dir = config['objects'] || 'objects'
       @root = config['root'] || Dir.pwd
@@ -13,7 +13,7 @@ module Archival
         @root, 'dist'
       )
       @helper_port = config['helper_port'] || 2701
-      @dev_mode = dev_mode
+      @dev_mode = config[:dev_mode] || false
     end
   end
 end

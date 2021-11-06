@@ -28,21 +28,14 @@ class RakeTasks
 
     task 'build' do
       Archival::Logger.benchmark('built') do
-        config = Config.new('root' => build_dir)
+        config = Archival::Config.new('root' => build_dir)
         builder = Archival::Builder.new(config)
         builder.write_all
       end
     end
 
     task 'run' do
-      Archival.listen(build_dir)
-      begin
-        sleep
-      rescue Interrupt
-        # Don't print a stack when a user interrupts, as this is the right way
-        # to stop the development server.
-        puts ''
-      end
+      Archival.listen('root' => build_dir)
     end
 
     RakeTasks.instance = self

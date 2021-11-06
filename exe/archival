@@ -20,12 +20,12 @@ build_dir = Dir.pwd
 case command
 when 'build'
   Archival::Logger.benchmark('built') do
-    config = Config.new('root' => build_dir)
+    config = Archival::Config.new('root' => build_dir)
     builder = Archival::Builder.new(config)
     builder.write_all
   end
 when 'run'
-  Archival.listen(build_dir)
+  Archival.listen('root' => build_dir)
 else
   # print help
   puts 'archival [command]'

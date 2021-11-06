@@ -25,7 +25,7 @@ RSpec.describe Archival::Builder do
       root = File.join(FIXTURES_DIR,
                        'simple_website')
       Layout.reset_cache
-      config = Config.new('root' => build_dir)
+      config = Archival::Config.new('root' => root)
       @builder = Archival::Builder.new(config)
       Dir.chdir root
     end
