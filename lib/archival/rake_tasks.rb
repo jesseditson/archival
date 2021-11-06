@@ -28,7 +28,8 @@ class RakeTasks
 
     task 'build' do
       Archival::Logger.benchmark('built') do
-        builder = Archival::Builder.new('root' => build_dir)
+        config = Config.new('root' => build_dir)
+        builder = Archival::Builder.new(config)
         builder.write_all
       end
     end

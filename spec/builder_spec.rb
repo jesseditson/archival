@@ -25,7 +25,8 @@ RSpec.describe Archival::Builder do
       root = File.join(FIXTURES_DIR,
                        'simple_website')
       Layout.reset_cache
-      @builder = Archival::Builder.new('root' => root)
+      config = Config.new('root' => build_dir)
+      @builder = Archival::Builder.new(config)
       Dir.chdir root
     end
     it 'has the right pages' do

@@ -12,7 +12,7 @@ module Archival
     attr_reader :page_templates
 
     def initialize(config, *_args)
-      @config = Config.new(config)
+      @config = config
       refresh_config
     end
 
@@ -61,6 +61,7 @@ module Archival
               add_prefix.call(page_name)
             )
             content = @file_system.read_template_file(template_file)
+            content += dev_mode_content if @config.dev_mode
             @page_templates[add_prefix.call(page_name)] =
               Liquid::Template.parse(content)
           end
@@ -122,6 +123,12 @@ module Archival
           file.write(render(template))
         end
       end
+    end
+
+    private
+
+    def dev_mode_content
+      "<script src=\"http://localhost:#{@config.helper_port}/js/archival-helper.js\" type=\"application/javascript\"></script>"
     end
   end
 end

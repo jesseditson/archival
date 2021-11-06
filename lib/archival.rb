@@ -7,5 +7,6 @@ end
 require 'archival/version'
 require 'archival/logger'
 require 'archival/config'
+require 'archival/helper_server'
 require 'archival/builder'
 require 'archival/listen'
