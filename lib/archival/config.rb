@@ -5,7 +5,7 @@ module Archival
     attr_reader :pages_dir, :objects_dir, :root, :build_dir, :helper_port,
                 :dev_mode
 
-    def initialize(config, dev_mode = false)
+    def initialize(config, dev_mode: false)
       @pages_dir = config['pages'] || 'pages'
       @objects_dir = config['objects'] || 'objects'
       @root = config['root'] || Dir.pwd

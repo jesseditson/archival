@@ -128,7 +128,7 @@ module Archival
     private
 
     def dev_mode_content
-      "<script src=\"http://localhost:#{@config.helper_port}/js/archival-helper.js\" type=\"application/javascript\"></script>"
+      "<script src=\"http://localhost:#{@config.helper_port}/js/archival-helper.js\" type=\"application/javascript\"></script>" # rubocop:disable Metrics/LineLength
     end
   end
 end

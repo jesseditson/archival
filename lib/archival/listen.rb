@@ -5,7 +5,7 @@ require 'pathname'
 
 module Archival
   def listen(config)
-    @config = Config.new(config, true)
+    @config = Config.new(config, dev_mode: true)
     builder = Builder.new(@config)
     Logger.benchmark('built') do
       builder.write_all

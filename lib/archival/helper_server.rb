@@ -138,7 +138,7 @@ module Archival
     end
 
     def serve_static(client, path)
-      buffer = open(File.join(@helper_dir, path)).read
+      buffer = File.open(File.join(@helper_dir, path)).read
       buffer.sub! '$PORT', @port.to_s
       client.print buffer
     end
