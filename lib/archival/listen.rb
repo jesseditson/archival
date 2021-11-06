@@ -13,23 +13,23 @@ module Archival
     listen_paths = %r{(#{@config.pages_dir}|#{@config.objects_dir})/}
     listener = Listen.to(@config.root,
                          only: listen_paths) do |modified, added, removed|
-      update_pages = false
-      update_objects = false
+      updated_pages = []
+      updated_objects = []
       (modified + added + removed).each do |file|
         case change_type(file, builder)
         when :pages
-          update_pages = true
+          updated_pages << file
         when :objects
-          update_objects = true
+          updated_objects << file
         end
       end
-      if update_pages || update_objects
-        rebuild(builder, update_objects, update_pages)
-        puts @server.socket
+      if updated_pages.length || updated_objects.length
+        rebuild(builder, updated_objects, updated_pages)
+        @server.refresh_client
       end
     end
     listener.start
-    @server = serve_helpers
+    serve_helpers
   end
 
   module_function :listen
@@ -55,18 +55,17 @@ module Archival
       :none
     end
 
-    def rebuild(builder, update_objects, update_pages)
+    def rebuild(builder, updated_objects, updated_pages)
       Logger.benchmark('rebuilt') do
-        builder.update_objects if update_objects
-        builder.update_pages if update_pages
+        builder.update_objects if updated_objects.length
+        builder.update_pages if updated_pages.length
         builder.write_all
       end
     end
 
     def serve_helpers
-      server = HelperServer.new(@config.helper_port)
-      server.start
-      server
+      @server = HelperServer.new(@config.helper_port, @config.build_dir)
+      @server.start
     end
   end
 end

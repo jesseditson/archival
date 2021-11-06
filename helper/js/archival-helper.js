@@ -4,40 +4,88 @@
  * source has changed.
  */
 
-window.onload = () => {
-    connectSocket($PORT);
-};
+(function () {
+  const remotePort = $PORT;
+  const CONNECTING_COLOR = "#bd270d";
+  const CONNECTED_COLOR = "#19bd0d";
+  const CHECK_INTERVAL = 500;
+  const DISCONNECTED_INTERVAL = 1000;
+  const connectionDot = document.createElement("div");
+  connectionDot.style = `position: absolute; z-index: 9999; bottom: 10px; right: 10px; background-color: ${CONNECTING_COLOR}; width: 15px; height: 15px; border-radius: 50%; opacity: 0.8;`;
+  connectionDot.setAttribute("title", "Archival Dev Server: Connecting");
+  connectionDot.addEventListener(
+    "mouseenter",
+    () => (connectionDot.style.opacity = 0.2)
+  );
+  connectionDot.addEventListener(
+    "mouseleave",
+    () => (connectionDot.style.opacity = 0.8)
+  );
 
-function connectSocket(remotePort) {
-    console.log("connecting...")
-  navigator.tcpPermission
-    .requestPermission({ remoteAddress: "localhost", remotePort })
-    .then(() => {
-        console.log("connected.")
-      // Permission was granted
-      // Create a new TCP client socket and connect to remote host
-      const mySocket = new TCPSocket("localhost", remotePort);
-      console.log(mySocket)
+  let lastContact = -1;
+  let isConnecting = false;
+  let connection;
 
-      mySocket.readable
-        .getReader()
-        .read()
-        .then(({ value, done }) => {
-          if (!done) {
-            // Response received, log it:
-            console.log("Data received from server:" + value);
-          }
+  function connectionLoop() {
+    connection.send(`page:${window.location.pathname}`);
+    if (Date.now() - lastContact > DISCONNECTED_INTERVAL) {
+      setConnected(false);
+      connectSocket();
+    }
+    setTimeout(connectionLoop, CHECK_INTERVAL);
+  }
 
-          // Close the TCP connection
-          mySocket.close();
-        });
-      // Send data to server
-      mySocket.writeable.write("Hello World").then(
-        () => {
-          // Data sent sucessfully, wait for response
-          console.log("Data has been sent to server");
-        },
-        (e) => console.error("Sending error: ", e)
-      );
-    });
-}
+  function setConnected(connected) {
+    connectionDot.style.backgroundColor = connected
+      ? CONNECTED_COLOR
+      : CONNECTING_COLOR;
+    connectionDot.setAttribute(
+      "title",
+      `Archival Dev Server: ${connected ? "Connected" : "Disconnected"}`
+    );
+  }
+
+  window.onload = () => {
+    connectSocket(true);
+  };
+
+  function connectSocket(init) {
+    if (isConnecting) {
+      return;
+    }
+    isConnecting = true;
+    console.log(
+      `${init ? "connecting" : "reconnecting"} to archival dev server...`
+    );
+    document.body.appendChild(connectionDot);
+    connection = new WebSocket(`ws://localhost:${remotePort}`);
+    connection.onerror = () => {
+      isConnecting = false;
+    };
+
+    connection.onopen = () => {
+      isConnecting = false;
+      connection.send("connected");
+      if (init) {
+        connectionLoop();
+      }
+    };
+    connection.onmessage = (event) => {
+      lastContact = Date.now();
+      switch (event.data) {
+        case "ready":
+          console.log("connected to archival dev server.");
+          break;
+        case "ok":
+          setConnected(true);
+          break;
+        case "refresh":
+          window.location.reload();
+          break;
+        default:
+          console.log(`receieved unexpected message ${event.data}`);
+          break;
+      }
+    };
+  }
+})();
