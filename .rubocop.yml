@@ -1,14 +1,17 @@
+inherit_mode:
+    merge:
+      - Exclude
+
 AllCops:
   NewCops: enable
   SuggestExtensions: false
   Exclude:
-    - bin/bundle
+    - bin/*
 
 Layout/LineLength:
   Max: 80
   Exclude:
     - archival.gemspec
-    - bin/*
     - spec/spec_helper.rb
 
 Layout/TrailingWhitespace:
@@ -28,6 +31,12 @@ Metrics/BlockLength:
 
 Metrics/ClassLength:
   Max: 150
+
+Metrics/CyclomaticComplexity:
+  Max: 10
+
+Metrics/PerceivedComplexity:
+  Max: 10
 
 Lint/ImplicitStringConcatenation:
   Exclude:

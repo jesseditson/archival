@@ -19,19 +19,13 @@ build_dir = Dir.pwd
 
 case command
 when 'build'
-  Archival::Logger.benchmark("built") do
-    builder = Archival::Builder.new('root' => build_dir)
+  Archival::Logger.benchmark('built') do
+    config = Archival::Config.new('root' => build_dir)
+    builder = Archival::Builder.new(config)
     builder.write_all
   end
 when 'run'
-  Archival.listen(build_dir)
-  begin
-    sleep
-  rescue Interrupt
-    # Don't print a stack when a user interrupts, as this is the right way to
-    # stop the development server.
-    puts ''
-  end
+  Archival.listen('root' => build_dir)
 else
   # print help
   puts 'archival [command]'

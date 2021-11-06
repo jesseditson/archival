@@ -10,3 +10,4 @@ RuboCop::RakeTask.new
 
 task default: :spec
 task lint: :rubocop
+task 'lint:fix': 'rubocop:auto_correct'
