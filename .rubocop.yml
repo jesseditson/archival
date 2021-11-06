@@ -1,9 +1,12 @@
+inherit_mode:
+    merge:
+      - Exclude
+
 AllCops:
   NewCops: enable
   SuggestExtensions: false
   Exclude:
     - bin/bundle
-    - vendor/bundle/**/*
 
 Layout/LineLength:
   Max: 80
