@@ -3,6 +3,7 @@
 require 'liquid'
 require 'tomlrb'
 require 'tags/layout'
+require 'redcarpet'
 
 Liquid::Template.error_mode = :strict
 Liquid::Template.register_tag('layout', Layout)
@@ -13,23 +14,29 @@ module Archival
 
     def initialize(config, *_args)
       @config = config
+      @markdown = Redcarpet::Markdown.new(
+        Redcarpet::Render::HTML.new(prettify: true,
+                                    hard_wrap: true), no_intra_emphasis: true, fenced_code_blocks: true, autolink: true, strikethrough: true, underline: true
+      )
       refresh_config
     end
 
     def refresh_config
       @file_system = Liquid::LocalFileSystem.new(
-        @config.root, '%s.liquid'
+        File.join(@config.root, @config.pages_dir), '%s.liquid'
       )
       @variables = {}
       @object_types = {}
       @page_templates = {}
 
-      Liquid::Template.file_system = @file_system
+      Liquid::Template.file_system = Liquid::LocalFileSystem.new(
+        File.join(@config.root, @config.pages_dir), '_%s.liquid'
+      )
 
       objects_definition_file = File.join(@config.root,
                                           'objects.toml')
       if File.file? objects_definition_file
-        @object_types = read_toml(objects_definition_file)
+        @object_types = Tomlrb.load_file(objects_definition_file)
       end
 
       update_pages
@@ -61,10 +68,7 @@ module Archival
           if entry.end_with?('.liquid') && !(entry.start_with? '_')
             page_name = File.basename(entry,
                                       '.liquid')
-            template_file = File.join(
-              @config.pages_dir,
-              add_prefix.call(page_name)
-            )
+            template_file = add_prefix.call(page_name)
             content = @file_system.read_template_file(template_file)
             content += dev_mode_content if @config.dev_mode
             @page_templates[add_prefix.call(page_name)] =
@@ -81,30 +85,48 @@ module Archival
 
     def do_update_objects(dir)
       objects = {}
-      @object_types.each do |name, _definition|
-        objects[name] = []
+      @object_types.each do |name, definition|
+        objects[name] = {}
         obj_dir = File.join(dir, name)
         if File.directory? obj_dir
           Dir.foreach(obj_dir) do |file|
             if file.end_with? '.toml'
-              object = read_toml(File.join(
-                                   obj_dir, file
-                                 ))
+              object = Tomlrb.load_file(File.join(
+                                          obj_dir, file
+                                        ))
               object[:name] =
                 File.basename(file, '.toml')
-              objects[name].push object
+              objects[name][object[:name]] = parse_object(object, definition)
             end
           end
         end
-        objects[name] = objects[name].sort do |a, b|
-          (a['order'] || a[:name]).to_s <=> (b['order'] || b[:name]).to_s
-        end
+        objects[name] = sort_objects(objects[name])
       end
       @variables['objects'] = objects
     end
 
-    def read_toml(file_path)
-      Tomlrb.load_file(file_path)
+    def sort_objects(objects)
+      # Since objects are hashes but we'd like them to be iterable based on
+      # arbitrary "order" keys, and in ruby hashes enumerate in insert order,
+      # we just need to re-insert in the correct order.
+      sorted_keys = objects.sort_by do |name, obj|
+        obj['order'].to_s || name
+      end
+      sorted_objects = {}
+      sorted_keys.each do |d|
+        sorted_objects[d[0]] = d[1]
+      end
+      sorted_objects
+    end
+
+    def parse_object(object, definition)
+      definition.each do |name, type|
+        case type
+        when 'markdown'
+          object[name] = @markdown.render(object[name]) if object[name]
+        end
+      end
+      object
     end
 
     def set_var(name, value)
