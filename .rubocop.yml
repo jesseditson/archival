@@ -34,9 +34,15 @@ Metrics/ClassLength:
 
 Metrics/CyclomaticComplexity:
   Max: 10
+  Exclude:
+    # This file does a lot of defaulting. It's easy to read.
+    - lib/archival/config.rb
 
 Metrics/PerceivedComplexity:
   Max: 10
+  Exclude:
+    # This file does a lot of defaulting. It's easy to read.
+    - lib/archival/config.rb
 
 Lint/ImplicitStringConcatenation:
   Exclude:

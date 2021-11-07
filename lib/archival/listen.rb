@@ -57,7 +57,7 @@ module Archival
       @config.assets_dirs.each do |dir|
         return :assets if child?(File.join(@config.root, dir), file)
       end
-      return :assets if child?(File.join(@config.root, "layout"), file)
+      return :assets if child?(File.join(@config.root, 'layout'), file)
       return :assets if ['manifest.toml',
                          'objects.toml'].include? File.basename(file)
 

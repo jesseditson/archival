@@ -128,6 +128,13 @@ module Archival
           file.write(render(template))
         end
       end
+      return if @config.dev_mode
+
+      # in production, also copy all assets to the dist folder.
+      @config.assets_dirs.each do |asset_dir|
+        FileUtils.copy_entry File.join(@config.root, asset_dir),
+                             File.join(@config.build_dir, asset_dir)
+      end
     end
 
     private
