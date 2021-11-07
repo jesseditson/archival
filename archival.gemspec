@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |s|
   s.name = 'archival'
-  s.version     = '0.0.4'
+  s.version     = '0.0.5'
   s.summary     = 'An incredibly simple CMS for durable websites'
   s.description = 'https://jesseditson.com/the-simplest-cms-part-1'
   s.authors     = ['Jesse Ditson']
@@ -24,6 +24,6 @@ Gem::Specification.new do |s|
 
   s.add_dependency 'liquid', '~> 5.1.0'
   s.add_dependency 'listen', '~> 3.7.0'
-  s.add_dependency 'tomlrb', '~> 2.0.1'
   s.add_dependency 'redcarpet', '~> 3.5.1'
+  s.add_dependency 'tomlrb', '~> 2.0.1'
 end

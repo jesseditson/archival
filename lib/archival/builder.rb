@@ -16,7 +16,11 @@ module Archival
       @config = config
       @markdown = Redcarpet::Markdown.new(
         Redcarpet::Render::HTML.new(prettify: true,
-                                    hard_wrap: true), no_intra_emphasis: true, fenced_code_blocks: true, autolink: true, strikethrough: true, underline: true
+                                    hard_wrap: true), no_intra_emphasis: true,
+                                                      fenced_code_blocks: true,
+                                                      autolink: true,
+                                                      strikethrough: true,
+                                                      underline: true
       )
       refresh_config
     end
