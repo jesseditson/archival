@@ -36,6 +36,11 @@ module Archival
       update_objects
     end
 
+    def full_rebuild
+      Layout.reset_cache
+      refresh_config
+    end
+
     def update_pages
       do_update_pages(File.join(@config.root, @config.pages_dir))
     end
@@ -128,7 +133,7 @@ module Archival
     private
 
     def dev_mode_content
-      "<script src=\"http://localhost:#{@config.helper_port}/js/archival-helper.js\" type=\"application/javascript\"></script>" # rubocop:disable Metrics/LineLength
+      "<script src=\"http://localhost:#{@config.helper_port}/js/archival-helper.js\" type=\"application/javascript\"></script>" # rubocop:disable Layout/LineLength
     end
   end
 end

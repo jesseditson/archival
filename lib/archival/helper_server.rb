@@ -129,10 +129,12 @@ module Archival
       end
       #   warn "Unmasked the data: #{unmasked_data.inspect}"
 
-      unmasked_data.pack('C*').force_encoding('utf-8')
+      unmasked_data.to_s.pack('C*').force_encoding('utf-8')
     end
 
     def ws_sendmessage(message)
+      return unless @socket
+
       output = [0b10000001, message.size, message]
       @socket.write output.pack("CCA#{message.size}")
     end

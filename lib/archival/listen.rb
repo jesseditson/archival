@@ -10,23 +10,24 @@ module Archival
     Logger.benchmark('built') do
       builder.write_all
     end
-    listen_paths = %r{(#{@config.pages_dir}|#{@config.objects_dir})/}
+    ignore = %r{/dist/}
     listener = Listen.to(@config.root,
-                         only: listen_paths) do |modified, added, removed|
+                         ignore: ignore) do |modified, added, removed|
       updated_pages = []
       updated_objects = []
+      updated_assets = []
       (modified + added + removed).each do |file|
-        case change_type(file, builder)
+        case change_type(file)
         when :pages
           updated_pages << file
         when :objects
           updated_objects << file
+        when :assets
+          updated_assets << file
         end
       end
-      if updated_pages.length || updated_objects.length
-        rebuild(builder, updated_objects, updated_pages)
-        @server.refresh_client
-      end
+      @server.refresh_client if rebuild?(builder, updated_objects,
+                                         updated_pages, updated_assets)
     end
     listener.start
     serve_helpers
@@ -44,7 +45,7 @@ module Archival
       false
     end
 
-    def change_type(file, _builder)
+    def change_type(file)
       # a page was modified, rebuild the pages.
       return :pages if child?(File.join(@config.root, @config.pages_dir),
                               file)
@@ -52,15 +53,29 @@ module Archival
       return :objects if child?(File.join(@config.root, @config.objects_dir),
                                 file)
 
+      # layout and other assets. For now, this is everything.
+      @config.assets_dirs.each do |dir|
+        return :assets if child?(File.join(@config.root, dir), file)
+      end
+      return :assets if child?(File.join(@config.root, "layout"), file)
+      return :assets if ['manifest.toml',
+                         'objects.toml'].include? File.basename(file)
+
       :none
     end
 
-    def rebuild(builder, updated_objects, updated_pages)
+    def rebuild?(builder, updated_objects, updated_pages, updated_assets)
+      if updated_pages.empty? && updated_objects.empty? && updated_assets.empty?
+        return false
+      end
+
       Logger.benchmark('rebuilt') do
         builder.update_objects if updated_objects.length
         builder.update_pages if updated_pages.length
+        builder.full_rebuild if updated_assets.length
         builder.write_all
       end
+      true
     end
 
     def serve_helpers
