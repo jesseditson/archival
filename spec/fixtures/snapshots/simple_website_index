@@ -18,9 +18,9 @@ Test Content
         <h3>Name: this is an item</h3>
         
         <p>
-            Description: ### Test Markdown
+            Description: <h3>Test Markdown</h3>
 
-This contains some simple _formatting_
+<p>This contains some simple <u>formatting</u></p>
 
         </p>
         

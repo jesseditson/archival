@@ -9,6 +9,9 @@ Liquid::Template.error_mode = :strict
 Liquid::Template.register_tag('layout', Layout)
 
 module Archival
+  class DuplicateKeyError < StandardError
+  end
+
   class Builder
     attr_reader :page_templates
 
@@ -110,14 +113,16 @@ module Archival
     end
 
     def sort_objects(objects)
-      # Since objects are hashes but we'd like them to be iterable based on
-      # arbitrary "order" keys, and in ruby hashes enumerate in insert order,
-      # we just need to re-insert in the correct order.
-      sorted_keys = objects.sort_by do |name, obj|
-        obj['order'].to_s || name
+      # Sort by either 'order' key or object name, depending on what is
+      # available.
+      sorted_by_keys = objects.sort_by do |name, obj|
+        obj.key?('order') ? obj['order'].to_s : name
       end
-      sorted_objects = {}
-      sorted_keys.each do |d|
+      sorted_objects = Archival::TemplateArray.new
+      sorted_by_keys.each do |d|
+        raise DuplicateKeyError if sorted_objects.key?(d[0])
+
+        sorted_objects.push(d[1])
         sorted_objects[d[0]] = d[1]
       end
       sorted_objects

@@ -5,6 +5,7 @@ module Archival
 end
 
 require 'archival/version'
+require 'archival/template_array'
 require 'archival/logger'
 require 'archival/config'
 require 'archival/helper_server'
