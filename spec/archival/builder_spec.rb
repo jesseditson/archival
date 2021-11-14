@@ -76,10 +76,10 @@ RSpec.describe Archival::Builder do
                         'dynamic_pages')
       Layout.reset_cache
       config = Archival::Config.new('root' => @root)
-      builder = Archival::Builder.new(config)
+      @builder = Archival::Builder.new(config)
       Dir.chdir @root
       FileUtils.rm_rf(File.join(@root, 'dist'))
-      builder.write_all
+      @builder.write_all
     end
     it 'renders one page per item' do
       posts_dir = File.join(@root, 'dist', 'post')
@@ -90,6 +90,11 @@ RSpec.describe Archival::Builder do
     it 'does not render the template' do
       template_path = File.join(@root, 'dist', 'post.html')
       expect(File.exist?(template_path)).to be(false)
+    end
+    it 'adds a path to the dynamic objects' do
+      first_post = @builder.objects['post'][0]
+      expect(first_post.key?('path')).to be(true)
+      expect(first_post['path']).to eq('post/another-post.html')
     end
     it 'has the correct content' do
       post_file = File.join(@root, 'dist', 'post', 'another-post.html')

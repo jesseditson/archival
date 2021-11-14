@@ -123,6 +123,12 @@ module Archival
         end
         objects[name] = sort_objects(objects[name])
       end
+      @dynamic_pages.each do |page|
+        objects[page].each do |obj|
+          objects[page][obj[:name]]['path'] =
+            File.join(page, "#{obj[:name]}.html")
+        end
+      end
       @variables['objects'] = objects
     end
 
@@ -156,6 +162,10 @@ module Archival
       @variables[name] = value
     end
 
+    def objects
+      @variables['objects']
+    end
+
     def render(page)
       template = @page_templates[page]
       template.render(@variables)
@@ -184,7 +194,6 @@ module Archival
         objects = @variables['objects'][page]
         objects.each do |obj|
           out_path = File.join(out_dir, "#{obj[:name]}.html")
-          obj['path'] = out_path
           File.open(out_path, 'w+') do |file|
             file.write(render_dynamic(page, obj))
           end
