@@ -35,6 +35,8 @@ module Archival
       @variables = {}
       @object_types = {}
       @page_templates = {}
+      @dynamic_pages = Set.new
+      @dynamic_templates = {}
 
       Liquid::Template.file_system = Liquid::LocalFileSystem.new(
         File.join(@config.root, @config.pages_dir), '_%s.liquid'
@@ -46,8 +48,8 @@ module Archival
         @object_types = Tomlrb.load_file(objects_definition_file)
       end
 
-      update_pages
       update_objects
+      update_pages
     end
 
     def full_rebuild
@@ -57,6 +59,16 @@ module Archival
 
     def update_pages
       do_update_pages(File.join(@config.root, @config.pages_dir))
+    end
+
+    def dynamic?(file)
+      @dynamic_pages.include? File.basename(file, '.liquid')
+    end
+
+    def template_for_page(template_file)
+      content = @file_system.read_template_file(template_file)
+      content += dev_mode_content if @config.dev_mode
+      Liquid::Template.parse(content)
     end
 
     def do_update_pages(dir, prefix = nil)
@@ -72,14 +84,13 @@ module Archival
                          add_prefix(entry))
           end
         elsif File.file? File.join(dir, entry)
-          if entry.end_with?('.liquid') && !(entry.start_with? '_')
-            page_name = File.basename(entry,
-                                      '.liquid')
-            template_file = add_prefix.call(page_name)
-            content = @file_system.read_template_file(template_file)
-            content += dev_mode_content if @config.dev_mode
-            @page_templates[add_prefix.call(page_name)] =
-              Liquid::Template.parse(content)
+          page_name = File.basename(entry, '.liquid')
+          template_file = add_prefix.call(page_name)
+          if dynamic? entry
+            @dynamic_templates[template_file] = template_for_page(template_file)
+          elsif entry.end_with?('.liquid') && !(entry.start_with? '_')
+            @page_templates[template_file] =
+              template_for_page(template_file)
           end
         end
       end
@@ -104,6 +115,9 @@ module Archival
               object[:name] =
                 File.basename(file, '.toml')
               objects[name][object[:name]] = parse_object(object, definition)
+              if definition.key? 'template'
+                @dynamic_pages << definition['template']
+              end
             end
           end
         end
@@ -147,16 +161,33 @@ module Archival
       template.render(@variables)
     end
 
+    def render_dynamic(page, obj)
+      template = @dynamic_templates[page]
+      template.render(@variables.merge({ page => obj }))
+    end
+
     def write_all
       Dir.mkdir(@config.build_dir) unless File.exist? @config.build_dir
       @page_templates.each_key do |template|
         out_dir = File.join(@config.build_dir,
                             File.dirname(template))
         Dir.mkdir(out_dir) unless File.exist? out_dir
-        out_path = File.join(@config.build_dir,
+        out_path = File.join(out_dir,
                              "#{template}.html")
         File.open(out_path, 'w+') do |file|
           file.write(render(template))
+        end
+      end
+      @dynamic_pages.each do |page|
+        out_dir = File.join(@config.build_dir, page)
+        Dir.mkdir(out_dir) unless File.exist? out_dir
+        objects = @variables['objects'][page]
+        objects.each do |obj|
+          out_path = File.join(out_dir, "#{obj[:name]}.html")
+          obj['path'] = out_path
+          File.open(out_path, 'w+') do |file|
+            file.write(render_dynamic(page, obj))
+          end
         end
       end
       return if @config.dev_mode
