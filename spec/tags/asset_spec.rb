@@ -21,8 +21,8 @@ RSpec.describe Asset do
       content = Liquid::Template.parse("{% asset '../foo/bar.thing' %}")
       out = content.render
       expect(out).to eq(
-        'Liquid error: template_path must be provided to parse when using \
-assets'
+        'Liquid error: template_path must be provided to parse when using ' \
+        'assets'
       )
     end
 
