@@ -14,23 +14,6 @@ Test Content
 
 <ol>
 
-    <li>
-        <h3>Name: this is an item</h3>
-        
-        <p>
-            Description: <h3>Test Markdown</h3>
-
-<p>This contains some simple <u>formatting</u></p>
-
-        </p>
-        
-    </li>
-
-    <li>
-        <h3>Name: this is another item</h3>
-        
-    </li>
-
 </ol>
 </main>
 </body>

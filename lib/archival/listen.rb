@@ -70,8 +70,7 @@ module Archival
       end
 
       Logger.benchmark('rebuilt') do
-        builder.update_objects if updated_objects.length
-        builder.update_pages if updated_pages.length
+        builder.update_pages if updated_pages.length || updated_objects.length
         builder.full_rebuild if updated_assets.length
         builder.write_all
       end

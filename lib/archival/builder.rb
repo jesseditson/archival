@@ -2,11 +2,7 @@
 
 require 'liquid'
 require 'tomlrb'
-require 'tags/layout'
 require 'redcarpet'
-
-Liquid::Template.error_mode = :strict
-Liquid::Template.register_tag('layout', Layout)
 
 module Archival
   class DuplicateKeyError < StandardError
@@ -17,29 +13,30 @@ module Archival
 
     def initialize(config, *_args)
       @config = config
-      @markdown = Redcarpet::Markdown.new(
-        Redcarpet::Render::HTML.new(prettify: true,
-                                    hard_wrap: true), no_intra_emphasis: true,
-                                                      fenced_code_blocks: true,
-                                                      autolink: true,
-                                                      strikethrough: true,
-                                                      underline: true
-      )
       refresh_config
+    end
+
+    def pages_dir
+      File.join(@config.root, @config.pages_dir)
+    end
+
+    def objects_dir
+      File.join(@config.root, @config.objects_dir)
     end
 
     def refresh_config
       @file_system = Liquid::LocalFileSystem.new(
-        File.join(@config.root, @config.pages_dir), '%s.liquid'
+        pages_dir, '%s.liquid'
       )
       @variables = {}
       @object_types = {}
       @page_templates = {}
       @dynamic_pages = Set.new
       @dynamic_templates = {}
+      @parser = Archival::Parser.new(pages_dir)
 
       Liquid::Template.file_system = Liquid::LocalFileSystem.new(
-        File.join(@config.root, @config.pages_dir), '_%s.liquid'
+        pages_dir, '_%s.liquid'
       )
 
       objects_definition_file = File.join(@config.root,
@@ -48,7 +45,6 @@ module Archival
         @object_types = Tomlrb.load_file(objects_definition_file)
       end
 
-      update_objects
       update_pages
     end
 
@@ -58,7 +54,13 @@ module Archival
     end
 
     def update_pages
-      do_update_pages(File.join(@config.root, @config.pages_dir))
+      @object_types.each do |name, definition|
+        read_objects name do |_object|
+          is_template = definition.key? 'template'
+          @dynamic_pages << definition['template'] if is_template
+        end
+      end
+      do_update_pages(pages_dir)
     end
 
     def dynamic?(file)
@@ -96,40 +98,41 @@ module Archival
       end
     end
 
-    def update_objects
-      do_update_objects(File.join(@config.root,
-                                  @config.objects_dir))
+    def read_objects(name)
+      obj_dir = File.join(objects_dir, name)
+      if File.directory? obj_dir
+        Dir.foreach(obj_dir) do |file|
+          if file.end_with? '.toml'
+            object = Tomlrb.load_file(File.join(
+                                        obj_dir, file
+                                      ))
+            object[:name] =
+              File.basename(file, '.toml')
+            yield object
+          end
+        end
+      end
     end
 
-    def do_update_objects(dir)
+    def objects_for_template(template)
       objects = {}
       @object_types.each do |name, definition|
         objects[name] = {}
-        obj_dir = File.join(dir, name)
-        if File.directory? obj_dir
-          Dir.foreach(obj_dir) do |file|
-            if file.end_with? '.toml'
-              object = Tomlrb.load_file(File.join(
-                                          obj_dir, file
-                                        ))
-              object[:name] =
-                File.basename(file, '.toml')
-              objects[name][object[:name]] = parse_object(object, definition)
-              if definition.key? 'template'
-                @dynamic_pages << definition['template']
-              end
-            end
-          end
+        read_objects name do |object|
+          objects[name][object[:name]] =
+            @parser.parse_object(object, definition, template)
         end
         objects[name] = sort_objects(objects[name])
       end
       @dynamic_pages.each do |page|
         objects[page].each do |obj|
+          path = Pathname.new(File.join(pages_dir, page,
+                                        "#{obj[:name]}.html"))
           objects[page][obj[:name]]['path'] =
-            File.join(page, "#{obj[:name]}.html")
+            path.relative_path_from(objects_dir).to_s
         end
       end
-      @variables['objects'] = objects
+      objects
     end
 
     def sort_objects(objects)
@@ -148,32 +151,28 @@ module Archival
       sorted_objects
     end
 
-    def parse_object(object, definition)
-      definition.each do |name, type|
-        case type
-        when 'markdown'
-          object[name] = @markdown.render(object[name]) if object[name]
-        end
-      end
-      object
-    end
-
-    def set_var(name, value)
-      @variables[name] = value
-    end
-
-    def objects
-      @variables['objects']
-    end
-
     def render(page)
+      dir = File.join(pages_dir, File.dirname(page))
       template = @page_templates[page]
-      template.render(@variables)
+      template_path = File.join(dir, page)
+      vars = @variables.clone
+                       .merge(objects_for_template(template_path))
+                       .merge('template_path' => template_path)
+      template.render(vars)
     end
 
     def render_dynamic(page, obj)
+      dir = File.join(pages_dir, page)
       template = @dynamic_templates[page]
-      template.render(@variables.merge({ page => obj }))
+      template_path = File.join(dir, obj[:name])
+      vars = @variables.clone
+                       .merge(objects_for_template(template_path))
+                       .merge({ page => obj })
+                       .merge('template_path' => template_path)
+      puts 'TEMPLATE'
+      puts template.render(vars)
+      puts '----TEMPLATE'
+      template.render(vars)
     end
 
     def write_all
@@ -182,8 +181,7 @@ module Archival
         out_dir = File.join(@config.build_dir,
                             File.dirname(template))
         Dir.mkdir(out_dir) unless File.exist? out_dir
-        out_path = File.join(out_dir,
-                             "#{template}.html")
+        out_path = File.join(out_dir, "#{template}.html")
         File.open(out_path, 'w+') do |file|
           file.write(render(template))
         end
@@ -191,8 +189,7 @@ module Archival
       @dynamic_pages.each do |page|
         out_dir = File.join(@config.build_dir, page)
         Dir.mkdir(out_dir) unless File.exist? out_dir
-        objects = @variables['objects'][page]
-        objects.each do |obj|
+        read_objects(page) do |obj|
           out_path = File.join(out_dir, "#{obj[:name]}.html")
           File.open(out_path, 'w+') do |file|
             file.write(render_dynamic(page, obj))

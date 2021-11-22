@@ -91,11 +91,6 @@ RSpec.describe Archival::Builder do
       template_path = File.join(@root, 'dist', 'post.html')
       expect(File.exist?(template_path)).to be(false)
     end
-    it 'adds a path to the dynamic objects' do
-      first_post = @builder.objects['post'][0]
-      expect(first_post.key?('path')).to be(true)
-      expect(first_post['path']).to eq('post/another-post.html')
-    end
     it 'has the correct content' do
       post_file = File.join(@root, 'dist', 'post', 'another-post.html')
       expect(File.exist?(post_file)).to be(true)
@@ -105,6 +100,44 @@ RSpec.describe Archival::Builder do
                        content)
       end
       expect(content).to eq snapshot('dynamic_pages_post')
+    end
+  end
+  context 'path rewriting' do
+    before(:all) do
+      @root = File.join(FIXTURES_DIR,
+                        'path_rewriting')
+      Layout.reset_cache
+      config = Archival::Config.new('root' => @root)
+      @builder = Archival::Builder.new(config)
+      Dir.chdir @root
+      FileUtils.rm_rf(File.join(@root, 'dist'))
+      @builder.write_all
+    end
+    it 'retains paths in dist' do
+      index_path = File.join(@root, 'dist', 'index.html')
+      index_content = File.read(index_path)
+      expect(index_content).to include('src="../img/bob.jpeg')
+      expect(index_content).to include('href="../style/theme.css"')
+    end
+    it 'rewrites paths in dist dynamic subfolders' do
+      post_path = File.join(@root, 'dist', 'post', 'another-post.html')
+      post_content = File.read(post_path)
+      expect(post_content).to include('src="../../img/bob.jpeg"')
+    end
+    it 'rewrites paths in dist dynamic subfolders in markdown' do
+      post_path = File.join(@root, 'dist', 'post', 'another-post.html')
+      post_content = File.read(post_path)
+      expect(post_content).to include('href="../../img/foo.jpeg"')
+    end
+    it 'rewrites paths to other dynamic objects' do
+      post_path = File.join(@root, 'dist', 'post', 'another-post.html')
+      post_content = File.read(post_path)
+      expect(post_content).to include('href="some-post-name.html"')
+    end
+    it 'rewrites paths in layouts when used in subfolders' do
+      post_path = File.join(@root, 'dist', 'post', 'another-post.html')
+      post_content = File.read(post_path)
+      expect(post_content).to include('href="../../style/theme.css"')
     end
   end
 end
