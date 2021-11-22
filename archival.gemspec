@@ -26,4 +26,8 @@ Gem::Specification.new do |s|
   s.add_dependency 'listen', '~> 3.7.0'
   s.add_dependency 'redcarpet', '~> 3.5.1'
   s.add_dependency 'tomlrb', '~> 2.0.1'
+
+  s.metadata = {
+    'rubygems_mfa_required' => 'true'
+  }
 end
