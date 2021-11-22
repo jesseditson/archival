@@ -4,6 +4,8 @@ require 'listen'
 require 'pathname'
 
 module Archival
+  Change = Struct.new(:path, :type)
+
   def listen(config = {})
     @config = Config.new(config.merge(dev_mode: true))
     builder = Builder.new(@config)
@@ -16,15 +18,24 @@ module Archival
       updated_pages = []
       updated_objects = []
       updated_assets = []
-      (modified + added + removed).each do |file|
+      add_change = lambda { |file, type|
         case change_type(file)
         when :pages
-          updated_pages << file
+          updated_pages << change(file, type)
         when :objects
-          updated_objects << file
+          updated_objects << change(file, type)
         when :assets
-          updated_assets << file
+          updated_assets << change(file, type)
         end
+      }
+      added.each do |file|
+        add_change.call(file, :added)
+      end
+      modified.each do |file|
+        add_change.call(file, :modified)
+      end
+      removed.each do |file|
+        add_change.call(file, :removed)
       end
       @server.refresh_client if rebuild?(builder, updated_objects,
                                          updated_pages, updated_assets)
@@ -43,6 +54,13 @@ module Archival
       return true if path.fnmatch?(File.join(parent, '**'))
 
       false
+    end
+
+    def change(file, type)
+      c = Change.new
+      c.path = Pathname.new(file).relative_path_from(@config.root)
+      c.type = type
+      c
     end
 
     def change_type(file)
@@ -70,8 +88,10 @@ module Archival
       end
 
       Logger.benchmark('rebuilt') do
-        builder.update_pages if updated_pages.length || updated_objects.length
-        builder.copy_assets(updated_assets) if updated_assets.length
+        if updated_pages.length || updated_objects.length
+          builder.update_pages(updated_pages, updated_objects)
+        end
+        builder.update_assets(updated_assets) if updated_assets.length
         builder.full_rebuild if updated_assets.length
         builder.write_all
       end

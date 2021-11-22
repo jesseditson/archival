@@ -38,11 +38,7 @@ module Archival
         pages_dir, '_%s.liquid'
       )
 
-      objects_definition_file = File.join(@config.root,
-                                          'objects.toml')
-      if File.file? objects_definition_file
-        @object_types = Tomlrb.load_file(objects_definition_file)
-      end
+      @objects_definition_file = File.join(@config.root, 'objects.toml')
 
       update_pages
     end
@@ -52,19 +48,34 @@ module Archival
       refresh_config
     end
 
-    def update_pages
+    def update_objects(_updated_objects = nil)
+      @object_types = {}
+      if File.file? @objects_definition_file
+        @object_types = Tomlrb.load_file(@objects_definition_file)
+      end
+      @dynamic_types = Set.new
       @object_types.each do |_name, definition|
         is_template = definition.key? 'template'
         @dynamic_types << definition['template'] if is_template
       end
+      # TODO: remove deleted dynamic pages
+    end
+
+    def update_pages(_updated_pages = nil, _updated_objects = nil)
+      update_objects
+      # TODO: remove deleted pages
       do_update_pages(pages_dir)
     end
 
-    def copy_assets(assets)
-      assets.each do |asset|
-        puts asset
-        asset_path = File.join(@config.build_dir, asset)
-        FileUtils.copy_entry File.join(@config.root, asset), asset_path
+    def update_assets(changes)
+      changes.each do |change|
+        asset_path = File.join(@config.build_dir, change.path)
+        case change.type
+        when :removed
+          FileUtils.rm_rf asset_path
+        else
+          FileUtils.copy_entry File.join(@config.root, change.path), asset_path
+        end
       end
     end
 
