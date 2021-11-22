@@ -74,6 +74,7 @@ module Archival
         when :removed
           FileUtils.rm_rf asset_path
         else
+          puts change.path
           FileUtils.copy_entry File.join(@config.root, change.path), asset_path
         end
       end

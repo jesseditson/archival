@@ -15,18 +15,16 @@ module Archival
     ignore = %r{/dist/}
     listener = Listen.to(@config.root,
                          ignore: ignore) do |modified, added, removed|
-      updated_pages = []
-      updated_objects = []
-      updated_assets = []
+      changes = {
+        pages: [],
+        objects: [],
+        assets: [],
+        layout: [],
+        config: []
+      }
       add_change = lambda { |file, type|
-        case change_type(file)
-        when :pages
-          updated_pages << change(file, type)
-        when :objects
-          updated_objects << change(file, type)
-        when :assets
-          updated_assets << change(file, type)
-        end
+        c_type = change_type(file)
+        changes[c_type] << change(file, type) unless c_type == :none
       }
       added.each do |file|
         add_change.call(file, :added)
@@ -37,8 +35,7 @@ module Archival
       removed.each do |file|
         add_change.call(file, :removed)
       end
-      @server.refresh_client if rebuild?(builder, updated_objects,
-                                         updated_pages, updated_assets)
+      @server.refresh_client if rebuild?(builder, changes)
     end
     listener.start
     serve_helpers
@@ -71,28 +68,29 @@ module Archival
       return :objects if child?(File.join(@config.root, @config.objects_dir),
                                 file)
 
-      # layout and other assets. For now, this is everything.
+      # an asset was changed, which just means to copy or delete it
       @config.assets_dirs.each do |dir|
         return :assets if child?(File.join(@config.root, dir), file)
       end
-      return :assets if child?(File.join(@config.root, 'layout'), file)
-      return :assets if ['manifest.toml',
+      # other special files
+      return :layout if child?(File.join(@config.root, 'layout'), file)
+      return :config if ['manifest.toml',
                          'objects.toml'].include? File.basename(file)
 
       :none
     end
 
-    def rebuild?(builder, updated_objects, updated_pages, updated_assets)
-      if updated_pages.empty? && updated_objects.empty? && updated_assets.empty?
-        return false
-      end
+    def rebuild?(builder, changes)
+      return false if changes.values.all?(&:empty?)
 
       Logger.benchmark('rebuilt') do
-        if updated_pages.length || updated_objects.length
-          builder.update_pages(updated_pages, updated_objects)
+        if changes[:pages].length || changes[:objects].length
+          builder.update_pages(changes[:pages], changes[:objects])
         end
-        builder.update_assets(updated_assets) if updated_assets.length
-        builder.full_rebuild if updated_assets.length
+        builder.update_assets(changes[:assets]) if changes[:assets].length
+        if changes[:assets].length || changes[:layouts] || changes[:config]
+          builder.full_rebuild
+        end
         builder.write_all
       end
       true
