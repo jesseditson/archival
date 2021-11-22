@@ -102,14 +102,12 @@ RSpec.describe Layout do
     it "errors when layout name doesn't exist" do
       content = Liquid::Template.parse("{% layout 'teme' %}")
       out = content.render
-      # Would be nice if this were a better error...
-      expect(out).to eq 'Liquid error: internal'
+      expect(out).to eq 'Liquid error: No layouts named teme found.'
     end
     it 'errors when syntax is wrong' do
       content = Liquid::Template.parse('{% layout teme pork %}')
       out = content.render
-      # Would be nice if this were a better error...
-      expect(out).to eq 'Liquid error: internal'
+      expect(out).to eq 'Liquid error: Bad layout name argument'
     end
   end
   context 'variables' do

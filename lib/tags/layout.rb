@@ -25,7 +25,7 @@ class Layout < Liquid::Tag
     super
 
     @page_content = []
-    raise 'Invalid layout syntax' unless markup =~ SYNTAX
+    raise LayoutError, 'Invalid layout syntax' unless markup =~ SYNTAX
 
     layout_name = Regexp.last_match(1)
     @layout_name_expr = parse_expression(layout_name)
@@ -40,7 +40,9 @@ class Layout < Liquid::Tag
     base_path = Dir.pwd
     layout_dir = 'layout'
     layout_path = File.join(base_path, layout_dir)
-    raise "Layout dir #{layout_path} not found" unless File.exist? layout_path
+    unless File.exist? layout_path
+      raise LayoutError, "Layout dir #{layout_path} not found"
+    end
 
     layout_path
   end
@@ -55,11 +57,15 @@ class Layout < Liquid::Tag
       )
 
       next unless File.basename(f, '.*') == layout_name
-      raise "More than one layout named #{layout_name} found." if found_layout
+      if found_layout
+        raise LayoutError, "More than one layout named #{layout_name} found."
+      end
 
       found_layout = File.join(layout_path, f)
     end
-    raise "No layouts named #{layout_name} found." if found_layout.nil?
+    if found_layout.nil?
+      raise LayoutError, "No layouts named #{layout_name} found."
+    end
 
     layout = File.read(found_layout)
     @@layout_cache[layout_name] =
@@ -77,7 +83,7 @@ class Layout < Liquid::Tag
 
   def render_to_output_buffer(context, output)
     layout_name = context.evaluate(@layout_name_expr)
-    raise 'Bad layout name argument' unless layout_name
+    raise LayoutError, 'Bad layout name argument' unless layout_name
 
     layout = load_layout(layout_name)
 
@@ -103,4 +109,7 @@ class Layout < Liquid::Tag
 
     output
   end
+end
+
+class LayoutError < Liquid::Error
 end

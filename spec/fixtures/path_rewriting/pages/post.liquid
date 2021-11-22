@@ -1,0 +1,14 @@
+{% layout 'theme', name: post.title %}
+
+<h1>{{post.title}}</h1>
+{{post.content}}
+
+<img src="{% asset "img/bob.jpeg" %}"/>
+
+<ol>
+{% for post in objects.post %}
+    <li>
+        <a href="{{post.path}}">{{post.title}}</a>
+    </li>
+{% endfor %}
+</ol>

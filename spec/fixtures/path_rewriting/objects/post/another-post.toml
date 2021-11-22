@@ -1,0 +1,8 @@
+title = "another post"
+content = """
+More content
+
+![An image](img/foo.jpeg)
+
+test
+"""
