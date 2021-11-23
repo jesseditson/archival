@@ -44,16 +44,23 @@ module Archival
     MAGIC_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 
     def handle_request(client, req, method, path)
-      if method == 'GET' && path.start_with?('/js/')
-        # For static paths, just serve the files they refer to.
+      if method == 'GET' && path.start_with?('/js/archival-helper.js')
+        # For this special file, serve it from the helper dir
         http_response(client, type: 'application/javascript') do
-          serve_static(client, path)
+          serve_static(client, path, @helper_dir)
         end
         client.close
       elsif (matches = req.match(/^Sec-WebSocket-Key: (\S+)/))
         websocket_key = matches[1]
         # puts "Websocket handshake detected with key: #{websocket_key}"
         connect_socket(client, websocket_key)
+      elsif method == 'GET'
+        # For static paths, just serve the files they refer to.
+        # TODO: mime type should be inferred from file type
+        http_response(client, type: 'application/javascript') do
+          serve_static(client, path)
+        end
+        client.close
       else
         client.close
       end
@@ -139,8 +146,8 @@ module Archival
       @socket.write output.pack("CCA#{message.size}")
     end
 
-    def serve_static(client, path)
-      buffer = File.open(File.join(@helper_dir, path)).read
+    def serve_static(client, path, base = @build_dir)
+      buffer = File.open(File.join(base, path)).read
       buffer.sub! '$PORT', @port.to_s
       client.print buffer
     end
@@ -150,6 +157,7 @@ module Archival
       type = config[:type] ||= 'text/html'
       client.print "HTTP/1.1 #{status}\r\n"
       client.print "Content-Type: #{type}\r\n"
+      client.print "Access-Control-Allow-Origin: *\r\n"
       client.print "\r\n"
       yield
     end

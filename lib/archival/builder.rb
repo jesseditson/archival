@@ -3,6 +3,8 @@
 require 'liquid'
 require 'tomlrb'
 require 'redcarpet'
+require 'fileutils'
+require 'tags/asset'
 
 module Archival
   class DuplicateKeyError < StandardError
@@ -14,6 +16,7 @@ module Archival
     def initialize(config, *_args)
       @config = config
       refresh_config
+      Asset.helper_port = @config.helper_port
     end
 
     def pages_dir
@@ -221,9 +224,12 @@ module Archival
       # in dev, they will be copied as they change.
       @config.assets_dirs.each do |asset_dir|
         asset_path = File.join(@config.build_dir, asset_dir)
-        next if @config.dev_mode || !File.exist?(asset_path)
+        next if @config.dev_mode && File.exist?(asset_path)
 
-        FileUtils.copy_entry File.join(@config.root, asset_dir), asset_path
+        source_path = File.join(@config.root, asset_dir)
+        next unless File.exist?(source_path)
+
+        FileUtils.copy_entry source_path, asset_path
       end
     end
 

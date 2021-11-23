@@ -40,6 +40,24 @@ RSpec.describe Asset do
                                                         'template-name.liquid'))
       expect(out).to eq "../#{asset_path}"
     end
+    it 'rewrites to a server path if serve is true' do
+      asset_path = 'foo/bar.thing'
+      content = Liquid::Template.parse(
+        "{% asset '#{asset_path}', serve: true %}"
+      )
+      out = content.render('template_path' => File.join(@cwd,
+                                                        'template-name.liquid'))
+      expect(out).to eq "http://localhost:2701/#{asset_path}"
+    end
+    it 'rewrites server paths without relative dots' do
+      Asset.helper_port = 2701
+      content = Liquid::Template.parse(
+        "{% asset 'subdir/bar.thing', serve: true %}"
+      )
+      out = content.render('template_path' => File.join(@cwd, 'subdir',
+                                                        'template-name.liquid'))
+      expect(out).to eq "http://localhost:2701/bar.thing"
+    end
   end
 end
 

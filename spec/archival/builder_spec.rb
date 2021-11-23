@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'archival'
+require 'fileutils'
 
 FIXTURES_DIR = File.join(File.dirname(__FILE__),
                          '..', 'fixtures')

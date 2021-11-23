@@ -24,10 +24,20 @@ class Asset < Liquid::Tag
     # This is defaulted to the pages dir, because it represents the structure
     # of our website. Asset directories are copied as siblings at runtime.
     @@root_dir ||= File.join(Dir.pwd, 'pages')
+
+    @attributes = {}
+
+    markup.scan(Liquid::TagAttributes) do |key, value|
+      @attributes[key] = parse_expression(value)
+    end
   end
 
   def self.root_dir=(dir)
     @@root_dir = dir
+  end
+
+  def self.helper_port=(port)
+    @@helper_port = port
   end
 
   def render_to_output_buffer(context, output)
@@ -42,7 +52,12 @@ class Asset < Liquid::Tag
     end
     template_path = File.dirname(context['template_path'])
     abs_asset_path = Pathname.new(File.join(@@root_dir, @path))
-    output << abs_asset_path.relative_path_from(template_path).to_s
+    asset_path = abs_asset_path.relative_path_from(template_path).cleanpath.to_s
+    output << if @attributes['serve'] == true
+                "http://localhost:#{@@helper_port}/#{asset_path}"
+              else
+                asset_path
+              end
     output
   end
 end
