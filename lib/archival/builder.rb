@@ -10,6 +10,9 @@ module Archival
   class DuplicateKeyError < StandardError
   end
 
+  class DuplicateStaticFileError < StandardError
+  end
+
   class Builder
     attr_reader :page_templates
 
@@ -227,6 +230,20 @@ module Archival
         next if @config.dev_mode && File.exist?(asset_path)
 
         source_path = File.join(@config.root, asset_dir)
+        next unless File.exist?(source_path)
+
+        FileUtils.copy_entry source_path, asset_path
+      end
+
+      # same for the static dir, but just the content.
+      copied_static_files = Set[Dir.children(@config.build_dir)]
+      Dir.children(@config.static_dir).each do |child|
+        raise DuplicateStaticFileError if copied_static_files.include?(child)
+        copied_static_files << child
+        asset_path = File.join(@config.build_dir, child)
+        next if @config.dev_mode && File.exist?(asset_path)
+
+        source_path = File.join(@config.static_dir, child)
         next unless File.exist?(source_path)
 
         FileUtils.copy_entry source_path, asset_path

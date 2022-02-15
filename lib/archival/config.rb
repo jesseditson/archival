@@ -4,7 +4,7 @@ require 'tomlrb'
 
 module Archival
   class Config
-    attr_reader :pages_dir, :objects_dir, :assets_dirs, :root, :build_dir,
+    attr_reader :pages_dir, :objects_dir, :static_dir, :assets_dirs, :root, :build_dir,
                 :helper_port, :dev_mode
 
     def initialize(config = {})
@@ -17,6 +17,7 @@ module Archival
       )
       @helper_port = config['helper_port'] || manifest['helper_port'] || 2701
       @assets_dirs = config['assets_dirs'] || manifest['assets'] || []
+      @static_dir = config['static_dir'] || manifest['static'] || 'static'
       @dev_mode = config[:dev_mode] || false
     end
 

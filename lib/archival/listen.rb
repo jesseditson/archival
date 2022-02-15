@@ -72,6 +72,10 @@ module Archival
       @config.assets_dirs.each do |dir|
         return :assets if child?(File.join(@config.root, dir), file)
       end
+
+      # a static file was changed - copy or delete those too.
+      return :assets if child?(File.join(@config.root, @config.static_dir), file)
+
       # other special files
       return :layout if child?(File.join(@config.root, 'layout'), file)
       return :config if ['manifest.toml',
@@ -89,6 +93,7 @@ module Archival
         end
         builder.update_assets(changes[:assets]) if changes[:assets].length
         if changes[:assets].length || changes[:layouts] || changes[:config]
+          # TODO: optimization: this could operate on the known subset of changes instead...
           builder.full_rebuild
         end
         builder.write_all
