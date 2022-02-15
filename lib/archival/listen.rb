@@ -74,7 +74,8 @@ module Archival
       end
 
       # a static file was changed - copy or delete those too.
-      return :assets if child?(File.join(@config.root, @config.static_dir), file)
+      return :assets if child?(File.join(@config.root, @config.static_dir),
+                               file)
 
       # other special files
       return :layout if child?(File.join(@config.root, 'layout'), file)

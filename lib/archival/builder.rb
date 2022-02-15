@@ -239,6 +239,7 @@ module Archival
       copied_static_files = Set[Dir.children(@config.build_dir)]
       Dir.children(@config.static_dir).each do |child|
         raise DuplicateStaticFileError if copied_static_files.include?(child)
+
         copied_static_files << child
         asset_path = File.join(@config.build_dir, child)
         next if @config.dev_mode && File.exist?(asset_path)

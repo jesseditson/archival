@@ -56,7 +56,7 @@ RSpec.describe Asset do
       )
       out = content.render('template_path' => File.join(@cwd, 'subdir',
                                                         'template-name.liquid'))
-      expect(out).to eq "http://localhost:2701/bar.thing"
+      expect(out).to eq 'http://localhost:2701/bar.thing'
     end
   end
 end
