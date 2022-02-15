@@ -52,12 +52,12 @@ RSpec.describe Archival::Builder do
   end
   context 'simple website' do
     before(:each) do
-      root = File.join(FIXTURES_DIR,
-                       'simple_website')
+      @root = File.join(FIXTURES_DIR,
+                        'simple_website')
       Layout.reset_cache
-      config = Archival::Config.new('root' => root)
+      config = Archival::Config.new('root' => @root)
       @builder = Archival::Builder.new(config)
-      Dir.chdir root
+      Dir.chdir @root
     end
     it 'has the right pages' do
       expect(@builder.page_templates.keys).to eq ['index']
@@ -69,6 +69,13 @@ RSpec.describe Archival::Builder do
                        out)
       end
       expect(out).to eq snapshot('simple_website_index')
+    end
+    it 'copies static files' do
+      @builder.write_all
+      root_files = Dir.children(File.join(@root, 'dist'))
+      expect(root_files).to include('1')
+      expect(root_files).to include('2')
+      expect(root_files).to include('3')
     end
   end
   context 'dynamic pages' do

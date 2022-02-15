@@ -235,23 +235,31 @@ module Archival
         FileUtils.copy_entry source_path, asset_path
       end
 
+      copy_static
+    end
+
+    private
+
+    def copy_static
+      static_dir = File.join(@config.root, @config.static_dir)
+
       # same for the static dir, but just the content.
+      return unless File.exist?(static_dir)
+
       copied_static_files = Set[Dir.children(@config.build_dir)]
-      Dir.children(@config.static_dir).each do |child|
+      Dir.children(static_dir).each do |child|
         raise DuplicateStaticFileError if copied_static_files.include?(child)
 
         copied_static_files << child
         asset_path = File.join(@config.build_dir, child)
         next if @config.dev_mode && File.exist?(asset_path)
 
-        source_path = File.join(@config.static_dir, child)
+        source_path = File.join(static_dir, child)
         next unless File.exist?(source_path)
 
         FileUtils.copy_entry source_path, asset_path
       end
     end
-
-    private
 
     def dev_mode_content
       "<script src=\"http://localhost:#{@config.helper_port}/js/archival-helper.js\" type=\"application/javascript\"></script>" # rubocop:disable Layout/LineLength
