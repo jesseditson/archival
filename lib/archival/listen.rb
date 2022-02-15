@@ -94,7 +94,8 @@ module Archival
         end
         builder.update_assets(changes[:assets]) if changes[:assets].length
         if changes[:assets].length || changes[:layouts] || changes[:config]
-          # TODO: optimization: this could operate on the known subset of changes instead...
+          # TODO: optimization: this could operate on the known subset of
+          # changes instead...
           builder.full_rebuild
         end
         builder.write_all

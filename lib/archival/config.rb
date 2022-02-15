@@ -4,8 +4,8 @@ require 'tomlrb'
 
 module Archival
   class Config
-    attr_reader :pages_dir, :objects_dir, :static_dir, :assets_dirs, :root, :build_dir,
-                :helper_port, :dev_mode
+    attr_reader :pages_dir, :objects_dir, :static_dir, :assets_dirs, :root,
+                :build_dir, :helper_port, :dev_mode
 
     def initialize(config = {})
       @root = config['root'] || Dir.pwd
