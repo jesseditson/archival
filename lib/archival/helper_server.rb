@@ -106,8 +106,9 @@ module Archival
 
       # Our server only supports single-frame, text messages.
       # Raise an exception if the client tries to send anything else.
-      raise "We don't support continuations" unless fin
-      raise 'We only support opcode 1' unless opcode == 1
+      raise 'Archival dev server does not support continuations' unless fin
+      # Some browsers send this regardless, so ignore it to keep the noise down.
+      return unless opcode == 1
 
       second_byte = @socket.getbyte
       is_masked = second_byte & 0b10000000
