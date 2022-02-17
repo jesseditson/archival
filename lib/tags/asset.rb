@@ -14,7 +14,7 @@ class Asset < Liquid::Tag
 
   prepend Liquid::Tag::Disableable
 
-  SYNTAX = /(#{Liquid::QuotedFragment}+)/o.freeze
+  SYNTAX = /(#{Liquid::QuotedFragment}+|\w+)/o.freeze
 
   def initialize(tag_name, markup, tokens)
     super
@@ -41,6 +41,8 @@ class Asset < Liquid::Tag
   end
 
   def render_to_output_buffer(context, output)
+    path = @path
+    path = path.evaluate(context) if path.is_a? Liquid::VariableLookup
     unless @@root_dir
       raise AssetError,
             'root_dir must be set on Archival::Asset'
@@ -51,7 +53,7 @@ class Asset < Liquid::Tag
             'template_path must be provided to parse when using assets'
     end
     template_path = File.dirname(context['template_path'])
-    abs_asset_path = Pathname.new(File.join(@@root_dir, @path))
+    abs_asset_path = Pathname.new(File.join(@@root_dir, path))
     asset_path = abs_asset_path.relative_path_from(template_path).cleanpath.to_s
     output << if @attributes['serve'] == true
                 "http://localhost:#{@@helper_port}/#{asset_path}"
