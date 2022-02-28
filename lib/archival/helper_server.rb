@@ -127,15 +127,17 @@ module Archival
       #   warn "Payload size: #{payload_size} bytes"
 
       mask = 4.times.map { @socket.getbyte }
-      #   warn "Got mask: #{mask.inspect}"
+      # warn "Got mask: #{mask.inspect}"
 
       data = payload_size.times.map { @socket.getbyte }
-      #   warn "Got masked data: #{data.inspect}"
+      # warn "Got masked data: #{data.inspect}"
+
+      return unless data[0]
 
       unmasked_data = data.each_with_index.map do |byte, i|
         byte ^ mask[i % 4]
       end
-      #   warn "Unmasked the data: #{unmasked_data.inspect}"
+      # warn "Unmasked the data: #{unmasked_data.inspect}"
 
       unmasked_data.pack('C*').force_encoding('utf-8')
     end

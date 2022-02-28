@@ -4,7 +4,7 @@ require 'redcarpet'
 
 module Archival
   class MarkdownRenderer < Redcarpet::Render::HTML
-    def autolink(link, _link_type, _opts)
+    def autolink(link, _opts)
       # TODO: handle link_type?
       "<a href=\"#{rewrite_link(link)}\">#{rewrite_link(link)}</a>"
     end
