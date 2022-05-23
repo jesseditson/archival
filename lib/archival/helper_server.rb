@@ -150,9 +150,14 @@ module Archival
     end
 
     def serve_static(client, path, base = @build_dir)
-      buffer = File.open(File.join(base, path)).read
-      buffer.sub! '$PORT', @port.to_s
-      client.print buffer
+      full_path = File.join(base, path)
+      if File.file? full_path
+        buffer = File.open(full_path).read
+        buffer.sub! '$PORT', @port.to_s
+        client.print buffer
+      else
+        client.print 'Unknown File'
+      end
     end
 
     def http_response(client, config)
