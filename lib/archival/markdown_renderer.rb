@@ -23,7 +23,7 @@ title=\"#{title}\" alt=\"#{alt_text}\"/>"
     def rewrite_link(link)
       if link.start_with?('http') || link.start_with?('mailto') ||
          link.start_with?('www') || link.start_with?('/')
-        link
+        return link
       end
       template_dir = File.dirname(@options[:template_file])
       resolved_link = Pathname.new(File.join(@options[:pages_root], link))
