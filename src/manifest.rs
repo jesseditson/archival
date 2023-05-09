@@ -7,11 +7,9 @@ use std::{
 use serde::{Deserialize, Serialize};
 use toml::{Table, Value};
 
-static OBJECT_DEFINITION_FILE_NAME: &'static str = "objects.toml";
-static PAGES_DIR_NAME: &'static str = "pages";
-static OBJECTS_DIR_NAME: &'static str = "objects";
-static BUILD_DIR_NAME: &'static str = "dist";
-static STATIC_DIR_NAME: &'static str = "public";
+use super::constants::{
+    BUILD_DIR_NAME, OBJECTS_DIR_NAME, OBJECT_DEFINITION_FILE_NAME, PAGES_DIR_NAME, STATIC_DIR_NAME,
+};
 
 #[derive(Debug, Clone)]
 struct InvalidManifestError;
