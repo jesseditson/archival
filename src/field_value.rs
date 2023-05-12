@@ -178,10 +178,6 @@ impl FieldValue {
                 //         .with_offset(offset);
                 Ok(FieldValue::Date(liquid_date))
             }
-            _ => Err(Box::new(InvalidFieldError {
-                field: key.to_string(),
-                value: value.to_string(),
-            })),
         }
     }
 
