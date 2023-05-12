@@ -10,6 +10,10 @@ name = "archival"
 path = "src/lib.rs"
 
 [dependencies]
-liquid = "0.26.0"
+liquid = "0.26.1"
 serde = "1.0.152"
 toml = "0.7.1"
+walkdir = "2.3.3"
+
+[dev-dependencies]
+tempfile = "3.5.0"
