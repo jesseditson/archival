@@ -5,17 +5,19 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod field_value;
 mod liquid_parser;
 mod manifest;
-mod objects;
+mod object;
+mod object_definition;
 mod page;
 mod read_toml;
 mod reserved_fields;
-mod test_util;
 
 use constants::MANIFEST_FILE_NAME;
 use manifest::Manifest;
-use objects::{Object, ObjectDefinition, ObjectDefinitions};
+use object::Object;
+use object_definition::{ObjectDefinition, ObjectDefinitions};
 use page::Page;
 use read_toml::read_toml;
 use serde::{Deserialize, Serialize};
