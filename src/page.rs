@@ -54,9 +54,9 @@ impl<'a> Page<'a> {
         parser: &liquid::Parser,
         objects_map: &HashMap<String, Vec<Object>>,
     ) -> Result<String, Box<dyn Error>> {
+        // TODO: objects_map needs to be converted to liquid values.
         let globals = liquid::object!({ "objects": objects_map, "page": self.name });
         if let Some(template_info) = &self.template {
-            println!("rendering template");
             let template = parser.parse(&template_info.content)?;
             // TODO: parse markdown and other parsed types? Or maybe do
             // proactively when set in Object.
@@ -68,7 +68,6 @@ impl<'a> Page<'a> {
             context.extend(globals);
             return Ok(template.render(&context)?);
         } else if let Some(content) = &self.content {
-            println!("rendering regular");
             let template = parser.parse(&content)?;
             return Ok(template.render(&globals)?);
         }
