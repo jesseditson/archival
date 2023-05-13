@@ -63,13 +63,8 @@ impl<'a> Page<'a> {
             let mut context = liquid::object!({
               "object_name": template_info.object.name,
               "order": template_info.object.order,
-              template_info.definition.name.clone(): template_info.object.values
+              template_info.definition.name.clone(): template_info.object.values.to_value()
             });
-            println!(
-                "{}: {:?}",
-                template_info.definition.name.clone(),
-                template_info.object.values.to_value()
-            );
             context.extend(globals);
             return Ok(template.render(&context)?);
         } else if let Some(content) = &self.content {
@@ -192,12 +187,12 @@ mod tests {
     }
     fn artist_template_content() -> &'static str {
         "name: {{artist.name}}
-        {% for date in artist.tour_dates %}
-          date: {{date.date}}
-          link: {{date.ticket_link}}
-        {% endfor %}
         {% for number in artist.numbers %}
-          number: {{number}}
+          number: {{number.number}}
+        {% endfor %}
+        {% for date in artist.tour_dates %}
+          date: {{date.date | date: \"%b %d, %y\"}}
+          link: {{date.ticket_link}}
         {% endfor %}"
     }
 
@@ -223,7 +218,10 @@ mod tests {
             artist_template_content().to_string(),
         );
         let rendered = page.render(&liquid_parser, &objects_map)?;
-        println!("rendered: {}", rendered);
+        assert!(rendered.contains("name: Tormenta Rey"), "root field");
+        assert!(rendered.contains("number: 2.57"), "child number field");
+        assert!(rendered.contains("date: Dec 22, 22"), "child date field");
+        assert!(rendered.contains("link: foo.com"), "child string field");
         Ok(())
     }
 }
