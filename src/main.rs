@@ -1,3 +1,10 @@
+use std::{env, process};
+
+use archival::binary;
+
 fn main() {
-    println!("Hello, world!");
+    if let Err(e) = binary(env::args()) {
+        eprintln!("Error: ${e}");
+        process::exit(1);
+    }
 }

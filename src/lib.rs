@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    env,
     error::Error,
     fs,
     path::{Path, PathBuf},
@@ -24,6 +25,14 @@ use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
 mod constants;
+
+pub fn binary(_: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
+    // Build
+    let current_dir = env::current_dir()?;
+    let site = load_site(&current_dir)?;
+    build_site(&site)?;
+    Ok(())
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct Site {
