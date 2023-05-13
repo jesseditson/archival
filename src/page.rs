@@ -54,12 +54,15 @@ impl<'a> Page<'a> {
         parser: &liquid::Parser,
         objects_map: &HashMap<String, Vec<Object>>,
     ) -> Result<String, Box<dyn Error>> {
-        // TODO: objects_map needs to be converted to liquid values.
-        let globals = liquid::object!({ "objects": objects_map, "page": self.name });
+        // TODO: can we avoid allocating here using an iterator?
+        let mut objects: HashMap<String, Vec<liquid::model::Value>> = HashMap::new();
+        for (name, objs) in objects_map {
+            let values = objs.iter().map(|o| o.values.to_value()).collect();
+            objects.insert(name.to_string(), values);
+        }
+        let globals = liquid::object!({ "objects": objects, "page": self.name });
         if let Some(template_info) = &self.template {
             let template = parser.parse(&template_info.content)?;
-            // TODO: parse markdown and other parsed types? Or maybe do
-            // proactively when set in Object.
             let mut context = liquid::object!({
               "object_name": template_info.object.name,
               "order": template_info.object.order,
@@ -114,14 +117,15 @@ mod tests {
             values: artist_values,
         };
         let links_objects = vec![HashMap::from([(
-            "links".to_string(),
+            "url".to_string(),
             FieldValue::String("foo.com".to_string()),
         )])];
         let page_values = HashMap::from([
             (
                 "content".to_string(),
-                FieldValue::Markdown("test".to_string()),
+                FieldValue::Markdown("# hello".to_string()),
             ),
+            ("name".to_string(), FieldValue::String("home".to_string())),
             ("links".to_string(), FieldValue::Objects(links_objects)),
         ]);
 
@@ -175,6 +179,7 @@ mod tests {
 
     fn page_content() -> &'static str {
         "{% assign page = objects.page | where: \"name\", \"home\" | first %}
+        name: {{page.name}}
         content: {{page.content}}
         {% for link in page.links %}
           link: {{link.url}}
@@ -202,6 +207,16 @@ mod tests {
         let page = Page::new("home".to_string(), page_content().to_string());
         let rendered = page.render(&liquid_parser, &objects_map)?;
         println!("rendered: {}", rendered);
+        assert!(rendered.contains("name: home"), "filtered object");
+        assert!(
+            rendered.contains("content: <h1>hello</h1>"),
+            "markdown field"
+        );
+        assert!(rendered.contains("link: foo.com"), "child string field");
+        assert!(
+            rendered.contains("artist: Tormenta Rey"),
+            "item from objects"
+        );
         Ok(())
     }
     #[test]
@@ -217,6 +232,7 @@ mod tests {
             artist_template_content().to_string(),
         );
         let rendered = page.render(&liquid_parser, &objects_map)?;
+        println!("rendered: {}", rendered);
         assert!(rendered.contains("name: Tormenta Rey"), "root field");
         assert!(rendered.contains("number: 2.57"), "child number field");
         assert!(rendered.contains("date: Dec 22, 22"), "child date field");

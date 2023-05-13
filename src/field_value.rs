@@ -1,3 +1,4 @@
+use comrak::{markdown_to_html, ComrakOptions};
 use std::{
     collections::HashMap,
     error::Error,
@@ -81,6 +82,10 @@ impl ValueView for FieldValue {
             FieldValue::Number(n) => Some(model::ScalarCow::new(n.clone())),
             // TODO: should be able to return a datetime value here
             FieldValue::Date(d) => Some(model::ScalarCow::new(d.clone())),
+            FieldValue::Markdown(s) => Some(model::ScalarCow::new(markdown_to_html(
+                s,
+                &ComrakOptions::default(),
+            ))),
             _ => None,
         }
     }
