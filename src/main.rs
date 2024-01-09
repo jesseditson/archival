@@ -4,7 +4,7 @@ use archival::binary;
 
 fn main() {
     if let Err(e) = binary(env::args()) {
-        eprintln!("Error: ${e}");
+        eprintln!("Error: {e}");
         process::exit(1);
     }
 }

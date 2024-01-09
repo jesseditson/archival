@@ -14,6 +14,7 @@ mod object_definition;
 mod page;
 mod read_toml;
 mod reserved_fields;
+mod tags;
 
 use constants::MANIFEST_FILE_NAME;
 use manifest::Manifest;
@@ -26,10 +27,16 @@ use walkdir::WalkDir;
 
 mod constants;
 
-pub fn binary(_: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
+pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
     // Build
-    let current_dir = env::current_dir()?;
-    let site = load_site(&current_dir)?;
+    let mut build_dir = env::current_dir()?;
+    let _bin_name = args.next();
+    let path_arg = args.next();
+    println!("{:?}", path_arg);
+    if let Some(path) = path_arg {
+        build_dir = build_dir.join(path);
+    }
+    let site = load_site(&build_dir)?;
     build_site(&site)?;
     Ok(())
 }
