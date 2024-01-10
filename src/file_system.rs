@@ -19,7 +19,7 @@ pub trait WatchableFileSystemAPI {
     fn watch(
         self,
         root: PathBuf,
-        paths: Vec<String>,
+        watch_paths: Vec<String>,
         changed: impl Fn(Arc<Mutex<dyn FileSystemAPI>>, Vec<PathBuf>) + Send + Sync + 'static,
     ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>>;
 }
@@ -73,7 +73,7 @@ mod native {
         fn watch(
             self,
             root: PathBuf,
-            paths: Vec<String>,
+            watch_paths: Vec<String>,
             changed: impl Fn(Arc<Mutex<dyn FileSystemAPI>>, Vec<PathBuf>) + Send + Sync + 'static,
         ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>> {
             // Automatically select the best implementation for your platform.
@@ -84,12 +84,18 @@ mod native {
                 notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
                     match res {
                         Ok(event) => {
-                            let paths: Vec<PathBuf> = event
+                            let changed_paths: Vec<PathBuf> = event
                                 .paths
                                 .into_iter()
                                 .filter(|p| {
                                     if let Ok(rel) = p.strip_prefix(&root) {
-                                        for dir in &paths {
+                                        for dir in &watch_paths {
+                                            let mut dir = dir.to_string();
+                                            if let Ok(stripped) =
+                                                Path::new(&dir).strip_prefix(&root)
+                                            {
+                                                dir = stripped.to_string_lossy().into_owned();
+                                            }
                                             if rel.starts_with(dir) {
                                                 return true;
                                             }
@@ -101,8 +107,8 @@ mod native {
                                     }
                                 })
                                 .collect();
-                            if paths.len() > 0 {
-                                changed(self_box.clone(), paths);
+                            if changed_paths.len() > 0 {
+                                changed(self_box.clone(), changed_paths);
                             }
                         }
                         Err(e) => println!("watch error: {:?}", e),
