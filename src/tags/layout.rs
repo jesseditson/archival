@@ -1,5 +1,3 @@
-use std::io::Write;
-
 use liquid_core::error::ResultLiquidExt;
 use liquid_core::model::KString;
 use liquid_core::Expression;
@@ -9,6 +7,8 @@ use liquid_core::ValueView;
 use liquid_core::{runtime::StackFrame, Runtime};
 use liquid_core::{Error, Result};
 use liquid_core::{ParseTag, TagReflection, TagTokenIter};
+use regex::Regex;
+use std::io::Write;
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct LayoutTag;
@@ -21,7 +21,7 @@ impl TagReflection for LayoutTag {
     }
 
     fn description(&self) -> &'static str {
-        ""
+        "Renders a layout with the current template as the content"
     }
 }
 
@@ -77,8 +77,15 @@ struct Layout {
     vars: Vec<(KString, Expression)>,
 }
 
+static CONTENT_SENTINEL: &str = "___LAYOUT_CONTENT___";
+static SNIP_SENTINEL: &str = "___LAYOUT_SNIP___";
+
 impl Renderable for Layout {
     fn render_to(&self, writer: &mut dyn Write, runtime: &dyn Runtime) -> Result<()> {
+        runtime.set_global(
+            "page_content".into(),
+            liquid_core::Value::Scalar(CONTENT_SENTINEL.into()),
+        );
         let value = self.partial.evaluate(runtime)?;
         if !value.is_scalar() {
             return Error::with_msg("Can only use `layout` with strings")
@@ -113,26 +120,54 @@ impl Renderable for Layout {
                 .trace_with(|| format!("{{% layout {} %}}", self.partial).into())
                 .context_key_with(|| self.partial.to_string().into())
                 .value_with(|| name.to_string().into())?;
+
+            writer.write(SNIP_SENTINEL.as_bytes()).unwrap();
         }
 
         Ok(())
     }
 }
 
+pub fn post_process(mut rendered: String) -> String {
+    let snip_re = Regex::new(&format!("{}(?<content>[\\s\\S]*)", SNIP_SENTINEL)).unwrap();
+    if let Some(captured) = snip_re.captures(&rendered) {
+        rendered = rendered.replace(CONTENT_SENTINEL, &captured["content"]);
+    }
+    snip_re.replace(&rendered, "").into()
+}
+
 #[cfg(test)]
 mod test {
     use std::borrow;
+    use std::error::Error;
 
-    use liquid_core::parser;
     use liquid_core::partials;
     use liquid_core::partials::PartialCompiler;
-    use liquid_core::runtime;
     use liquid_core::runtime::RuntimeBuilder;
     use liquid_core::Value;
-    use liquid_core::{Display_filter, Filter, FilterReflection, ParseFilter};
     use liquid_lib::stdlib;
 
+    use crate::liquid_parser::ToTemplate;
+
     use super::*;
+
+    fn options() -> Language {
+        let mut options = Language::default();
+        options
+            .tags
+            .register("layout".to_string(), LayoutTag.into());
+        options
+            .blocks
+            .register("comment".to_string(), stdlib::CommentBlock.into());
+        options
+            .blocks
+            .register("if".to_string(), stdlib::IfBlock.into());
+        options.filters.register(
+            "size".to_string(),
+            Box::new(crate::filters::SizeFilterParser),
+        );
+        options
+    }
 
     #[derive(Default, Debug, Clone, Copy)]
     struct TestSource;
@@ -148,60 +183,18 @@ mod test {
 
         fn try_get<'a>(&'a self, name: &str) -> Option<borrow::Cow<'a, str>> {
             match name {
-                "example.liquid" => Some(r#"{{'whooo' | size}}{%comment%}What happens{%endcomment%} {%if num < numTwo%}wat{%else%}wot{%endif%} {%if num > numTwo%}wat{%else%}wot{%endif%}"#.into()),
-                "example_var.liquid" => Some(r#"{{example_var}}"#.into()),
-                "example_multi_var.liquid" => Some(r#"{{example_var}} {{example}}"#.into()),
+                "example.liquid" => Some(r#"{{'whooo' | size}}{%comment%}What happens{%endcomment%} {%if num < numTwo%}wat{%else%}wot{%endif%} {%if num > numTwo%}wat{%else%}wot{%endif%}{{ page_content }}"#.into()),
+                "example_var.liquid" => Some(r#"{{example_var}}{{ page_content }}"#.into()),
+                "example_multi_var.liquid" => Some(r#"{{example_var}} {{example}}{{ page_content }}"#.into()),
                 _ => None
             }
         }
     }
 
-    fn options() -> Language {
-        let mut options = Language::default();
-        options
-            .tags
-            .register("layout".to_string(), LayoutTag.into());
-        options
-            .blocks
-            .register("comment".to_string(), stdlib::CommentBlock.into());
-        options
-            .blocks
-            .register("if".to_string(), stdlib::IfBlock.into());
-        options
-    }
-
-    #[derive(Clone, ParseFilter, FilterReflection)]
-    #[filter(name = "size", description = "tests helper", parsed(SizeFilter))]
-    pub struct SizeFilterParser;
-
-    #[derive(Debug, Default, Display_filter)]
-    #[name = "size"]
-    pub struct SizeFilter;
-
-    impl Filter for SizeFilter {
-        fn evaluate(&self, input: &dyn ValueView, _runtime: &dyn Runtime) -> Result<Value> {
-            if let Some(x) = input.as_scalar() {
-                Ok(Value::scalar(x.to_kstr().len() as i64))
-            } else if let Some(x) = input.as_array() {
-                Ok(Value::scalar(x.size()))
-            } else if let Some(x) = input.as_object() {
-                Ok(Value::scalar(x.size()))
-            } else {
-                Ok(Value::scalar(0i64))
-            }
-        }
-    }
-
     #[test]
-    fn layout_tag_quotes() {
-        let text = "{% layout 'example.liquid' %}";
-        let mut options = options();
-        options
-            .filters
-            .register("size".to_string(), Box::new(SizeFilterParser));
-        let template = parser::parse(text, &options)
-            .map(runtime::Template::new)
-            .unwrap();
+    fn layout_tag_quotes() -> Result<(), Box<dyn Error>> {
+        let options = options();
+        let template = "{% layout 'example.liquid' %}\ntest test".to_template(&options)?;
 
         let partials = partials::OnDemandCompiler::<TestSource>::empty()
             .compile(::std::sync::Arc::new(options))
@@ -211,17 +204,16 @@ mod test {
             .build();
         runtime.set_global("num".into(), Value::scalar(5f64));
         runtime.set_global("numTwo".into(), Value::scalar(10f64));
-        let output = template.render(&runtime).unwrap();
-        assert_eq!(output, "5 wat wot");
+        let output = post_process(template.render(&runtime).unwrap());
+        assert_eq!(output, "5 wat wot\ntest test");
+        Ok(())
     }
 
     #[test]
-    fn layout_variable() {
-        let text = "{% layout 'example_var.liquid' example_var:\"hello\" %}";
+    fn layout_variable() -> Result<(), Box<dyn Error>> {
         let options = options();
-        let template = parser::parse(text, &options)
-            .map(runtime::Template::new)
-            .unwrap();
+        let template =
+            "{% layout 'example_var.liquid' example_var:\"hello\" %}".to_template(&options)?;
 
         let partials = partials::OnDemandCompiler::<TestSource>::empty()
             .compile(::std::sync::Arc::new(options))
@@ -229,18 +221,17 @@ mod test {
         let runtime = RuntimeBuilder::new()
             .set_partials(partials.as_ref())
             .build();
-        let output = template.render(&runtime).unwrap();
+        let output = post_process(template.render(&runtime).unwrap());
         assert_eq!(output, "hello");
+        Ok(())
     }
 
     #[test]
-    fn layout_multiple_variables() {
-        let text =
-            "{% layout 'example_multi_var.liquid' example_var:\"hello\", example:\"world\" %}";
+    fn layout_multiple_variables() -> Result<(), Box<dyn Error>> {
         let options = options();
-        let template = parser::parse(text, &options)
-            .map(runtime::Template::new)
-            .unwrap();
+        let template =
+            "{% layout 'example_multi_var.liquid' example_var:\"hello\", example:\"world\" %}"
+                .to_template(&options)?;
 
         let partials = partials::OnDemandCompiler::<TestSource>::empty()
             .compile(::std::sync::Arc::new(options))
@@ -248,18 +239,17 @@ mod test {
         let runtime = RuntimeBuilder::new()
             .set_partials(partials.as_ref())
             .build();
-        let output = template.render(&runtime).unwrap();
+        let output = post_process(template.render(&runtime).unwrap());
         assert_eq!(output, "hello world");
+        Ok(())
     }
 
     #[test]
-    fn layout_multiple_variables_trailing_comma() {
-        let text =
-            "{% layout 'example_multi_var.liquid' example_var:\"hello\", example:\"dogs\", %}";
+    fn layout_multiple_variables_trailing_comma() -> Result<(), Box<dyn Error>> {
         let options = options();
-        let template = parser::parse(text, &options)
-            .map(runtime::Template::new)
-            .unwrap();
+        let template =
+            "{% layout 'example_multi_var.liquid' example_var:\"hello\", example:\"dogs\", %}"
+                .to_template(&options)?;
 
         let partials = partials::OnDemandCompiler::<TestSource>::empty()
             .compile(::std::sync::Arc::new(options))
@@ -267,20 +257,15 @@ mod test {
         let runtime = RuntimeBuilder::new()
             .set_partials(partials.as_ref())
             .build();
-        let output = template.render(&runtime).unwrap();
+        let output = post_process(template.render(&runtime).unwrap());
         assert_eq!(output, "hello dogs");
+        Ok(())
     }
 
     #[test]
-    fn no_file() {
-        let text = "{% layout 'file_does_not_exist.liquid' %}";
-        let mut options = options();
-        options
-            .filters
-            .register("size".to_string(), Box::new(SizeFilterParser));
-        let template = parser::parse(text, &options)
-            .map(runtime::Template::new)
-            .unwrap();
+    fn no_file() -> Result<(), Box<dyn Error>> {
+        let options = options();
+        let template = "{% layout 'file_does_not_exist.liquid' %}".to_template(&options)?;
 
         let partials = partials::OnDemandCompiler::<TestSource>::empty()
             .compile(::std::sync::Arc::new(options))
@@ -292,5 +277,6 @@ mod test {
         runtime.set_global("numTwo".into(), Value::scalar(10f64));
         let output = template.render(&runtime);
         assert!(output.is_err());
+        Ok(())
     }
 }
