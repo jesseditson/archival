@@ -1,0 +1,200 @@
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+name: CI
+jobs:
+  # lint:
+  #   name: Lint
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: dtolnay/rust-toolchain@stable
+  #     - uses: Swatinem/rust-cache@v2
+
+  #     # make sure all code has been formatted with rustfmt
+  #     - run: rustup component add rustfmt
+  #     - name: check rustfmt
+  #       run: cargo fmt -- --check --color always
+
+  #     # run clippy to verify we have no warnings
+  #     - run: rustup component add clippy
+  #     - run: cargo fetch
+  #     - name: cargo clippy
+  #       run: cargo clippy --all-targets -- -D warnings
+
+  # test:
+  #   name: Test
+  #   strategy:
+  #     matrix:
+  #       os: [ubuntu-22.04, macOS-12, windows-2022]
+  #   runs-on: ${{ matrix.os }}
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: dtolnay/rust-toolchain@stable
+  #     - uses: Swatinem/rust-cache@v2
+  #     - run: cargo fetch
+  #     - name: cargo test build
+  #       run: cargo build --tests --release
+  #     - name: cargo test
+  #       run: cargo test --release
+
+  # msrv-check:
+  #   name: Minimum Stable Rust Version Check
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: dtolnay/rust-toolchain@master
+  #       with:
+  #         toolchain: "1.65.0"
+  #     - uses: Swatinem/rust-cache@v2
+  #     - run: cargo fetch
+  #     - name: cargo check
+  #       run: cargo check --all-targets
+
+  build-aarch64-apple-darwin:
+    name: Build aarch64-apple-darwin
+    runs-on: macOS-12
+    env:
+      TRIPLE: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TRIPLE }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fetch --target ${{ env.TRIPLE }}
+      - run: cargo build --release --target ${{ env.TRIPLE }}
+
+  deny-check:
+    name: cargo-deny
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: EmbarkStudios/cargo-deny-action@v1
+
+  # check-self:
+  #   name: archival
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: dtolnay/rust-toolchain@stable
+  #       with:
+  #         targets: x86_64-unknown-linux-musl
+  #     - run: sudo apt install -y musl-tools
+  #     - uses: Swatinem/rust-cache@v2
+  #     - run: cargo run --release --target x86_64-unknown-linux-musl -- generate --fail about.hbs
+
+  # Build `mdBook` documentation and upload it as a temporary build artifact
+  # doc-book:
+  #   name: Build the book
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - run: |
+  #         set -e
+  #         curl -L https://github.com/rust-lang-nursery/mdBook/releases/download/v0.4.21/mdbook-v0.4.21-x86_64-unknown-linux-gnu.tar.gz | tar xzf -
+  #         echo `pwd` >> $GITHUB_PATH
+  #     - run: (cd docs && mdbook build)
+  #     - uses: actions/upload-artifact@v1
+  #       with:
+  #         name: doc-book
+  #         path: docs/book
+
+  publish-check:
+    name: Publish Check
+    runs-on: ubuntu-22.04
+    container: ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fetch
+      - name: cargo publish
+        run: cargo publish --dry-run --all-features --target ${{ matrix.target }}
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/')
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu-22.04
+            target: aarch64-unknown-linux-musl
+            container: ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: macOS-12
+            target: x86_64-apple-darwin
+          - os: macOS-12
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: ${{ matrix.target }}
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt install -y musl-tools
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: cargo fetch
+        run: cargo fetch --target ${{ matrix.target }}
+      - name: Release build
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        env:
+          NAME: archival
+          TARGET: ${{ matrix.target }}
+        run: .github/scripts/package.sh
+      - name: Publish
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          files: "archival*"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # publish:
+  #   name: Publish Docs
+  #   needs: [doc-book]
+  #   runs-on: ubuntu-22.04
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #   steps:
+  #     - name: Download book
+  #       uses: actions/download-artifact@v1
+  #       with:
+  #         name: doc-book
+  #     - name: Assemble gh-pages
+  #       run: |
+  #         mv doc-book gh-pages
+  #     # If this is a push to the main branch push to the `gh-pages` using a
+  #     # deploy key. Note that a deploy key is necessary for now because otherwise
+  #     # using the default token for github actions doesn't actually trigger a page
+  #     # rebuild.
+  #     - name: Push to gh-pages
+  #       # Uses a rust script to setup and push to the gh-pages branch
+  #       run: curl -LsSf https://git.io/fhJ8n | rustc - && (cd gh-pages && ../rust_out)
+  #       env:
+  #         GITHUB_DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+  #         BUILD_REPOSITORY_ID: ${{ github.repository }}
+  #         BUILD_SOURCEVERSION: ${{ github.sha }}
