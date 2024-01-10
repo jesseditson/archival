@@ -18,8 +18,8 @@ pub trait FileSystemAPI {
 pub trait WatchableFileSystemAPI {
     fn watch(
         self,
-        path: PathBuf,
-        ignore: Vec<String>,
+        root: PathBuf,
+        paths: Vec<String>,
         changed: impl Fn(Arc<Mutex<dyn FileSystemAPI>>, Vec<PathBuf>) + Send + Sync + 'static,
     ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>>;
 }
@@ -72,13 +72,14 @@ mod native {
     impl WatchableFileSystemAPI for NativeFileSystem {
         fn watch(
             self,
-            path: PathBuf,
-            ignore: Vec<String>,
+            root: PathBuf,
+            paths: Vec<String>,
             changed: impl Fn(Arc<Mutex<dyn FileSystemAPI>>, Vec<PathBuf>) + Send + Sync + 'static,
         ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>> {
             // Automatically select the best implementation for your platform.
             let self_box = Arc::new(Mutex::new(self));
-            let watch_path = path.to_owned();
+            let watch_path = root.to_owned();
+            changed(self_box.clone(), vec![]);
             let mut watcher =
                 notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
                     match res {
@@ -87,13 +88,13 @@ mod native {
                                 .paths
                                 .into_iter()
                                 .filter(|p| {
-                                    if let Ok(rel) = p.strip_prefix(&path) {
-                                        for dir in &ignore {
+                                    if let Ok(rel) = p.strip_prefix(&root) {
+                                        for dir in &paths {
                                             if rel.starts_with(dir) {
-                                                return false;
+                                                return true;
                                             }
                                         }
-                                        true
+                                        false
                                     } else {
                                         println!("File changed outside of root: {}", p.display());
                                         true

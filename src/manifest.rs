@@ -84,20 +84,24 @@ impl Manifest {
                 "pages" => manifest.pages_dir = path_or_err(value)?,
                 "objects" => manifest.objects_dir = path_or_err(value)?,
                 "build_dir" => manifest.build_dir = path_or_err(value)?,
-                "static_dir" => manifest.build_dir = path_or_err(value)?,
+                "static_dir" => manifest.static_dir = path_or_err(value)?,
                 "layout_dir" => manifest.layout_dir = path_or_err(value)?,
                 _ => {}
             }
         }
         Ok(manifest)
     }
-}
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+    pub fn watched_paths(&self) -> Vec<String> {
+        vec![
+            &self.object_definition_file,
+            &self.objects_dir,
+            &self.pages_dir,
+            &self.static_dir,
+            &self.layout_dir,
+        ]
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
     }
 }

@@ -79,7 +79,7 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                 println!("Watching site: {}", &site);
                 let unwatch = fs.watch(
                     site.root.to_owned(),
-                    vec!["dist".to_string()],
+                    site.manifest.watched_paths(),
                     move |fs, paths| {
                         println!("Changed: {:?}", paths);
                         if let Ok(fs) = fs.try_lock() {
@@ -188,9 +188,9 @@ pub fn build_site(site: &Site, fs: &(impl FileSystemAPI + ?Sized)) -> Result<(),
         ))
         .into());
     }
-    // This is allowed to fail, we only remove if it exists.
-    _ = fs.remove_dir_all(&build_dir);
-    fs.create_dir_all(&build_dir)?;
+    if !build_dir.exists() {
+        fs.create_dir_all(&build_dir)?;
+    }
 
     // Copy static files
     if static_dir.exists() {
