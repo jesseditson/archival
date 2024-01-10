@@ -3,6 +3,11 @@ use std::{
     env,
     error::Error,
     path::{Path, PathBuf},
+    process::exit,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 mod field_value;
@@ -18,7 +23,8 @@ mod reserved_fields;
 mod tags;
 
 use constants::MANIFEST_FILE_NAME;
-use file_system::FileSystemAPI;
+use ctrlc;
+use file_system::{FileSystemAPI, WatchableFileSystemAPI};
 use manifest::Manifest;
 use object::Object;
 use object_definition::{ObjectDefinition, ObjectDefinitions};
@@ -52,18 +58,56 @@ impl Error for ArchivalError {
     }
 }
 
+static INVALID_COMMAND: &str = "Valid commands are `build` and `run`.";
+
 pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
-    // Build
     let mut build_dir = env::current_dir()?;
     let _bin_name = args.next();
-    let path_arg = args.next();
-    if let Some(path) = path_arg {
-        build_dir = build_dir.join(path);
+    if let Some(command_arg) = args.next() {
+        let path_arg = args.next();
+        if let Some(path) = path_arg {
+            build_dir = build_dir.join(path);
+        }
+        let fs = file_system::NativeFileSystem;
+        let site = load_site(&build_dir, &fs)?;
+        match &command_arg[..] {
+            "build" => {
+                println!("Building site: {}", &site);
+                build_site(&site, &fs)?;
+            }
+            "run" => {
+                println!("Watching site: {}", &site);
+                let unwatch = fs.watch(
+                    site.root.to_owned(),
+                    vec!["dist".to_string()],
+                    move |fs, paths| {
+                        println!("Changed: {:?}", paths);
+                        if let Ok(fs) = fs.try_lock() {
+                            build_site(&site, &(*fs)).unwrap_or_else(|err| {
+                                println!("Failed reloading site: {}", err);
+                            });
+                        }
+                    },
+                )?;
+                let aborted = Arc::new(AtomicBool::new(false));
+                let aborted_clone = aborted.clone();
+                ctrlc::set_handler(move || {
+                    aborted_clone.store(true, Ordering::SeqCst);
+                })?;
+                loop {
+                    if aborted.load(Ordering::SeqCst) {
+                        unwatch();
+                        exit(0);
+                    }
+                }
+            }
+            _ => {
+                return Err(ArchivalError::new(INVALID_COMMAND).into());
+            }
+        }
+    } else {
+        return Err(ArchivalError::new(INVALID_COMMAND).into());
     }
-    let fs = file_system::NativeFileSystem;
-    let site = load_site(&build_dir, &fs)?;
-    println!("Building site: {}", &site);
-    build_site(&site, &fs)?;
     Ok(())
 }
 
@@ -121,7 +165,7 @@ pub fn load_site(root: &Path, fs: &impl FileSystemAPI) -> Result<Site, Box<dyn E
     })
 }
 
-pub fn build_site(site: &Site, fs: &impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
+pub fn build_site(site: &Site, fs: &(impl FileSystemAPI + ?Sized)) -> Result<(), Box<dyn Error>> {
     let mut all_objects: HashMap<String, Vec<Object>> = HashMap::new();
     let objects_dir = site.root.join(&site.manifest.objects_dir);
     let layout_dir = site.root.join(&site.manifest.layout_dir);
