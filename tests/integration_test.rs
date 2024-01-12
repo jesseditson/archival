@@ -11,6 +11,6 @@ fn get_args(args: Vec<&str>) -> impl Iterator<Item = String> {
 
 #[test]
 fn build_basics() -> Result<(), Box<dyn Error>> {
-    archival::binary(get_args(vec!["tests/fixtures/website"]))?;
+    archival::binary(get_args(vec!["build", "tests/fixtures/website"]))?;
     Ok(())
 }

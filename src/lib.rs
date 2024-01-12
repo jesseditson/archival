@@ -23,8 +23,9 @@ mod reserved_fields;
 mod tags;
 
 use constants::MANIFEST_FILE_NAME;
+#[cfg(feature = "stdlib-fs")]
 use ctrlc;
-use file_system::{FileSystemAPI, WatchableFileSystemAPI};
+pub use file_system::{FileSystemAPI, WatchableFileSystemAPI};
 use manifest::Manifest;
 use object::Object;
 use object_definition::{ObjectDefinition, ObjectDefinitions};
@@ -32,9 +33,15 @@ use page::Page;
 use read_toml::read_toml;
 use serde::{Deserialize, Serialize};
 use tags::layout;
-use walkdir::WalkDir;
 
 mod constants;
+#[cfg(feature = "stdlib-fs")]
+mod file_system_stdlib;
+#[cfg(feature = "wasm-fs")]
+mod file_system_wasm;
+
+#[cfg(feature = "wasm-fs")]
+pub use file_system_wasm::WasmFileSystem;
 
 #[derive(Debug)]
 struct ArchivalError {
@@ -60,6 +67,7 @@ impl Error for ArchivalError {
 
 static INVALID_COMMAND: &str = "Valid commands are `build` and `run`.";
 
+#[cfg(feature = "stdlib-fs")]
 pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
     let mut build_dir = env::current_dir()?;
     let _bin_name = args.next();
@@ -68,7 +76,7 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
         if let Some(path) = path_arg {
             build_dir = build_dir.join(path);
         }
-        let fs = file_system::NativeFileSystem;
+        let fs = file_system_stdlib::NativeFileSystem;
         let site = load_site(&build_dir, &fs)?;
         match &command_arg[..] {
             "build" => {
@@ -241,19 +249,17 @@ pub fn build_site(site: &Site, fs: &(impl FileSystemAPI + ?Sized)) -> Result<(),
         }
     }
     // Render regular pages
-    for file in WalkDir::new(pages_dir)
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let file_name = file.file_name().to_string_lossy();
-        if file_name.ends_with(".liquid") {
-            let page_name = file_name.replace(".liquid", "");
-            let template_str = fs.read_to_string(&file.path())?;
-            let page = Page::new(page_name, template_str);
-            let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
-            let render_name = file_name.replace(".liquid", ".html");
-            fs.write(&build_dir.join(render_name), rendered)?;
+    for file in fs.walk_dir(&pages_dir)? {
+        if let Some(name) = file.file_name() {
+            let file_name = name.to_string_lossy();
+            if file_name.ends_with(".liquid") {
+                let page_name = file_name.replace(".liquid", "");
+                let template_str = fs.read_to_string(&file.as_path())?;
+                let page = Page::new(page_name, template_str);
+                let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
+                let render_name = file_name.replace(".liquid", ".html");
+                fs.write(&build_dir.join(render_name), rendered)?;
+            }
         }
     }
 
