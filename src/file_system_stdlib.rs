@@ -4,7 +4,6 @@ use std::{
     error::Error,
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
 };
 use walkdir::WalkDir;
 
@@ -28,8 +27,8 @@ impl FileSystemAPI for NativeFileSystem {
         }
         Ok(files)
     }
-    fn read_to_string(&self, path: &Path) -> Result<String, Box<dyn Error>> {
-        Ok(fs::read_to_string(path)?)
+    fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
+        Ok(Some(fs::read_to_string(path)?))
     }
     fn write(&self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
         Ok(fs::write(path, contents)?)
@@ -52,15 +51,13 @@ impl FileSystemAPI for NativeFileSystem {
 
 impl WatchableFileSystemAPI for NativeFileSystem {
     fn watch(
-        self,
+        &mut self,
         root: PathBuf,
         watch_paths: Vec<String>,
-        changed: impl Fn(Arc<Mutex<dyn FileSystemAPI>>, Vec<PathBuf>) + Send + Sync + 'static,
+        changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
     ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>> {
-        // Automatically select the best implementation for your platform.
-        let self_box = Arc::new(Mutex::new(self));
         let watch_path = root.to_owned();
-        changed(self_box.clone(), vec![]);
+        changed(vec![]);
         let mut watcher = notify::recommended_watcher(
             move |res: Result<notify::Event, notify::Error>| match res {
                 Ok(event) => {
@@ -86,7 +83,7 @@ impl WatchableFileSystemAPI for NativeFileSystem {
                         })
                         .collect();
                     if changed_paths.len() > 0 {
-                        changed(self_box.clone(), changed_paths);
+                        changed(changed_paths);
                     }
                 }
                 Err(e) => println!("watch error: {:?}", e),

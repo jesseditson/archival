@@ -12,6 +12,7 @@ use std::{
 
 mod field_value;
 mod file_system;
+mod file_system_mutex;
 mod filters;
 mod liquid_parser;
 mod manifest;
@@ -69,6 +70,10 @@ static INVALID_COMMAND: &str = "Valid commands are `build` and `run`.";
 
 #[cfg(feature = "stdlib-fs")]
 pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
+    use file_system_mutex::FileSystemMutex;
+
+    use crate::file_system_stdlib::NativeFileSystem;
+
     let mut build_dir = env::current_dir()?;
     let _bin_name = args.next();
     if let Some(command_arg) = args.next() {
@@ -76,27 +81,33 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
         if let Some(path) = path_arg {
             build_dir = build_dir.join(path);
         }
-        let fs = file_system_stdlib::NativeFileSystem;
-        let site = load_site(&build_dir, &fs)?;
+        let fs_a = FileSystemMutex::init(NativeFileSystem);
+
+        let site = fs_a.with_fs(|fs| load_site(&build_dir, fs))?;
         match &command_arg[..] {
             "build" => {
                 println!("Building site: {}", &site);
-                build_site(&site, &fs)?;
+                fs_a.with_fs(|fs| build_site(&site, fs))?;
             }
             "run" => {
                 println!("Watching site: {}", &site);
-                let unwatch = fs.watch(
-                    site.root.to_owned(),
-                    site.manifest.watched_paths(),
-                    move |fs, paths| {
-                        println!("Changed: {:?}", paths);
-                        if let Ok(fs) = fs.try_lock() {
-                            build_site(&site, &(*fs)).unwrap_or_else(|err| {
-                                println!("Failed reloading site: {}", err);
-                            });
-                        }
-                    },
-                )?;
+                fs_a.clone().with_fs(|fs| {
+                    // This won't leak because the process is ended when we
+                    // abort anyway
+                    _ = fs.watch(
+                        site.root.to_owned(),
+                        site.manifest.watched_paths(),
+                        move |paths| {
+                            println!("Changed: {:?}", paths);
+                            fs_a.clone()
+                                .with_fs(|fs| build_site(&site, fs))
+                                .unwrap_or_else(|err| {
+                                    println!("Failed reloading site: {}", err);
+                                })
+                        },
+                    )?;
+                    Ok(())
+                })?;
                 let aborted = Arc::new(AtomicBool::new(false));
                 let aborted_clone = aborted.clone();
                 ctrlc::set_handler(move || {
@@ -104,7 +115,6 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                 })?;
                 loop {
                     if aborted.load(Ordering::SeqCst) {
-                        unwatch();
                         exit(0);
                     }
                 }
@@ -234,16 +244,19 @@ pub fn build_site(site: &Site, fs: &(impl FileSystemAPI + ?Sized)) -> Result<(),
                 for object in t_objects {
                     let template_path = pages_dir.join(format!("{}.liquid", template));
                     let template_str = fs.read_to_string(&template_path)?;
-                    let page = Page::new_with_template(
-                        object.name.clone(),
-                        object_def,
-                        object,
-                        template_str,
-                    );
-                    let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
-                    let render_name = format!("{}.html", object.name);
-                    let build_path = build_dir.join(render_name);
-                    fs.write(&build_path, rendered)?;
+                    if let Some(template_str) = template_str {
+                        let page = Page::new_with_template(
+                            object.name.clone(),
+                            object_def,
+                            object,
+                            template_str,
+                        );
+                        let rendered =
+                            layout::post_process(page.render(&liquid_parser, &all_objects)?);
+                        let render_name = format!("{}.html", object.name);
+                        let build_path = build_dir.join(render_name);
+                        fs.write(&build_path, rendered)?;
+                    }
                 }
             }
         }
@@ -254,11 +267,14 @@ pub fn build_site(site: &Site, fs: &(impl FileSystemAPI + ?Sized)) -> Result<(),
             let file_name = name.to_string_lossy();
             if file_name.ends_with(".liquid") {
                 let page_name = file_name.replace(".liquid", "");
-                let template_str = fs.read_to_string(&file.as_path())?;
-                let page = Page::new(page_name, template_str);
-                let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
-                let render_name = file_name.replace(".liquid", ".html");
-                fs.write(&build_dir.join(render_name), rendered)?;
+                if let Some(template_str) = fs.read_to_string(&file.as_path())? {
+                    let page = Page::new(page_name, template_str);
+                    let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
+                    let render_name = file_name.replace(".liquid", ".html");
+                    fs.write(&build_dir.join(render_name), rendered)?;
+                } else {
+                    println!("template not found: {}", file.display());
+                }
             }
         }
     }
