@@ -10,8 +10,6 @@ use std::{
 use wasm_bindgen::JsValue;
 use web_sys::{DomException, IdbKeyRange};
 
-use crate::file_system_mutex::FileSystemMutex;
-
 use super::{FileSystemAPI, WatchableFileSystemAPI};
 
 static FILES_STORE_NAME: &str = "files";
@@ -129,13 +127,15 @@ impl FileSystemAPI for WasmFileSystem {
             Ok(None)
         }
     }
-    fn write(&self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
+    fn write(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
         idb_task(self.write_file(&path.to_path_buf(), &contents.as_bytes().to_vec()))?;
+        self.files_changed(vec![path.to_path_buf()])?;
         Ok(())
     }
-    fn copy_contents(&self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {
+    fn copy_contents(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {
         if let Some(file) = idb_task(self.read_file(&from.to_path_buf()))? {
             idb_task(self.write_file(&to.to_path_buf(), &file))?;
+            self.files_changed(vec![to.to_path_buf()])?;
         }
         Ok(())
     }
@@ -177,24 +177,25 @@ impl WatchableFileSystemAPI for WasmFileSystem {
     }
 }
 
+fn copy_path_arr(arr: &Vec<PathBuf>) -> Vec<PathBuf> {
+    arr.iter().map(|r| r.to_owned()).collect()
+}
+
 impl WasmFileSystem {
-    fn file_changed(self, path: &PathBuf) -> Result<(), Box<dyn Error>> {
-        let fs = FileSystemMutex::init(self);
-        fs.clone().with_fs(|fs| {
-            for ch in &fs.change_handlers {
-                for watched in &ch.paths {
-                    let fp = ch.root.join(watched);
-                    if path
-                        .to_string_lossy()
-                        .to_lowercase()
-                        .starts_with(&fp.to_string_lossy().to_lowercase())
-                    {
-                        (ch.changed)(vec![path.into()]);
-                    }
+    fn files_changed(&mut self, paths: Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
+        for ch in &self.change_handlers {
+            for watched in &ch.paths {
+                let fp = ch.root.join(watched);
+                let prefix = &fp.to_string_lossy().to_lowercase();
+                let changed_paths: Vec<PathBuf> = copy_path_arr(&paths)
+                    .into_iter()
+                    .filter(|p| p.to_string_lossy().to_lowercase().starts_with(prefix))
+                    .collect();
+                if changed_paths.len() > 0 {
+                    (ch.changed)(changed_paths);
                 }
             }
-            Ok(())
-        })?;
+        }
         Ok(())
     }
 

@@ -1,4 +1,4 @@
-#[cfg(feature = "fs-wasm")]
+#[cfg(feature = "wasm-fs")]
 mod wasm_tests {
     use archival::WasmFileSystem;
     use wasm_bindgen_test::*;
@@ -6,6 +6,6 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn wasm_site() {
-        let file_system = WasmFileSystem::new();
+        let file_system = WasmFileSystem::new("archival");
     }
 }

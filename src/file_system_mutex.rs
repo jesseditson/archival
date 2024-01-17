@@ -1,5 +1,6 @@
 use std::{
     error::Error,
+    ops::DerefMut,
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
@@ -25,8 +26,8 @@ where
         &self,
         f: impl FnOnce(&mut F) -> Result<R, Box<dyn Error>>,
     ) -> Result<R, Box<dyn Error>> {
-        if let Ok(mut fs) = self.0.clone().try_lock() {
-            let r = f(&mut (*fs))?;
+        if let Ok(mut fs) = self.0.try_lock() {
+            let r = f(fs.deref_mut())?;
             Ok(r)
         } else {
             Err(FileSystemMutexError::LockFailed.into())

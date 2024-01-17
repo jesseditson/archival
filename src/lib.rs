@@ -27,6 +27,7 @@ use constants::MANIFEST_FILE_NAME;
 #[cfg(feature = "stdlib-fs")]
 use ctrlc;
 pub use file_system::{FileSystemAPI, WatchableFileSystemAPI};
+use file_system_mutex::FileSystemMutex;
 use manifest::Manifest;
 use object::Object;
 use object_definition::{ObjectDefinition, ObjectDefinitions};
@@ -70,10 +71,6 @@ static INVALID_COMMAND: &str = "Valid commands are `build` and `run`.";
 
 #[cfg(feature = "stdlib-fs")]
 pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
-    use file_system_mutex::FileSystemMutex;
-
-    use crate::file_system_stdlib::NativeFileSystem;
-
     let mut build_dir = env::current_dir()?;
     let _bin_name = args.next();
     if let Some(command_arg) = args.next() {
@@ -81,13 +78,13 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
         if let Some(path) = path_arg {
             build_dir = build_dir.join(path);
         }
-        let fs_a = FileSystemMutex::init(NativeFileSystem);
+        let fs_a = FileSystemMutex::init(file_system_stdlib::NativeFileSystem);
 
         let site = fs_a.with_fs(|fs| load_site(&build_dir, fs))?;
         match &command_arg[..] {
             "build" => {
                 println!("Building site: {}", &site);
-                fs_a.with_fs(|fs| build_site(&site, fs))?;
+                build_site(&site, fs_a)?;
             }
             "run" => {
                 println!("Watching site: {}", &site);
@@ -99,11 +96,9 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                         site.manifest.watched_paths(),
                         move |paths| {
                             println!("Changed: {:?}", paths);
-                            fs_a.clone()
-                                .with_fs(|fs| build_site(&site, fs))
-                                .unwrap_or_else(|err| {
-                                    println!("Failed reloading site: {}", err);
-                                })
+                            build_site(&site, fs_a.clone()).unwrap_or_else(|err| {
+                                println!("Failed reloading site: {}", err);
+                            })
                         },
                     )?;
                     Ok(())
@@ -183,7 +178,10 @@ pub fn load_site(root: &Path, fs: &impl FileSystemAPI) -> Result<Site, Box<dyn E
     })
 }
 
-pub fn build_site(site: &Site, fs: &(impl FileSystemAPI + ?Sized)) -> Result<(), Box<dyn Error>> {
+pub fn build_site<T: FileSystemAPI>(
+    site: &Site,
+    fs: FileSystemMutex<T>,
+) -> Result<(), Box<dyn Error>> {
     let mut all_objects: HashMap<String, Vec<Object>> = HashMap::new();
     let objects_dir = site.root.join(&site.manifest.objects_dir);
     let layout_dir = site.root.join(&site.manifest.layout_dir);
@@ -207,19 +205,20 @@ pub fn build_site(site: &Site, fs: &(impl FileSystemAPI + ?Sized)) -> Result<(),
         .into());
     }
     if !build_dir.exists() {
-        fs.create_dir_all(&build_dir)?;
+        fs.with_fs(|f| f.create_dir_all(&build_dir))?;
     }
 
     // Copy static files
     if static_dir.exists() {
-        fs.copy_contents(&static_dir, &build_dir)?;
+        fs.clone()
+            .with_fs(|f| f.copy_contents(&static_dir, &build_dir))?;
     }
 
     for (object_name, object_def) in site.objects.iter() {
         let mut objects: Vec<Object> = Vec::new();
         let object_files_dir = objects_dir.join(object_name);
         if objects_dir.is_dir() {
-            for file in fs.read_dir(&object_files_dir)? {
+            for file in fs.with_fs(|f| f.read_dir(&object_files_dir))? {
                 if file.ends_with(".toml") {
                     let obj_table = read_toml(&file)?;
                     objects.push(Object::from_table(object_def, object_name, &obj_table)?)
@@ -243,7 +242,7 @@ pub fn build_site(site: &Site, fs: &(impl FileSystemAPI + ?Sized)) -> Result<(),
             if let Some(t_objects) = all_objects.get(name) {
                 for object in t_objects {
                     let template_path = pages_dir.join(format!("{}.liquid", template));
-                    let template_str = fs.read_to_string(&template_path)?;
+                    let template_str = fs.with_fs(|f| f.read_to_string(&template_path))?;
                     if let Some(template_str) = template_str {
                         let page = Page::new_with_template(
                             object.name.clone(),
@@ -255,23 +254,23 @@ pub fn build_site(site: &Site, fs: &(impl FileSystemAPI + ?Sized)) -> Result<(),
                             layout::post_process(page.render(&liquid_parser, &all_objects)?);
                         let render_name = format!("{}.html", object.name);
                         let build_path = build_dir.join(render_name);
-                        fs.write(&build_path, rendered)?;
+                        fs.with_fs(|f| f.write(&build_path, rendered))?;
                     }
                 }
             }
         }
     }
     // Render regular pages
-    for file in fs.walk_dir(&pages_dir)? {
+    for file in fs.with_fs(|f| f.walk_dir(&pages_dir))? {
         if let Some(name) = file.file_name() {
             let file_name = name.to_string_lossy();
             if file_name.ends_with(".liquid") {
                 let page_name = file_name.replace(".liquid", "");
-                if let Some(template_str) = fs.read_to_string(&file.as_path())? {
+                if let Some(template_str) = fs.with_fs(|f| f.read_to_string(&file.as_path()))? {
                     let page = Page::new(page_name, template_str);
                     let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
                     let render_name = file_name.replace(".liquid", ".html");
-                    fs.write(&build_dir.join(render_name), rendered)?;
+                    fs.with_fs(|f| f.write(&build_dir.join(render_name), rendered))?;
                 } else {
                     println!("template not found: {}", file.display());
                 }
