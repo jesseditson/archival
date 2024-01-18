@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     env,
     error::Error,
+    io::{Cursor, Read, Seek},
     path::{Path, PathBuf},
     process::exit,
     sync::{
@@ -21,6 +22,7 @@ mod object_definition;
 mod page;
 mod read_toml;
 mod reserved_fields;
+mod site;
 mod tags;
 
 use constants::MANIFEST_FILE_NAME;
@@ -28,12 +30,14 @@ use constants::MANIFEST_FILE_NAME;
 use ctrlc;
 pub use file_system::{FileSystemAPI, WatchableFileSystemAPI};
 use file_system_mutex::FileSystemMutex;
+use futures::executor;
 use manifest::Manifest;
 use object::Object;
-use object_definition::{ObjectDefinition, ObjectDefinitions};
+use object_definition::ObjectDefinition;
 use page::Page;
 use read_toml::read_toml;
-use serde::{Deserialize, Serialize};
+use reqwest;
+use site::Site;
 use tags::layout;
 
 mod constants;
@@ -124,33 +128,95 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
     Ok(())
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct Site {
-    pub root: PathBuf,
-    pub objects: ObjectDefinitions,
-    pub manifest: Manifest,
+#[cfg(feature = "binary")]
+pub fn download_site(url: &str) -> Result<Vec<u8>, reqwest::Error> {
+    let response = executor::block_on(reqwest::get(url))?;
+    match response.error_for_status() {
+        Ok(r) => {
+            let r = executor::block_on(r.bytes())?;
+            Ok(r.to_vec())
+        }
+        Err(e) => Err(e),
+    }
 }
 
-impl std::fmt::Display for Site {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            r#"
-        === Root:
-            {}
-        === Objects:
-            {}
-        === Manifest: {}
-        "#,
-            self.root.display(),
-            self.objects
-                .keys()
-                .map(|o| format!("{}", o.as_str()))
-                .collect::<Vec<String>>()
-                .join("\n"),
-            self.manifest
-        )
+#[cfg(feature = "wasm-fs")]
+pub fn fetch_site(url: &str) -> Result<Vec<u8>, reqwest_wasm::Error> {
+    let response = executor::block_on(reqwest_wasm::get(url))?;
+    match response.error_for_status() {
+        Ok(r) => {
+            let r = executor::block_on(r.bytes())?;
+            Ok(r.to_vec())
+        }
+        Err(e) => Err(e),
     }
+}
+
+fn has_toplevel<S: Read + Seek>(
+    archive: &mut zip::ZipArchive<S>,
+) -> Result<bool, zip::result::ZipError> {
+    let mut toplevel_dir: Option<PathBuf> = None;
+    if archive.len() < 2 {
+        return Ok(false);
+    }
+
+    for i in 0..archive.len() {
+        let file = archive.by_index(i)?.mangled_name();
+        if let Some(toplevel_dir) = &toplevel_dir {
+            if !file.starts_with(toplevel_dir) {
+                return Ok(false);
+            }
+        } else {
+            // First iteration
+            let comp: PathBuf = file.components().take(1).collect();
+            toplevel_dir = Some(comp);
+        }
+    }
+    Ok(true)
+}
+
+pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
+    let mut archive = zip::ZipArchive::new(Cursor::new(zipball))?;
+
+    let do_strip_toplevel = has_toplevel(&mut archive)?;
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        let mut relative_path = file.mangled_name();
+
+        if do_strip_toplevel {
+            let base = relative_path
+                .components()
+                .take(1)
+                .fold(PathBuf::new(), |mut p, c| {
+                    p.push(c);
+                    p
+                });
+            relative_path = relative_path.strip_prefix(&base)?.to_path_buf()
+        }
+
+        if relative_path.to_string_lossy().is_empty() {
+            // Top-level directory
+            continue;
+        }
+
+        let mut outpath = PathBuf::new();
+        outpath.push(relative_path);
+
+        if file.name().ends_with('/') {
+            fs.create_dir_all(&outpath)?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    fs.create_dir_all(&p)?;
+                }
+            }
+            let mut buffer = vec![];
+            file.read_to_end(&mut buffer)?;
+            fs.write(&outpath, buffer)?;
+        }
+    }
+    Ok(())
 }
 
 pub fn load_site(root: &Path, fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
@@ -254,7 +320,7 @@ pub fn build_site<T: FileSystemAPI>(
                             layout::post_process(page.render(&liquid_parser, &all_objects)?);
                         let render_name = format!("{}.html", object.name);
                         let build_path = build_dir.join(render_name);
-                        fs.with_fs(|f| f.write(&build_path, rendered))?;
+                        fs.with_fs(|f| f.write_str(&build_path, rendered))?;
                     }
                 }
             }
@@ -270,7 +336,7 @@ pub fn build_site<T: FileSystemAPI>(
                     let page = Page::new(page_name, template_str);
                     let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
                     let render_name = file_name.replace(".liquid", ".html");
-                    fs.with_fs(|f| f.write(&build_dir.join(render_name), rendered))?;
+                    fs.with_fs(|f| f.write_str(&build_dir.join(render_name), rendered))?;
                 } else {
                     println!("template not found: {}", file.display());
                 }
@@ -279,4 +345,31 @@ pub fn build_site<T: FileSystemAPI>(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(feature = "stdlib-fs")]
+    fn zip_unpacking_stdlib() -> Result<(), Box<dyn Error>> {
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        let mut fs = file_system_stdlib::NativeFileSystem;
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let dirs = fs.read_dir(Path::new("/"))?;
+        assert_eq!(dirs.len(), 19);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "wasm-fs")]
+    fn zip_unpacking_wasm() -> Result<(), Box<dyn Error>> {
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        let mut fs = file_system_wasm::WasmFileSystem::new("test");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let dirs = fs.read_dir(Path::new("/"))?;
+        assert_eq!(dirs.len(), 19);
+        Ok(())
+    }
 }

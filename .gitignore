@@ -1,2 +1,14 @@
-/target
-/tests/fixtures/website/dist
+## Environment normalization:
+/.bundle/
+
+# Archival
+dist
+
+# MacOS
+.DS_Store
+
+# npm
+node_modules
+
+# rust 
+target

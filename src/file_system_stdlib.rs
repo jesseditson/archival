@@ -30,7 +30,10 @@ impl FileSystemAPI for NativeFileSystem {
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
         Ok(Some(fs::read_to_string(path)?))
     }
-    fn write(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
+    fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
+        Ok(fs::write(path, contents)?)
+    }
+    fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
         Ok(fs::write(path, contents)?)
     }
     fn copy_contents(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {

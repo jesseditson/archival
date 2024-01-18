@@ -127,10 +127,13 @@ impl FileSystemAPI for WasmFileSystem {
             Ok(None)
         }
     }
-    fn write(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
-        idb_task(self.write_file(&path.to_path_buf(), &contents.as_bytes().to_vec()))?;
+    fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
+        idb_task(self.write_file(&path.to_path_buf(), &contents))?;
         self.files_changed(vec![path.to_path_buf()])?;
         Ok(())
+    }
+    fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
+        self.write(path, contents.as_bytes().to_vec())
     }
     fn copy_contents(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {
         if let Some(file) = idb_task(self.read_file(&from.to_path_buf()))? {

@@ -15,13 +15,41 @@ path = "src/lib.rs"
 default = ["stdlib-fs", "binary"]
 binary = ["dep:notify", "dep:ctrlc"]
 stdlib-fs = ["dep:fs_extra", "dep:walkdir"]
-wasm-fs = ["dep:wasm-bindgen", "dep:web-sys", "dep:futures", "dep:wasm-bindgen-futures", "dep:indexed_db_futures", "dep:serde_bytes", "dep:serde-wasm-bindgen"]
+wasm-fs = [
+    "dep:wasm-bindgen",
+    "dep:web-sys",
+    "dep:wasm-bindgen-futures",
+    "dep:indexed_db_futures",
+    "dep:serde_bytes",
+    "dep:serde-wasm-bindgen",
+    "dep:reqwest-wasm",
+]
 
 [[bin]]
 name = "archival"
 path = "src/main.rs"
 
 [dependencies]
+# stdlib-fs
+walkdir = { version = "2.3.3", optional = true }
+fs_extra = { version = "1.3.0", optional = true }
+notify = { version = "6.1.1", optional = true }
+ctrlc = { version = "3.4.2", optional = true }
+futures = { version = "0.3.30", features = ["executor"] }
+# wasm-fs
+wasm-bindgen = { version = "0.2.87", features = [
+    "serde-serialize",
+], optional = true }
+web-sys = { version = "0.3.66", optional = true, features = [
+    "IdbKeyRange",
+    "DomException",
+] }
+wasm-bindgen-futures = { version = "0.4.37", optional = true }
+serde-wasm-bindgen = { version = "0.4", optional = true }
+indexed_db_futures = { version = "0.3.0", optional = true }
+serde_bytes = { version = "0.11.12", optional = true }
+reqwest-wasm = { version = "0.11.16", optional = true }
+# shared
 liquid = "0.26.1"
 serde = "1.0.152"
 toml = "0.7.1"
@@ -29,23 +57,9 @@ comrak = "0.18"
 liquid-core = "0.26.4"
 liquid-lib = { version = "0.26.4", features = ["shopify", "extra"] }
 regex = "1.10.2"
-# stdlib-fs
-walkdir = {version = "2.3.3", optional = true}
-fs_extra = {version = "1.3.0", optional = true}
-notify = {version = "6.1.1", optional = true}
-ctrlc = {version = "3.4.2", optional = true}
-# wasm-fs
-wasm-bindgen = { version = "0.2.87", features = ["serde-serialize"], optional = true }
-web-sys = {version = "0.3.66", optional = true, features = [
-    "IdbKeyRange",
-    "DomException"
-]}
-futures = {version = "0.3.30", optional = true, features = ["executor"]}
-wasm-bindgen-futures = {version = "0.4.37", optional = true}
-serde-wasm-bindgen = {version = "0.4", optional = true}
-indexed_db_futures = {version = "0.3.0", optional = true}
-serde_bytes = {version = "0.11.12", optional = true}
 thiserror = "1.0.56"
+zip = { version = "0.6.6", default_features = false, features = ["deflate"] }
+reqwest = "0.11.23"
 
 [dev-dependencies]
 tempfile = "3.5.0"

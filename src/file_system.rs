@@ -8,7 +8,8 @@ pub trait FileSystemAPI {
     fn create_dir_all(&self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>>;
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>>;
-    fn write(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>>;
+    fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>>;
+    fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>>;
     fn copy_contents(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>>;
     fn walk_dir(&self, path: &Path) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>>;
 }
