@@ -58,7 +58,7 @@ mod tests {
         let site = site::load(Path::new(""), &fs)?;
         assert_eq!(site.objects.len(), 1);
         let first_id = site.objects.keys().next().unwrap();
-        assert_eq!(site.objects[first_id].name, "");
+        assert_eq!(site.objects[first_id].name, "section");
         Ok(())
     }
 }

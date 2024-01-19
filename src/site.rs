@@ -51,7 +51,7 @@ pub fn load(root: &Path, fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>
     }
 
     // Load our object definitions
-    let objects_table = read_toml(&odf)?;
+    let objects_table = read_toml(&odf, fs)?;
     let objects = ObjectDefinition::from_table(&objects_table)?;
     Ok(Site {
         root: root.to_path_buf(),
@@ -104,7 +104,7 @@ pub fn build<T: FileSystemAPI>(
         if objects_dir.is_dir() {
             for file in fs.with_fs(|f| f.read_dir(&object_files_dir))? {
                 if file.ends_with(".toml") {
-                    let obj_table = read_toml(&file)?;
+                    let obj_table = fs.with_fs(|fs| read_toml(&file, fs))?;
                     objects.push(Object::from_table(object_def, object_name, &obj_table)?)
                 }
             }

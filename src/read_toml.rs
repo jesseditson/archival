@@ -2,6 +2,19 @@ use std::{error::Error, fmt::Display, fs, path::Path};
 
 use toml::Table;
 
+use crate::FileSystemAPI;
+
+#[derive(Debug)]
+pub struct NotFoundError;
+
+impl Display for NotFoundError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Not Found")
+    }
+}
+
+impl Error for NotFoundError {}
+
 #[derive(Debug)]
 struct TomlError {
     error: Box<dyn Error>,
@@ -14,9 +27,17 @@ impl Display for TomlError {
 }
 impl Error for TomlError {}
 
-pub fn read_toml(path: &Path) -> Result<Table, Box<dyn Error>> {
-    let toml = match fs::read_to_string(path) {
-        Ok(c) => c,
+pub fn read_toml(path: &Path, fs: &impl FileSystemAPI) -> Result<Table, Box<dyn Error>> {
+    let toml = match fs.read_to_string(path) {
+        Ok(c) => match c {
+            Some(c) => c,
+            None => {
+                return Err(TomlError {
+                    error: NotFoundError.into(),
+                    file: path.to_string_lossy().to_string()
+                }.into())
+            }
+        },
         Err(error) => {
             return Err(TomlError {
                 error: error.into(),
