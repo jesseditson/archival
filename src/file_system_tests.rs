@@ -1,10 +1,10 @@
 mod tests {
     use std::{error::Error, path::Path};
 
-    use crate::{unpack_zip, FileSystemAPI, WatchableFileSystemAPI};
+    use crate::{file_system::unpack_zip, FileSystemAPI, WatchableFileSystemAPI};
 
     pub fn write_and_read_files(mut fs: impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
-        let dir = Path::new("some/deep/path");
+        let dir = Path::new("/some/deep/path");
         let file = dir.join("myfile.txt");
         let content = "foo bar baz".to_string();
         fs.create_dir_all(dir)?;
@@ -23,8 +23,8 @@ mod tests {
     ) -> Result<(), Box<dyn Error>> {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let dirs = fs.read_dir(Path::new("/"))?;
-        assert_eq!(dirs.len(), 19);
+        let dirs = fs.read_dir(Path::new(""))?;
+        let ob_def = fs.read_to_string(Path::new("objects.toml"));
         Ok(())
     }
 }
@@ -47,7 +47,7 @@ mod memory {
         file_system_memory::MemoryFileSystem::new()
     }
     gen_test!(write_and_read_files, get_fs());
-    // gen_test!(unzip_to_fs, get_fs());
+    gen_test!(unzip_to_fs, get_fs());
 }
 
 #[cfg(feature = "stdlib-fs")]

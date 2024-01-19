@@ -13,7 +13,7 @@ use std::{
 };
 
 use crate::{
-    build_site, file_system_mutex::FileSystemMutex, file_system_stdlib, load_site, ArchivalError,
+    site, file_system_mutex::FileSystemMutex, file_system_stdlib, file_system::WatchableFileSystemAPI, ArchivalError,
 };
 
 static INVALID_COMMAND: &str = "Valid commands are `build` and `run`.";
@@ -28,11 +28,11 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
         }
         let fs_a = FileSystemMutex::init(file_system_stdlib::NativeFileSystem);
 
-        let site = fs_a.with_fs(|fs| load_site(&build_dir, fs))?;
+        let site = fs_a.with_fs(|fs| site::load(&build_dir, fs))?;
         match &command_arg[..] {
             "build" => {
                 println!("Building site: {}", &site);
-                build_site(&site, fs_a)?;
+                site::build(&site, fs_a)?;
             }
             "run" => {
                 println!("Watching site: {}", &site);
@@ -44,7 +44,7 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                         site.manifest.watched_paths(),
                         move |paths| {
                             println!("Changed: {:?}", paths);
-                            build_site(&site, fs_a.clone()).unwrap_or_else(|err| {
+                            site::build(&site, fs_a.clone()).unwrap_or_else(|err| {
                                 println!("Failed reloading site: {}", err);
                             })
                         },
