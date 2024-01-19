@@ -1,18 +1,12 @@
 use std::{
     collections::HashMap,
-    env,
     error::Error,
     io::{Cursor, Read, Seek},
     path::{Path, PathBuf},
-    process::exit,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
 };
-
 mod field_value;
 mod file_system;
+mod file_system_memory;
 mod file_system_mutex;
 mod filters;
 mod liquid_parser;
@@ -24,28 +18,24 @@ mod read_toml;
 mod reserved_fields;
 mod site;
 mod tags;
-
 use constants::MANIFEST_FILE_NAME;
-#[cfg(feature = "stdlib-fs")]
-use ctrlc;
 pub use file_system::{FileSystemAPI, WatchableFileSystemAPI};
 use file_system_mutex::FileSystemMutex;
-use futures::executor;
 use manifest::Manifest;
 use object::Object;
 use object_definition::ObjectDefinition;
 use page::Page;
 use read_toml::read_toml;
-use reqwest;
 use site::Site;
 use tags::layout;
-
+#[cfg(feature = "binary")]
+pub mod binary;
 mod constants;
 #[cfg(feature = "stdlib-fs")]
 mod file_system_stdlib;
 #[cfg(feature = "wasm-fs")]
 mod file_system_wasm;
-
+pub use file_system_memory::MemoryFileSystem;
 #[cfg(feature = "wasm-fs")]
 pub use file_system_wasm::WasmFileSystem;
 
@@ -71,77 +61,10 @@ impl Error for ArchivalError {
     }
 }
 
-static INVALID_COMMAND: &str = "Valid commands are `build` and `run`.";
-
-#[cfg(feature = "stdlib-fs")]
-pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
-    let mut build_dir = env::current_dir()?;
-    let _bin_name = args.next();
-    if let Some(command_arg) = args.next() {
-        let path_arg = args.next();
-        if let Some(path) = path_arg {
-            build_dir = build_dir.join(path);
-        }
-        let fs_a = FileSystemMutex::init(file_system_stdlib::NativeFileSystem);
-
-        let site = fs_a.with_fs(|fs| load_site(&build_dir, fs))?;
-        match &command_arg[..] {
-            "build" => {
-                println!("Building site: {}", &site);
-                build_site(&site, fs_a)?;
-            }
-            "run" => {
-                println!("Watching site: {}", &site);
-                fs_a.clone().with_fs(|fs| {
-                    // This won't leak because the process is ended when we
-                    // abort anyway
-                    _ = fs.watch(
-                        site.root.to_owned(),
-                        site.manifest.watched_paths(),
-                        move |paths| {
-                            println!("Changed: {:?}", paths);
-                            build_site(&site, fs_a.clone()).unwrap_or_else(|err| {
-                                println!("Failed reloading site: {}", err);
-                            })
-                        },
-                    )?;
-                    Ok(())
-                })?;
-                let aborted = Arc::new(AtomicBool::new(false));
-                let aborted_clone = aborted.clone();
-                ctrlc::set_handler(move || {
-                    aborted_clone.store(true, Ordering::SeqCst);
-                })?;
-                loop {
-                    if aborted.load(Ordering::SeqCst) {
-                        exit(0);
-                    }
-                }
-            }
-            _ => {
-                return Err(ArchivalError::new(INVALID_COMMAND).into());
-            }
-        }
-    } else {
-        return Err(ArchivalError::new(INVALID_COMMAND).into());
-    }
-    Ok(())
-}
-
-#[cfg(feature = "binary")]
-pub fn download_site(url: &str) -> Result<Vec<u8>, reqwest::Error> {
-    let response = executor::block_on(reqwest::get(url))?;
-    match response.error_for_status() {
-        Ok(r) => {
-            let r = executor::block_on(r.bytes())?;
-            Ok(r.to_vec())
-        }
-        Err(e) => Err(e),
-    }
-}
-
 #[cfg(feature = "wasm-fs")]
 pub fn fetch_site(url: &str) -> Result<Vec<u8>, reqwest_wasm::Error> {
+    use futures::executor;
+
     let response = executor::block_on(reqwest_wasm::get(url))?;
     match response.error_for_status() {
         Ok(r) => {
@@ -352,21 +275,9 @@ pub mod tests {
     use super::*;
 
     #[test]
-    #[cfg(feature = "stdlib-fs")]
-    fn zip_unpacking_stdlib() -> Result<(), Box<dyn Error>> {
+    fn zip_unpacking() -> Result<(), Box<dyn Error>> {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
-        let mut fs = file_system_stdlib::NativeFileSystem;
-        unpack_zip(zip.to_vec(), &mut fs)?;
-        let dirs = fs.read_dir(Path::new("/"))?;
-        assert_eq!(dirs.len(), 19);
-        Ok(())
-    }
-
-    #[test]
-    #[cfg(feature = "wasm-fs")]
-    fn zip_unpacking_wasm() -> Result<(), Box<dyn Error>> {
-        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
-        let mut fs = file_system_wasm::WasmFileSystem::new("test");
+        let mut fs = file_system_memory::MemoryFileSystem::new();
         unpack_zip(zip.to_vec(), &mut fs)?;
         let dirs = fs.read_dir(Path::new("/"))?;
         assert_eq!(dirs.len(), 19);

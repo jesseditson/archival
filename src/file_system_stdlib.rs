@@ -12,10 +12,10 @@ use super::{FileSystemAPI, WatchableFileSystemAPI};
 pub struct NativeFileSystem;
 
 impl FileSystemAPI for NativeFileSystem {
-    fn remove_dir_all(&self, path: &Path) -> Result<(), Box<dyn Error>> {
+    fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         Ok(fs::remove_dir_all(path)?)
     }
-    fn create_dir_all(&self, path: &Path) -> Result<(), Box<dyn Error>> {
+    fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         Ok(fs::create_dir_all(path)?)
     }
     fn read_dir(&self, path: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn Error>> {

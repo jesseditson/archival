@@ -1,6 +1,5 @@
 use futures::executor::block_on;
 use indexed_db_futures::prelude::*;
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashSet, VecDeque},
     error::Error,
@@ -10,56 +9,12 @@ use std::{
 use wasm_bindgen::JsValue;
 use web_sys::{DomException, IdbKeyRange};
 
+use crate::file_system_memory::{FileGraphNode, Watcher};
+
 use super::{FileSystemAPI, WatchableFileSystemAPI};
 
 static FILES_STORE_NAME: &str = "files";
 static FILE_GRAPH_STORE_NAME: &str = "file_graph";
-
-#[derive(Serialize, Deserialize)]
-struct FileGraphNode {
-    path: PathBuf,
-    files: HashSet<PathBuf>,
-}
-
-impl FileGraphNode {
-    pub fn from_val(path: &PathBuf, val: Option<JsValue>) -> Self {
-        match val {
-            Some(js_val) => {
-                let val = match serde_wasm_bindgen::from_value::<Self>(js_val) {
-                    Ok(v) => Some(v),
-                    Err(_) => None,
-                };
-                val
-            }
-            None => None,
-        }
-        .unwrap_or_else(|| Self::new(&path))
-    }
-    pub fn new(path: &PathBuf) -> Self {
-        Self {
-            path: path.to_path_buf(),
-            files: HashSet::new(),
-        }
-    }
-    pub fn key(path: &PathBuf) -> String {
-        path.to_string_lossy().to_lowercase()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.files.is_empty()
-    }
-    pub fn add(&mut self, path: &PathBuf) {
-        self.files.insert(path.to_owned());
-    }
-    pub fn remove(&mut self, path: &PathBuf) {
-        self.files.remove(path);
-    }
-}
-
-struct Watcher {
-    root: PathBuf,
-    paths: Vec<String>,
-    changed: Box<dyn Fn(Vec<PathBuf>) + Send + Sync>,
-}
 
 pub struct WasmFileSystem {
     idb_name: String,
@@ -74,6 +29,22 @@ impl WasmFileSystem {
             idb_name: idb_name.to_owned(),
             change_handlers: VecDeque::new(),
         }
+    }
+}
+
+impl FileGraphNode {
+    pub fn from_js_val(path: &PathBuf, val: Option<JsValue>) -> Self {
+        match val {
+            Some(js_val) => {
+                let val = match serde_wasm_bindgen::from_value::<Self>(js_val) {
+                    Ok(v) => Some(v),
+                    Err(_) => None,
+                };
+                val
+            }
+            None => None,
+        }
+        .unwrap_or_else(|| Self::new(&path))
     }
 }
 
@@ -107,12 +78,12 @@ fn map_idb_err<T>(r: Result<T, DomException>) -> Result<T, IdbError> {
 }
 
 impl FileSystemAPI for WasmFileSystem {
-    fn remove_dir_all(&self, path: &Path) -> Result<(), Box<dyn Error>> {
+    fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         let db = idb_task(self.get_db())?;
         idb_task(self.remove_from_graph(&path.to_path_buf(), &db))?;
         Ok(())
     }
-    fn create_dir_all(&self, _path: &Path) -> Result<(), Box<dyn Error>> {
+    fn create_dir_all(&mut self, _path: &Path) -> Result<(), Box<dyn Error>> {
         // dirs are implicitly created when files are created in them
         Ok(())
     }
@@ -153,7 +124,7 @@ impl FileSystemAPI for WasmFileSystem {
         let mut all_files: Vec<PathBuf> = vec![];
         for child in children {
             let node_data = idb_task(map_idb_err(store.get_owned(&FileGraphNode::key(&child)))?)?;
-            let node = FileGraphNode::from_val(&path, node_data);
+            let node = FileGraphNode::from_js_val(&path, node_data);
             all_files.append(&mut node.files.into_iter().collect());
         }
         Ok(Box::new(all_files.into_iter()))
@@ -258,8 +229,8 @@ impl WasmFileSystem {
             if a_path.to_string_lossy() == path.to_string_lossy() {
                 continue;
             }
-            let mut node = FileGraphNode::from_val(
-                &path,
+            let mut node = FileGraphNode::from_js_val(
+                &a_path,
                 store.get_owned(FileGraphNode::key(&a_path))?.await?,
             );
             node.add(&last_path);
@@ -277,7 +248,7 @@ impl WasmFileSystem {
             db.transaction_on_one_with_mode(FILE_GRAPH_STORE_NAME, IdbTransactionMode::Readwrite)?;
         let store = tx.object_store(FILE_GRAPH_STORE_NAME)?;
         let node =
-            FileGraphNode::from_val(&path, store.get_owned(&FileGraphNode::key(&path))?.await?);
+            FileGraphNode::from_js_val(&path, store.get_owned(&FileGraphNode::key(&path))?.await?);
         Ok(node.files)
     }
 
@@ -313,7 +284,7 @@ impl WasmFileSystem {
 
         // If this is a directory, remove it and its children from the graph
         let node =
-            FileGraphNode::from_val(&path, store.get_owned(&FileGraphNode::key(&path))?.await?);
+            FileGraphNode::from_js_val(&path, store.get_owned(&FileGraphNode::key(&path))?.await?);
         if !node.is_empty() {
             for path in self.all_children(&path, &store).await? {
                 // delete the node and object
@@ -330,7 +301,7 @@ impl WasmFileSystem {
                 // We've handled the leaf above
                 continue;
             }
-            let mut node = FileGraphNode::from_val(
+            let mut node = FileGraphNode::from_js_val(
                 &a_path,
                 store.get_owned(FileGraphNode::key(&a_path))?.await?,
             );

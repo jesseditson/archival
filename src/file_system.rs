@@ -4,8 +4,8 @@ use std::{
 };
 
 pub trait FileSystemAPI {
-    fn remove_dir_all(&self, path: &Path) -> Result<(), Box<dyn Error>>;
-    fn create_dir_all(&self, path: &Path) -> Result<(), Box<dyn Error>>;
+    fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
+    fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>>;
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>>;
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>>;
