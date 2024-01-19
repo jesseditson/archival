@@ -29,6 +29,7 @@ name = "archival"
 path = "src/main.rs"
 
 ## Eventually:
+## https://github.com/rust-lang/cargo/issues/1197
 # [target.'cfg(target_arch = "wasm32")'.features]
 # default = ["wasm-fs"]
 # [target.'cfg(not(target_arch = "wasm32"))'.features]
