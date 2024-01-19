@@ -8,6 +8,8 @@ mod field_value;
 mod file_system;
 mod file_system_memory;
 mod file_system_mutex;
+#[cfg(test)]
+mod file_system_tests;
 mod filters;
 mod liquid_parser;
 mod manifest;
@@ -268,19 +270,4 @@ pub fn build_site<T: FileSystemAPI>(
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-pub mod tests {
-    use super::*;
-
-    #[test]
-    fn zip_unpacking() -> Result<(), Box<dyn Error>> {
-        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
-        let mut fs = file_system_memory::MemoryFileSystem::new();
-        unpack_zip(zip.to_vec(), &mut fs)?;
-        let dirs = fs.read_dir(Path::new("/"))?;
-        assert_eq!(dirs.len(), 19);
-        Ok(())
-    }
 }

@@ -7,7 +7,7 @@ use std::{
 
 use super::{FileSystemAPI, WatchableFileSystemAPI};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FileGraphNode {
     path: PathBuf,
     pub(crate) files: HashSet<PathBuf>,
@@ -158,19 +158,16 @@ impl MemoryFileSystem {
 
     fn write_to_graph(&mut self, path: &PathBuf) {
         // Traverse up the path and add each file to its parent's node
-        let mut last_path: PathBuf;
+        let mut last_path: PathBuf = PathBuf::new();
         for ancestor in path.ancestors() {
-            // Skip the actual file path, since only directories are nodes
             let a_path = ancestor.to_path_buf();
-            last_path = a_path.to_owned();
-            if a_path.to_string_lossy() == path.to_string_lossy() {
-                continue;
+            // Skip the actual file path, since only directories are nodes
+            if a_path.to_string_lossy() != path.to_string_lossy() {
+                let mut node = self.get_node(&a_path);
+                node.add(&last_path);
+                self.tree.insert(FileGraphNode::key(&a_path), node);
             }
-            let mut node = self.get_node(&a_path);
-            node.add(&last_path);
-
-            self.tree
-                .insert(a_path.to_string_lossy().to_lowercase(), node);
+            last_path = a_path.to_owned();
         }
     }
 

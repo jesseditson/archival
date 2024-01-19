@@ -12,8 +12,8 @@ name = "archival"
 path = "src/lib.rs"
 
 [features]
-binary = ["dep:notify", "dep:ctrlc"]
-stdlib-fs = ["dep:fs_extra", "dep:walkdir"]
+binary = ["dep:ctrlc"]
+stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
 wasm-fs = [
     "dep:wasm-bindgen",
     "dep:web-sys",
@@ -28,11 +28,11 @@ wasm-fs = [
 name = "archival"
 path = "src/main.rs"
 
-[target.'cfg(target_arch = "wasm32")'.features]
-default = ["wasm-fs"]
-# [target.'cfg(target_arch = "wasm32")'.dependencies]
-[target.'cfg(not(target_arch = "wasm32"))'.features]
-default = ["stdlib-fs", "binary"]
+## Eventually:
+# [target.'cfg(target_arch = "wasm32")'.features]
+# default = ["wasm-fs"]
+# [target.'cfg(not(target_arch = "wasm32"))'.features]
+# default = ["stdlib-fs", "binary"]
 
 [dependencies]
 # stdlib-fs
