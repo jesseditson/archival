@@ -1,8 +1,5 @@
 mod tests {
-    use std::{
-        error::Error,
-        path::{Path, PathBuf},
-    };
+    use std::{error::Error, path::Path};
 
     use crate::{unpack_zip, FileSystemAPI, WatchableFileSystemAPI};
 
@@ -70,7 +67,7 @@ mod stdlib {
     gen_test!(unzip_to_fs, get_fs());
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(feature = "wasm-fs")]
 mod wasm {
     use crate::file_system_wasm;
 
