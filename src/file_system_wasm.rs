@@ -78,6 +78,10 @@ fn map_idb_err<T>(r: Result<T, DomException>) -> Result<T, IdbError> {
 }
 
 impl FileSystemAPI for WasmFileSystem {
+    fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
+        let f = idb_task(self.get_file(&path.to_path_buf()))?;
+        Ok(f.is_some())
+    }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         let db = idb_task(self.get_db())?;
         idb_task(self.remove_from_graph(&path.to_path_buf(), &db))?;
@@ -338,15 +342,18 @@ impl WasmFileSystem {
         Ok(())
     }
 
-    async fn read_file(&self, path: &PathBuf) -> Result<Option<Vec<u8>>, DomException> {
+    async fn get_file(&self, path: &PathBuf) -> Result<Option<JsValue>, DomException> {
         let db = self.get_db().await?;
 
         let tx = db.transaction_on_one(FILES_STORE_NAME)?;
         let store = tx.object_store(FILES_STORE_NAME)?;
 
-        match store
-            .get_owned(path.to_string_lossy().to_lowercase())?
-            .await?
+        store
+            .get_owned(path.to_string_lossy().to_lowercase())?.await
+    }
+
+    async fn read_file(&self, path: &PathBuf) -> Result<Option<Vec<u8>>, DomException> {
+        match self.get_file(path).await?
         {
             Some(js_val) => {
                 let val = match serde_wasm_bindgen::from_value::<Vec<u8>>(js_val) {

@@ -12,6 +12,9 @@ use super::{FileSystemAPI, WatchableFileSystemAPI};
 pub struct NativeFileSystem;
 
 impl FileSystemAPI for NativeFileSystem {
+    fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
+        Ok(fs::metadata(path).is_ok())
+    }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         Ok(fs::remove_dir_all(path)?)
     }

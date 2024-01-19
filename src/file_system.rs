@@ -4,6 +4,7 @@ use std::{
 };
 
 pub trait FileSystemAPI {
+    fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>>;
@@ -78,7 +79,7 @@ pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<(), B
             fs.create_dir_all(&outpath)?;
         } else {
             if let Some(p) = outpath.parent() {
-                if !p.exists() {
+                if !fs.exists(p)? {
                     fs.create_dir_all(&p)?;
                 }
             }

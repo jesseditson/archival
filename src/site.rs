@@ -39,8 +39,10 @@ pub fn load(root: &Path, fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>
         Ok(m) => m,
         Err(_) => Manifest::default(root),
     };
+    println!("m: {}", manifest);
+    println!("fs: {:?}", root);
     let odf = root.join(&manifest.object_definition_file);
-    if !odf.exists() {
+    if !fs.exists(&odf)? {
         return Err(ArchivalError::new(&format!(
             "Object definition file {} does not exist",
             odf.to_string_lossy()
@@ -70,29 +72,31 @@ pub fn build<T: FileSystemAPI>(
     let static_dir = site.root.join(&site.manifest.static_dir);
 
     // Validate paths
-    if !objects_dir.exists() {
-        return Err(ArchivalError::new(&format!(
-            "Objects dir {} does not exist",
-            objects_dir.to_string_lossy()
-        ))
-        .into());
-    }
-    if !pages_dir.exists() {
-        return Err(ArchivalError::new(&format!(
-            "Pages dir {} does not exist",
-            pages_dir.to_string_lossy()
-        ))
-        .into());
-    }
-    if !build_dir.exists() {
-        fs.with_fs(|f| f.create_dir_all(&build_dir))?;
-    }
-
-    // Copy static files
-    if static_dir.exists() {
-        fs.clone()
-            .with_fs(|f| f.copy_contents(&static_dir, &build_dir))?;
-    }
+    fs.with_fs(|fs| {
+        if !fs.exists(&objects_dir)? {
+            return Err(ArchivalError::new(&format!(
+                "Objects dir {} does not exist",
+                objects_dir.to_string_lossy()
+            ))
+            .into());
+        }
+        if !fs.exists(&pages_dir)? {
+            return Err(ArchivalError::new(&format!(
+                "Pages dir {} does not exist",
+                pages_dir.to_string_lossy()
+            ))
+            .into());
+        }
+        if !fs.exists(&build_dir)? {
+            fs.create_dir_all(&build_dir)?;
+        }
+    
+        // Copy static files
+        if fs.exists(&static_dir)? {
+            fs.copy_contents(&static_dir, &build_dir)?;
+        }
+        Ok(())
+    })?;
 
     for (object_name, object_def) in site.objects.iter() {
         let mut objects: Vec<Object> = Vec::new();

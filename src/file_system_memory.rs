@@ -63,6 +63,9 @@ impl MemoryFileSystem {
 }
 
 impl FileSystemAPI for MemoryFileSystem {
+    fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
+        Ok(self.fs.get(&path.to_string_lossy().to_lowercase()).is_some())
+    }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         self.remove_from_graph(&path.to_path_buf());
         Ok(())
