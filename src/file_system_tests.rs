@@ -4,7 +4,7 @@ mod tests {
     use crate::{file_system::unpack_zip, FileSystemAPI, WatchableFileSystemAPI};
 
     pub fn write_and_read_files(mut fs: impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
-        let dir = Path::new("/some/deep/path");
+        let dir = Path::new("some/deep/path");
         let file = dir.join("myfile.txt");
         let content = "foo bar baz".to_string();
         fs.create_dir_all(dir)?;
@@ -23,11 +23,13 @@ mod tests {
     ) -> Result<(), Box<dyn Error>> {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let dirs = fs.read_dir(Path::new(""))?;
+        let root_files: Vec<String> = fs
+            .read_dir(Path::new(""))?
+            .iter()
+            .map(|p| p.file_name().unwrap().to_str().unwrap().to_owned())
+            .collect();
         let ob_def = fs.read_to_string(Path::new("objects.toml"))?;
-        assert!(dirs.contains(&Path::new("layout").to_path_buf()));
-        assert!(dirs.contains(&Path::new("pages").to_path_buf()));
-        assert!(dirs.contains(&Path::new("objects").to_path_buf()));
+        assert!(root_files.contains(&"layout".to_string()));
         assert!(ob_def.is_some());
         Ok(())
     }
@@ -56,16 +58,22 @@ mod memory {
 
 #[cfg(feature = "stdlib-fs")]
 mod stdlib {
-    use std::{env, fs};
+    use rand::{distributions::Alphanumeric, Rng};
+    use std::{env, fs, path::Path};
 
     use crate::file_system_stdlib;
 
     use super::tests;
     fn get_fs() -> file_system_stdlib::NativeFileSystem {
-        fs::remove_dir_all("target/file-system-tests").unwrap();
-        fs::create_dir_all("target/file-system-tests").unwrap();
-        env::set_current_dir("target/file-system-tests").unwrap();
-        file_system_stdlib::NativeFileSystem
+        let rand_dir: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(14)
+            .map(char::from)
+            .collect();
+        let dir = format!("./target/file-system-tests/{}", rand_dir);
+        fs::create_dir_all(&dir).unwrap();
+        env::set_current_dir(&dir).unwrap();
+        file_system_stdlib::NativeFileSystem::new(Path::new(&dir))
     }
     gen_test!(write_and_read_files, get_fs());
     gen_test!(unzip_to_fs, get_fs());

@@ -80,7 +80,9 @@ impl<'a> Page<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{field_value::FieldValue, liquid_parser, object_definition::FieldType};
+    use crate::{
+        field_value::FieldValue, liquid_parser, object_definition::FieldType, MemoryFileSystem,
+    };
 
     use super::*;
 
@@ -202,7 +204,7 @@ mod tests {
 
     #[test]
     fn regular_page() -> Result<(), Box<dyn Error>> {
-        let liquid_parser = liquid_parser::get(None)?;
+        let liquid_parser = liquid_parser::get(None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
         let page = Page::new("home".to_string(), page_content().to_string());
         let rendered = page.render(&liquid_parser, &objects_map)?;
@@ -221,7 +223,7 @@ mod tests {
     }
     #[test]
     fn template_page() -> Result<(), Box<dyn Error>> {
-        let liquid_parser = liquid_parser::get(None)?;
+        let liquid_parser = liquid_parser::get(None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
         let object = objects_map["artist"].first().unwrap();
         let artist_def = artist_definition();

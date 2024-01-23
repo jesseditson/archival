@@ -1,11 +1,5 @@
 use regex::Regex;
-use std::{
-    borrow::Cow,
-    collections::HashMap,
-    error::Error,
-    fs::{self, read_dir},
-    path::PathBuf,
-};
+use std::{borrow::Cow, collections::HashMap, error::Error, path::Path};
 
 use liquid_core::{
     parser,
@@ -13,7 +7,7 @@ use liquid_core::{
     runtime, Language, Template,
 };
 
-use crate::tags::layout::LayoutTag;
+use crate::{tags::layout::LayoutTag, FileSystemAPI};
 
 fn liquid_extension() -> Regex {
     Regex::new(r"\.(liquid|html)").unwrap()
@@ -25,17 +19,20 @@ struct LayoutPartialSource {
 }
 
 impl LayoutPartialSource {
-    pub fn new(path: Option<PathBuf>) -> Result<Self, std::io::Error> {
+    pub fn new(path: Option<&Path>, fs: &impl FileSystemAPI) -> Result<Self, Box<dyn Error>> {
         let mut layouts = HashMap::new();
         if let Some(path) = path {
-            let files = read_dir(path)?;
+            let files = fs.read_dir(path)?;
             let ext_re = liquid_extension();
-            for file in files.flatten() {
-                if let Some(name) = file.file_name().to_str() {
+            for file in files {
+                if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
                     if ext_re.is_match(name) {
                         let template_name = ext_re.replace(name, "").to_string();
-                        let contents = fs::read_to_string(file.path())?;
-                        layouts.insert(template_name, contents);
+                        if let Some(contents) = fs.read_to_string(&file)? {
+                            layouts.insert(template_name, contents);
+                        } else {
+                            println!("Failed reading {}", file.display());
+                        }
                     }
                 }
             }
@@ -62,8 +59,11 @@ impl PartialSource for LayoutPartialSource {
     }
 }
 
-pub fn get(layout_path: Option<PathBuf>) -> Result<liquid::Parser, Box<dyn Error>> {
-    let layout_partials = EagerCompiler::new(LayoutPartialSource::new(layout_path)?);
+pub fn get(
+    layout_path: Option<&Path>,
+    fs: &impl FileSystemAPI,
+) -> Result<liquid::Parser, Box<dyn Error>> {
+    let layout_partials = EagerCompiler::new(LayoutPartialSource::new(layout_path, fs)?);
     let parser = liquid::ParserBuilder::with_stdlib()
         .tag(LayoutTag)
         .partials(layout_partials);

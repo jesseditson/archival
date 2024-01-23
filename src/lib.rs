@@ -45,7 +45,7 @@ pub fn fetch_site(url: &str) -> Result<Vec<u8>, reqwest_wasm::Error> {
 
 #[cfg(test)]
 mod tests {
-    use std::{error::Error, path::Path};
+    use std::error::Error;
 
     use crate::file_system::unpack_zip;
 
@@ -56,7 +56,7 @@ mod tests {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let site = site::load(Path::new(""), &fs)?;
+        let site = site::load(&fs)?;
         assert_eq!(site.objects.len(), 1);
         let first_id = site.objects.keys().next().unwrap();
         assert_eq!(site.objects[first_id].name, "section");

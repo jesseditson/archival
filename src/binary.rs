@@ -27,9 +27,9 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
         if let Some(path) = path_arg {
             build_dir = build_dir.join(path);
         }
-        let fs_a = FileSystemMutex::init(file_system_stdlib::NativeFileSystem);
+        let fs_a = FileSystemMutex::init(file_system_stdlib::NativeFileSystem::new(&build_dir));
 
-        let site = fs_a.with_fs(|fs| site::load(&build_dir, fs))?;
+        let site = fs_a.with_fs(|fs| site::load(fs))?;
         match &command_arg[..] {
             "build" => {
                 println!("Building site: {}", &site);
@@ -41,7 +41,7 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                     // This won't leak because the process is ended when we
                     // abort anyway
                     _ = fs.watch(
-                        site.root.to_owned(),
+                        fs.root.to_owned(),
                         site.manifest.watched_paths(),
                         move |paths| {
                             println!("Changed: {:?}", paths);

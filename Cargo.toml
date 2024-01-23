@@ -14,15 +14,7 @@ path = "src/lib.rs"
 [features]
 binary = ["dep:ctrlc", "stdlib-fs"]
 stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
-wasm-fs = [
-    "dep:wasm-bindgen",
-    "dep:web-sys",
-    "dep:wasm-bindgen-futures",
-    "dep:indexed_db_futures",
-    "dep:serde_bytes",
-    "dep:serde-wasm-bindgen",
-    "dep:reqwest-wasm",
-]
+wasm-fs = ["dep:wasm-bindgen", "dep:web-sys", "dep:wasm-bindgen-futures", "dep:indexed_db_futures", "dep:serde_bytes", "dep:serde-wasm-bindgen", "dep:reqwest-wasm", "dep:typescript-type-def"]
 
 [[bin]]
 name = "archival"
@@ -55,6 +47,7 @@ serde-wasm-bindgen = { version = "0.4", optional = true }
 indexed_db_futures = { version = "0.3.0", optional = true }
 serde_bytes = { version = "0.11.12", optional = true }
 reqwest-wasm = { version = "0.11.16", optional = true }
+typescript-type-def = { version = "0.5.9", optional = true }
 # shared
 liquid = "0.26.1"
 serde = "1.0.152"
@@ -68,5 +61,6 @@ zip = { version = "0.6.6", default_features = false, features = ["deflate"] }
 reqwest = "0.11.23"
 
 [dev-dependencies]
+rand = "0.8.5"
 tempfile = "3.5.0"
 wasm-bindgen-test = "0.3.0"

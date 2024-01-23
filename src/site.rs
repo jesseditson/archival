@@ -1,9 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    error::Error,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, error::Error, path::Path};
 
 use crate::{
     constants::MANIFEST_FILE_NAME,
@@ -20,7 +16,6 @@ use crate::{
 
 #[derive(Deserialize, Serialize)]
 pub struct Site {
-    pub root: PathBuf,
     pub objects: ObjectDefinitions,
     pub manifest: Manifest,
 }
@@ -30,13 +25,10 @@ impl std::fmt::Display for Site {
         write!(
             f,
             r#"
-        === Root:
-            {}
         === Objects:
             {}
         === Manifest: {}
         "#,
-            self.root.display(),
             self.objects
                 .keys()
                 .map(|o| o.as_str().to_string())
@@ -47,15 +39,13 @@ impl std::fmt::Display for Site {
     }
 }
 
-pub fn load(root: &Path, fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
+pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
     // Load our manifest (should it exist)
-    let manifest = match Manifest::from_file(&root.join(MANIFEST_FILE_NAME), fs) {
+    let manifest = match Manifest::from_file(&Path::new(MANIFEST_FILE_NAME), fs) {
         Ok(m) => m,
-        Err(_) => Manifest::default(root),
+        Err(_) => Manifest::default(Path::new("")),
     };
-    println!("m: {}", manifest);
-    println!("fs: {:?}", root);
-    let odf = root.join(&manifest.object_definition_file);
+    let odf = Path::new(&manifest.object_definition_file);
     if !fs.exists(&odf)? {
         return Err(ArchivalError::new(&format!(
             "Object definition file {} does not exist",
@@ -67,20 +57,16 @@ pub fn load(root: &Path, fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>
     // Load our object definitions
     let objects_table = read_toml(&odf, fs)?;
     let objects = ObjectDefinition::from_table(&objects_table)?;
-    Ok(Site {
-        root: root.to_path_buf(),
-        manifest,
-        objects,
-    })
+    Ok(Site { manifest, objects })
 }
 
 pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<(), Box<dyn Error>> {
     let mut all_objects: HashMap<String, Vec<Object>> = HashMap::new();
-    let objects_dir = site.root.join(&site.manifest.objects_dir);
-    let layout_dir = site.root.join(&site.manifest.layout_dir);
-    let pages_dir = site.root.join(&site.manifest.pages_dir);
-    let build_dir = site.root.join(&site.manifest.build_dir);
-    let static_dir = site.root.join(&site.manifest.static_dir);
+    let objects_dir = &site.manifest.objects_dir;
+    let layout_dir = &site.manifest.layout_dir;
+    let pages_dir = &site.manifest.pages_dir;
+    let build_dir = &site.manifest.build_dir;
+    let static_dir = &site.manifest.static_dir;
 
     // Validate paths
     fs.with_fs(|fs| {
@@ -125,13 +111,19 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<()
         all_objects.insert(object_name.clone(), objects);
     }
 
-    let liquid_parser = liquid_parser::get(if layout_dir.exists() {
-        Some(layout_dir)
-    } else {
-        None
+    let liquid_parser = fs.with_fs(|fs| {
+        liquid_parser::get(
+            if fs.exists(layout_dir)? {
+                Some(layout_dir)
+            } else {
+                None
+            },
+            fs,
+        )
     })?;
 
     // Render template pages
+    println!("Rendering templates...");
     for (name, object_def) in site.objects.iter() {
         if let Some(template) = &object_def.template {
             if let Some(t_objects) = all_objects.get(name) {
@@ -149,6 +141,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<()
                             layout::post_process(page.render(&liquid_parser, &all_objects)?);
                         let render_name = format!("{}.html", object.name);
                         let build_path = build_dir.join(render_name);
+
                         fs.with_fs(|f| f.write_str(&build_path, rendered))?;
                     }
                 }
@@ -156,6 +149,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<()
         }
     }
     // Render regular pages
+    println!("Rendering pages...");
     for file in fs.with_fs(|f| f.walk_dir(&pages_dir))? {
         if let Some(name) = file.file_name() {
             let file_name = name.to_string_lossy();

@@ -1,6 +1,6 @@
 #[cfg(feature = "binary")]
 mod binary_tests {
-    use std::{env, error::Error, fs};
+    use std::{error::Error, fs};
 
     fn get_args(args: Vec<&str>) -> impl Iterator<Item = String> {
         let mut a = vec!["archival".to_string()];
@@ -12,9 +12,7 @@ mod binary_tests {
 
     #[test]
     fn build_basics() -> Result<(), Box<dyn Error>> {
-        fs::remove_dir_all("target/binary-tests")?;
-        fs::create_dir_all("target/binary-tests")?;
-        env::set_current_dir("target/binary-tests")?;
+        _ = fs::remove_dir_all("tests/fixtures/website/dist");
         archival::binary::binary(get_args(vec!["build", "tests/fixtures/website"]))?;
         Ok(())
     }

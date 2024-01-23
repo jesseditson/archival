@@ -8,43 +8,57 @@ use walkdir::WalkDir;
 
 use super::{FileSystemAPI, WatchableFileSystemAPI};
 
-pub struct NativeFileSystem;
+pub struct NativeFileSystem {
+    pub root: PathBuf,
+}
+
+impl NativeFileSystem {
+    pub fn new(root: &Path) -> Self {
+        Self {
+            root: Path::new(root).to_owned(),
+        }
+    }
+
+    fn get_path(&self, rel: &Path) -> PathBuf {
+        self.root.join(rel)
+    }
+}
 
 impl FileSystemAPI for NativeFileSystem {
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
-        Ok(fs::metadata(path).is_ok())
+        Ok(fs::metadata(self.get_path(path)).is_ok())
     }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
-        Ok(fs::remove_dir_all(path)?)
+        Ok(fs::remove_dir_all(self.get_path(path))?)
     }
     fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
-        Ok(fs::create_dir_all(path)?)
+        Ok(fs::create_dir_all(self.get_path(path))?)
     }
     fn read_dir(&self, path: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn Error>> {
         let mut files = vec![];
-        for f in (fs::read_dir(path)?).flatten() {
-            files.push(f.path());
+        for f in (fs::read_dir(self.get_path(path))?).flatten() {
+            files.push(f.path().strip_prefix(&self.root)?.to_path_buf());
         }
         Ok(files)
     }
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
-        Ok(Some(fs::read_to_string(path)?))
+        Ok(Some(fs::read_to_string(self.get_path(path))?))
     }
     fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
-        Ok(fs::write(path, contents)?)
+        Ok(fs::write(self.get_path(path), contents)?)
     }
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
-        Ok(fs::write(path, contents)?)
+        Ok(fs::write(self.get_path(path), contents)?)
     }
     fn copy_contents(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {
         let mut options = fs_extra::dir::CopyOptions::new();
         options.overwrite = true;
         options.content_only = true;
-        fs_extra::dir::copy(from, to, &options)?;
+        fs_extra::dir::copy(self.get_path(from), self.get_path(to), &options)?;
         Ok(())
     }
     fn walk_dir(&self, path: &Path) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
-        let iterator = WalkDir::new(path)
+        let iterator = WalkDir::new(self.get_path(path))
             .follow_links(true)
             .into_iter()
             .filter_map(|e| e.ok());
@@ -59,6 +73,7 @@ impl WatchableFileSystemAPI for NativeFileSystem {
         watch_paths: Vec<String>,
         changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
     ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>> {
+        let root = self.get_path(&root);
         let watch_path = root.to_owned();
         changed(vec![]);
         let mut watcher = notify::recommended_watcher(
