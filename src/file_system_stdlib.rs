@@ -1,4 +1,3 @@
-use fs_extra;
 use notify::{RecursiveMode, Watcher};
 use std::{
     error::Error,
@@ -23,10 +22,8 @@ impl FileSystemAPI for NativeFileSystem {
     }
     fn read_dir(&self, path: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn Error>> {
         let mut files = vec![];
-        for f in fs::read_dir(path)? {
-            if let Ok(f) = f {
-                files.push(f.path());
-            }
+        for f in (fs::read_dir(path)?).flatten() {
+            files.push(f.path());
         }
         Ok(files)
     }
@@ -88,7 +85,7 @@ impl WatchableFileSystemAPI for NativeFileSystem {
                             }
                         })
                         .collect();
-                    if changed_paths.len() > 0 {
+                    if !changed_paths.is_empty() {
                         changed(changed_paths);
                     }
                 }

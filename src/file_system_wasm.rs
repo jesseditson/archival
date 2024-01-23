@@ -33,18 +33,15 @@ impl WasmFileSystem {
 }
 
 impl FileGraphNode {
-    pub fn from_js_val(path: &PathBuf, val: Option<JsValue>) -> Self {
+    pub fn from_js_val(path: &Path, val: Option<JsValue>) -> Self {
         match val {
-            Some(js_val) => {
-                let val = match serde_wasm_bindgen::from_value::<Self>(js_val) {
-                    Ok(v) => Some(v),
-                    Err(_) => None,
-                };
-                val
-            }
+            Some(js_val) => match serde_wasm_bindgen::from_value::<Self>(js_val) {
+                Ok(v) => Some(v),
+                Err(_) => None,
+            },
             None => None,
         }
-        .unwrap_or_else(|| Self::new(&path))
+        .unwrap_or_else(|| Self::new(path))
     }
 }
 
@@ -79,12 +76,12 @@ fn map_idb_err<T>(r: Result<T, DomException>) -> Result<T, IdbError> {
 
 impl FileSystemAPI for WasmFileSystem {
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
-        let f = idb_task(self.get_file(&path.to_path_buf()))?;
+        let f = idb_task(self.get_file(path))?;
         Ok(f.is_some())
     }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         let db = idb_task(self.get_db())?;
-        idb_task(self.remove_from_graph(&path.to_path_buf(), &db))?;
+        idb_task(self.remove_from_graph(path, &db))?;
         Ok(())
     }
     fn create_dir_all(&mut self, _path: &Path) -> Result<(), Box<dyn Error>> {
@@ -92,18 +89,18 @@ impl FileSystemAPI for WasmFileSystem {
         Ok(())
     }
     fn read_dir(&self, path: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn Error>> {
-        let files = idb_task(self.get_files(&path.to_path_buf()))?;
+        let files = idb_task(self.get_files(path))?;
         Ok(files.into_iter().collect())
     }
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
-        if let Some(file) = idb_task(self.read_file(&path.to_path_buf()))? {
+        if let Some(file) = idb_task(self.read_file(path))? {
             Ok(Some(std::str::from_utf8(&file)?.to_string()))
         } else {
             Ok(None)
         }
     }
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
-        idb_task(self.write_file(&path.to_path_buf(), &contents))?;
+        idb_task(self.write_file(path, &contents))?;
         self.files_changed(vec![path.to_path_buf()])?;
         Ok(())
     }
@@ -111,8 +108,8 @@ impl FileSystemAPI for WasmFileSystem {
         self.write(path, contents.as_bytes().to_vec())
     }
     fn copy_contents(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {
-        if let Some(file) = idb_task(self.read_file(&from.to_path_buf()))? {
-            idb_task(self.write_file(&to.to_path_buf(), &file))?;
+        if let Some(file) = idb_task(self.read_file(from))? {
+            idb_task(self.write_file(to, &file))?;
             self.files_changed(vec![to.to_path_buf()])?;
         }
         Ok(())
@@ -155,7 +152,7 @@ impl WatchableFileSystemAPI for WasmFileSystem {
     }
 }
 
-fn copy_path_arr(arr: &Vec<PathBuf>) -> Vec<PathBuf> {
+fn copy_path_arr(arr: &[PathBuf]) -> Vec<PathBuf> {
     arr.iter().map(|r| r.to_owned()).collect()
 }
 
@@ -169,7 +166,7 @@ impl WasmFileSystem {
                     .into_iter()
                     .filter(|p| p.to_string_lossy().to_lowercase().starts_with(prefix))
                     .collect();
-                if changed_paths.len() > 0 {
+                if !changed_paths.is_empty() {
                     (ch.changed)(changed_paths);
                 }
             }
@@ -181,17 +178,13 @@ impl WasmFileSystem {
         let mut db_req = IdbDatabase::open_u32(&self.idb_name, self.version)?;
         db_req.set_on_upgrade_needed(Some(|evt: &IdbVersionChangeEvent| -> Result<(), JsValue> {
             // Check if the object store exists; create it if it doesn't
-            if let None = evt
-                .db()
-                .object_store_names()
-                .find(|n| n == FILES_STORE_NAME)
-            {
+            if !evt.db().object_store_names().any(|n| n == FILES_STORE_NAME) {
                 evt.db().create_object_store(FILES_STORE_NAME)?;
             }
-            if let None = evt
+            if !evt
                 .db()
                 .object_store_names()
-                .find(|n| n == FILE_GRAPH_STORE_NAME)
+                .any(|n| n == FILE_GRAPH_STORE_NAME)
             {
                 evt.db().create_object_store(FILE_GRAPH_STORE_NAME)?;
             }
@@ -201,7 +194,7 @@ impl WasmFileSystem {
         Ok(db)
     }
 
-    async fn write_file(&self, path: &PathBuf, data: &Vec<u8>) -> Result<(), DomException> {
+    async fn write_file(&self, path: &Path, data: &Vec<u8>) -> Result<(), DomException> {
         let db = self.get_db().await?;
 
         let tx =
@@ -219,7 +212,7 @@ impl WasmFileSystem {
         Ok(())
     }
 
-    async fn write_to_graph(&self, path: &PathBuf, db: &IdbDatabase) -> Result<(), DomException> {
+    async fn write_to_graph(&self, path: &Path, db: &IdbDatabase) -> Result<(), DomException> {
         let tx =
             db.transaction_on_one_with_mode(FILE_GRAPH_STORE_NAME, IdbTransactionMode::Readwrite)?;
         let store = tx.object_store(FILE_GRAPH_STORE_NAME)?;
@@ -246,30 +239,30 @@ impl WasmFileSystem {
         Ok(())
     }
 
-    async fn get_files(&self, path: &PathBuf) -> Result<HashSet<PathBuf>, DomException> {
+    async fn get_files(&self, path: &Path) -> Result<HashSet<PathBuf>, DomException> {
         let db = self.get_db().await?;
         let tx =
             db.transaction_on_one_with_mode(FILE_GRAPH_STORE_NAME, IdbTransactionMode::Readwrite)?;
         let store = tx.object_store(FILE_GRAPH_STORE_NAME)?;
         let node =
-            FileGraphNode::from_js_val(&path, store.get_owned(&FileGraphNode::key(&path))?.await?);
+            FileGraphNode::from_js_val(path, store.get_owned(&FileGraphNode::key(path))?.await?);
         Ok(node.files)
     }
 
     async fn all_children(
         &self,
-        path: &PathBuf,
+        path: &Path,
         store: &IdbObjectStore<'_>,
     ) -> Result<Vec<PathBuf>, DomException> {
         // All children of this directory will use keys prefixed with this
         // directory's key. This means we can use a bound with the highest
         // possible value to get all the keys
-        let node_key = FileGraphNode::key(&path);
+        let node_key = FileGraphNode::key(path);
         let range_key = IdbKeyRange::bound(
             &JsValue::from_str(&node_key),
             &JsValue::from_str(&format!("{}\u{ffff}", node_key)),
         )
-        .map_err(|jv| DomException::from(jv))?;
+        .map_err(DomException::from)?;
         let all_keys = store.get_all_with_key(&range_key)?.await?;
         Ok(all_keys
             .iter()
@@ -279,7 +272,7 @@ impl WasmFileSystem {
 
     async fn remove_from_graph<'a>(
         &self,
-        path: &PathBuf,
+        path: &Path,
         db: &IdbDatabase,
     ) -> Result<(), DomException> {
         let tx =
@@ -288,12 +281,12 @@ impl WasmFileSystem {
 
         // If this is a directory, remove it and its children from the graph
         let node =
-            FileGraphNode::from_js_val(&path, store.get_owned(&FileGraphNode::key(&path))?.await?);
+            FileGraphNode::from_js_val(path, store.get_owned(&FileGraphNode::key(path))?.await?);
         if !node.is_empty() {
-            for path in self.all_children(&path, &store).await? {
+            for path in self.all_children(path, &store).await? {
                 // delete the node and object
                 store.delete_owned(path.to_str())?;
-                self.delete_file_only(&path, &db).await?;
+                self.delete_file_only(&path, db).await?;
             }
         }
 
@@ -326,7 +319,7 @@ impl WasmFileSystem {
         Ok(())
     }
 
-    async fn delete_file_only(&self, path: &PathBuf, db: &IdbDatabase) -> Result<(), DomException> {
+    async fn delete_file_only(&self, path: &Path, db: &IdbDatabase) -> Result<(), DomException> {
         let tx =
             db.transaction_on_one_with_mode(FILES_STORE_NAME, IdbTransactionMode::Readwrite)?;
         let store = tx.object_store(FILES_STORE_NAME)?;
@@ -335,26 +328,26 @@ impl WasmFileSystem {
         Ok(())
     }
 
-    async fn delete_file(&self, path: &PathBuf) -> Result<(), DomException> {
-        let db = self.get_db().await?;
-        self.delete_file_only(path, &db).await?;
-        self.remove_from_graph(path, &db).await?;
-        Ok(())
-    }
+    // async fn delete_file(&self, path: &Path) -> Result<(), DomException> {
+    //     let db = self.get_db().await?;
+    //     self.delete_file_only(path, &db).await?;
+    //     self.remove_from_graph(path, &db).await?;
+    //     Ok(())
+    // }
 
-    async fn get_file(&self, path: &PathBuf) -> Result<Option<JsValue>, DomException> {
+    async fn get_file(&self, path: &Path) -> Result<Option<JsValue>, DomException> {
         let db = self.get_db().await?;
 
         let tx = db.transaction_on_one(FILES_STORE_NAME)?;
         let store = tx.object_store(FILES_STORE_NAME)?;
 
         store
-            .get_owned(path.to_string_lossy().to_lowercase())?.await
+            .get_owned(path.to_string_lossy().to_lowercase())?
+            .await
     }
 
-    async fn read_file(&self, path: &PathBuf) -> Result<Option<Vec<u8>>, DomException> {
-        match self.get_file(path).await?
-        {
+    async fn read_file(&self, path: &Path) -> Result<Option<Vec<u8>>, DomException> {
+        match self.get_file(path).await? {
             Some(js_val) => {
                 let val = match serde_wasm_bindgen::from_value::<Vec<u8>>(js_val) {
                     Ok(v) => Some(v),

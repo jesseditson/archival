@@ -1,6 +1,5 @@
 #[cfg(feature = "binary")]
 mod binary_tests {
-    use archival;
     use std::{env, error::Error, fs};
 
     fn get_args(args: Vec<&str>) -> impl Iterator<Item = String> {

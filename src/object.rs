@@ -102,11 +102,7 @@ mod tests {
         let defs =
             ObjectDefinition::from_table(&toml::from_str(artist_and_page_definition_str())?)?;
         let table: Table = toml::from_str(artist_object_str())?;
-        let obj = Object::from_table(
-            defs.get("artist").unwrap(),
-            &"tormenta-rey".to_string(),
-            &table,
-        )?;
+        let obj = Object::from_table(defs.get("artist").unwrap(), "tormenta-rey", &table)?;
         assert_eq!(obj.order, 1);
         assert_eq!(obj.object_name, "artist");
         assert_eq!(obj.name, "tormenta-rey");
