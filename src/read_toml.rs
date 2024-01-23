@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display, fs, path::Path};
+use std::{error::Error, fmt::Display, path::Path};
 
 use toml::Table;
 
@@ -34,13 +34,14 @@ pub fn read_toml(path: &Path, fs: &impl FileSystemAPI) -> Result<Table, Box<dyn 
             None => {
                 return Err(TomlError {
                     error: NotFoundError.into(),
-                    file: path.to_string_lossy().to_string()
-                }.into())
+                    file: path.to_string_lossy().to_string(),
+                }
+                .into())
             }
         },
         Err(error) => {
             return Err(TomlError {
-                error: error.into(),
+                error,
                 file: path.to_string_lossy().to_string(),
             }
             .into())

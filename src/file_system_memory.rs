@@ -14,13 +14,13 @@ pub struct FileGraphNode {
 }
 
 impl FileGraphNode {
-    pub fn new(path: &PathBuf) -> Self {
+    pub fn new(path: &Path) -> Self {
         Self {
             path: path.to_path_buf(),
             files: HashSet::new(),
         }
     }
-    pub fn key(path: &PathBuf) -> String {
+    pub fn key(path: &Path) -> String {
         path.to_string_lossy().to_lowercase()
     }
     pub fn is_empty(&self) -> bool {
@@ -46,28 +46,22 @@ pub struct Watcher {
     pub(crate) changed: Box<dyn Fn(Vec<PathBuf>) + Send + Sync>,
 }
 
+#[derive(Default)]
 pub struct MemoryFileSystem {
     fs: HashMap<String, Vec<u8>>,
     tree: HashMap<String, FileGraphNode>,
     change_handlers: VecDeque<Watcher>,
 }
 
-impl MemoryFileSystem {
-    pub fn new() -> Self {
-        Self {
-            fs: HashMap::new(),
-            tree: HashMap::new(),
-            change_handlers: VecDeque::new(),
-        }
-    }
-}
-
 impl FileSystemAPI for MemoryFileSystem {
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
-        Ok(self.fs.get(&path.to_string_lossy().to_lowercase()).is_some())
+        Ok(self
+            .fs
+            .get(&path.to_string_lossy().to_lowercase())
+            .is_some())
     }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
-        self.remove_from_graph(&path.to_path_buf());
+        self.remove_from_graph(path);
         Ok(())
     }
     fn create_dir_all(&mut self, _path: &Path) -> Result<(), Box<dyn Error>> {
@@ -75,18 +69,18 @@ impl FileSystemAPI for MemoryFileSystem {
         Ok(())
     }
     fn read_dir(&self, path: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn Error>> {
-        let files = self.get_files(&path.to_path_buf());
+        let files = self.get_files(path);
         Ok(files.iter().map(|pb| pb.to_path_buf()).collect())
     }
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
-        if let Some(file) = self.read_file(&path.to_path_buf()) {
+        if let Some(file) = self.read_file(path) {
             Ok(Some(std::str::from_utf8(&file)?.to_string()))
         } else {
             Ok(None)
         }
     }
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
-        self.write_file(&path.to_path_buf(), contents);
+        self.write_file(path, contents);
         self.files_changed(vec![path.to_path_buf()])?;
         Ok(())
     }
@@ -94,8 +88,8 @@ impl FileSystemAPI for MemoryFileSystem {
         self.write(path, contents.as_bytes().to_vec())
     }
     fn copy_contents(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {
-        if let Some(file) = self.read_file(&from.to_path_buf()) {
-            self.write_file(&to.to_path_buf(), file);
+        if let Some(file) = self.read_file(from) {
+            self.write_file(to, file);
             self.files_changed(vec![to.to_path_buf()])?;
         }
         Ok(())
@@ -132,7 +126,7 @@ impl WatchableFileSystemAPI for MemoryFileSystem {
     }
 }
 
-fn copy_path_arr(arr: &Vec<PathBuf>) -> Vec<PathBuf> {
+fn copy_path_arr(arr: &[PathBuf]) -> Vec<PathBuf> {
     arr.iter().map(|r| r.to_owned()).collect()
 }
 
@@ -146,7 +140,7 @@ impl MemoryFileSystem {
                     .into_iter()
                     .filter(|p| p.to_string_lossy().to_lowercase().starts_with(prefix))
                     .collect();
-                if changed_paths.len() > 0 {
+                if !changed_paths.is_empty() {
                     (ch.changed)(changed_paths);
                 }
             }
@@ -154,12 +148,12 @@ impl MemoryFileSystem {
         Ok(())
     }
 
-    fn write_file(&mut self, path: &PathBuf, data: Vec<u8>) {
+    fn write_file(&mut self, path: &Path, data: Vec<u8>) {
         self.fs.insert(path.to_string_lossy().to_lowercase(), data);
         self.write_to_graph(path);
     }
 
-    fn write_to_graph(&mut self, path: &PathBuf) {
+    fn write_to_graph(&mut self, path: &Path) {
         // Traverse up the path and add each file to its parent's node
         let mut last_path: PathBuf = PathBuf::new();
         for ancestor in path.ancestors() {
@@ -174,33 +168,33 @@ impl MemoryFileSystem {
         }
     }
 
-    fn get_node(&self, path: &PathBuf) -> FileGraphNode {
+    fn get_node(&self, path: &Path) -> FileGraphNode {
         match self.tree.get(&FileGraphNode::key(path)) {
             Some(n) => n.copy(),
             None => FileGraphNode::new(path),
         }
     }
 
-    fn get_files(&self, path: &PathBuf) -> HashSet<PathBuf> {
+    fn get_files(&self, path: &Path) -> HashSet<PathBuf> {
         self.get_node(path).files
     }
 
-    fn all_children(&self, path: &PathBuf) -> Vec<PathBuf> {
+    fn all_children(&self, path: &Path) -> Vec<PathBuf> {
         // All children of this directory will use keys prefixed with this
         // directory's key.
-        let node_key = FileGraphNode::key(&path);
+        let node_key = FileGraphNode::key(path);
         self.tree
             .keys()
             .filter(|k| k.starts_with(&node_key))
-            .map(|key| PathBuf::from(key))
+            .map(PathBuf::from)
             .collect()
     }
 
-    fn remove_from_graph(&mut self, path: &PathBuf) {
+    fn remove_from_graph(&mut self, path: &Path) {
         // If this is a directory, remove it and its children from the graph
         let node = self.get_node(path);
         if !node.is_empty() {
-            for path in self.all_children(&path) {
+            for path in self.all_children(path) {
                 // delete the node and object
                 self.tree.remove(&FileGraphNode::key(&path));
                 self.delete_file_only(&path);
@@ -223,24 +217,24 @@ impl MemoryFileSystem {
             } else {
                 // If the file has siblings, just write the updated value and
                 // stop traversing.
-                self.tree.insert(FileGraphNode::key(&path), node);
+                self.tree.insert(FileGraphNode::key(path), node);
                 break;
             }
         }
     }
 
-    fn delete_file_only(&mut self, path: &PathBuf) {
+    fn delete_file_only(&mut self, path: &Path) {
         self.fs.remove(&path.to_string_lossy().to_lowercase());
     }
 
-    fn delete_file(&mut self, path: &PathBuf) {
-        self.delete_file_only(path);
-        self.remove_from_graph(path);
-    }
+    // fn delete_file(&mut self, path: &Path) {
+    //     self.delete_file_only(path);
+    //     self.remove_from_graph(path);
+    // }
 
-    fn read_file(&self, path: &PathBuf) -> Option<Vec<u8>> {
+    fn read_file(&self, path: &Path) -> Option<Vec<u8>> {
         self.fs
             .get(&path.to_string_lossy().to_lowercase())
-            .map(|v| v.iter().map(|r| *r).collect())
+            .map(|v| v.to_vec())
     }
 }

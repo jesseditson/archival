@@ -24,7 +24,11 @@ mod tests {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let dirs = fs.read_dir(Path::new(""))?;
-        let ob_def = fs.read_to_string(Path::new("objects.toml"));
+        let ob_def = fs.read_to_string(Path::new("objects.toml"))?;
+        assert!(dirs.contains(&Path::new("layout").to_path_buf()));
+        assert!(dirs.contains(&Path::new("pages").to_path_buf()));
+        assert!(dirs.contains(&Path::new("objects").to_path_buf()));
+        assert!(ob_def.is_some());
         Ok(())
     }
 }
@@ -44,7 +48,7 @@ mod memory {
 
     use super::tests;
     fn get_fs() -> file_system_memory::MemoryFileSystem {
-        file_system_memory::MemoryFileSystem::new()
+        file_system_memory::MemoryFileSystem::default()
     }
     gen_test!(write_and_read_files, get_fs());
     gen_test!(unzip_to_fs, get_fs());

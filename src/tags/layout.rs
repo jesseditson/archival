@@ -121,7 +121,7 @@ impl Renderable for Layout {
                 .context_key_with(|| self.partial.to_string().into())
                 .value_with(|| name.to_string().into())?;
 
-            writer.write(SNIP_SENTINEL.as_bytes()).unwrap();
+            writer.write_all(SNIP_SENTINEL.as_bytes()).unwrap();
         }
 
         Ok(())

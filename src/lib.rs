@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn load_site_from_zip() -> Result<(), Box<dyn Error>> {
-        let mut fs = MemoryFileSystem::new();
+        let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let site = site::load(Path::new(""), &fs)?;

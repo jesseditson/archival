@@ -15,8 +15,8 @@ mod wasm_tests {
         println!("READ");
         let mut fs = WasmFileSystem::new("archival");
         unpack_zip(downloaded_site.to_vec(), &mut fs)?;
-        // let site = load_site(Path::new(""), &fs)?;
-        // assert_eq!(site.objects.len(), 1);
+        let site = site::load(Path::new(""), &fs)?;
+        assert_eq!(site.objects.len(), 1);
         Ok(())
     }
 }

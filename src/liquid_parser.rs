@@ -30,14 +30,12 @@ impl LayoutPartialSource {
         if let Some(path) = path {
             let files = read_dir(path)?;
             let ext_re = liquid_extension();
-            for file in files {
-                if let Ok(file) = file {
-                    if let Some(name) = file.file_name().to_str() {
-                        if ext_re.is_match(name) {
-                            let template_name = ext_re.replace(name, "").to_string();
-                            let contents = fs::read_to_string(file.path())?;
-                            layouts.insert(template_name, contents);
-                        }
+            for file in files.flatten() {
+                if let Some(name) = file.file_name().to_str() {
+                    if ext_re.is_match(name) {
+                        let template_name = ext_re.replace(name, "").to_string();
+                        let contents = fs::read_to_string(file.path())?;
+                        layouts.insert(template_name, contents);
                     }
                 }
             }
@@ -60,11 +58,7 @@ impl PartialSource for LayoutPartialSource {
     }
 
     fn try_get<'a>(&'a self, name: &str) -> Option<Cow<'a, str>> {
-        if let Some(v) = self.layouts.get(name) {
-            Some(v.into())
-        } else {
-            None
-        }
+        self.layouts.get(name).map(|layout| layout.into())
     }
 }
 

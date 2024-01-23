@@ -71,7 +71,7 @@ impl<'a> Page<'a> {
             context.extend(globals);
             return Ok(template.render(&context)?);
         } else if let Some(content) = &self.content {
-            let template = parser.parse(&content)?;
+            let template = parser.parse(content)?;
             return Ok(template.render(&globals)?);
         }
         panic!("Pages must have either a template or a path");

@@ -27,7 +27,7 @@ impl Object {
         for (key, value) in table {
             if let Some(field_type) = definition.fields.get(&key.to_string()) {
                 // Primitive values
-                let field_value = FieldValue::from_toml(&key, field_type, &value)?;
+                let field_value = FieldValue::from_toml(key, field_type, value)?;
                 values.insert(key.to_string(), field_value);
             } else if let Some(child_def) = definition.children.get(&key.to_string()) {
                 // Children
@@ -36,19 +36,17 @@ impl Object {
                     value: value.to_string(),
                 })?;
                 let mut objects: Vec<ObjectValues> = Vec::new();
-                let mut index = 0;
-                for object in m_objects {
+                for (index, object) in m_objects.iter().enumerate() {
                     let table = object.as_table().ok_or(InvalidFieldError {
                         field: format!("{}: {}", key, index),
                         value: value.to_string(),
                     })?;
-                    let object = Object::values_from_table(&table, child_def)?;
+                    let object = Object::values_from_table(table, child_def)?;
                     objects.push(object);
-                    index += 1;
                 }
                 let field_value = FieldValue::Objects(objects);
                 values.insert(key.to_string(), field_value);
-            } else if !is_reserved_field(&key) {
+            } else if !is_reserved_field(key) {
                 println!("Unknown field {}", key);
             }
         }
@@ -57,10 +55,10 @@ impl Object {
 
     pub fn from_table(
         definition: &ObjectDefinition,
-        name: &String,
+        name: &str,
         table: &Table,
     ) -> Result<Object, Box<dyn Error>> {
-        let values = Object::values_from_table(&table, definition)?;
+        let values = Object::values_from_table(table, definition)?;
         let mut order = -1;
         if let Some(t_order) = table.get(reserved_fields::ORDER) {
             if let Some(int_order) = t_order.as_integer() {
@@ -70,7 +68,7 @@ impl Object {
             }
         }
         let object = Object {
-            name: name.clone(),
+            name: name.to_owned(),
             object_name: definition.name.clone(),
             order,
             values,

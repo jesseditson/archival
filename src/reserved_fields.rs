@@ -28,11 +28,5 @@ pub fn reserved_field_from_str(field: &str) -> &'static str {
 }
 
 pub fn is_reserved_field(field: &str) -> bool {
-    match field {
-        OBJECT_NAME => true,
-        ORDER => true,
-        PAGE_NAME => true,
-        TEMPLATE => true,
-        _ => false,
-    }
+    matches!(field, OBJECT_NAME | ORDER | PAGE_NAME | TEMPLATE)
 }

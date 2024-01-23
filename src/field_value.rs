@@ -32,7 +32,7 @@ pub enum FieldValue {
 
 impl fmt::Display for FieldValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self.as_string())
     }
 }
 
@@ -62,7 +62,7 @@ impl ValueView for FieldValue {
     }
     /// Interpret as a string.
     fn to_kstr(&self) -> model::KStringCow<'_> {
-        model::KStringCow::from(self.to_string())
+        model::KStringCow::from(self.as_string())
     }
     /// Query the value's state
     fn query_state(&self, state: model::State) -> bool {
@@ -182,7 +182,7 @@ impl FieldValue {
         }
     }
 
-    fn to_string(&self) -> String {
+    fn as_string(&self) -> String {
         match self {
             FieldValue::String(s) => s.clone(),
             FieldValue::Markdown(n) => n.clone(),

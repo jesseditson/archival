@@ -1,7 +1,22 @@
 use serde::{Deserialize, Serialize};
-use std::{path::{PathBuf, Path}, error::Error, collections::HashMap};
+use std::{
+    collections::HashMap,
+    error::Error,
+    path::{Path, PathBuf},
+};
 
-use crate::{manifest::Manifest, object_definition::{ObjectDefinitions, ObjectDefinition}, FileSystemAPI, constants::MANIFEST_FILE_NAME, ArchivalError, liquid_parser, read_toml::read_toml, file_system_mutex::FileSystemMutex, object::Object, tags::layout, page::Page};
+use crate::{
+    constants::MANIFEST_FILE_NAME,
+    file_system_mutex::FileSystemMutex,
+    liquid_parser,
+    manifest::Manifest,
+    object::Object,
+    object_definition::{ObjectDefinition, ObjectDefinitions},
+    page::Page,
+    read_toml::read_toml,
+    tags::layout,
+    ArchivalError, FileSystemAPI,
+};
 
 #[derive(Deserialize, Serialize)]
 pub struct Site {
@@ -24,14 +39,13 @@ impl std::fmt::Display for Site {
             self.root.display(),
             self.objects
                 .keys()
-                .map(|o| format!("{}", o.as_str()))
+                .map(|o| o.as_str().to_string())
                 .collect::<Vec<String>>()
                 .join("\n"),
             self.manifest
         )
     }
 }
-
 
 pub fn load(root: &Path, fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
     // Load our manifest (should it exist)
@@ -60,10 +74,7 @@ pub fn load(root: &Path, fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>
     })
 }
 
-pub fn build<T: FileSystemAPI>(
-    site: &Site,
-    fs: FileSystemMutex<T>,
-) -> Result<(), Box<dyn Error>> {
+pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<(), Box<dyn Error>> {
     let mut all_objects: HashMap<String, Vec<Object>> = HashMap::new();
     let objects_dir = site.root.join(&site.manifest.objects_dir);
     let layout_dir = site.root.join(&site.manifest.layout_dir);
@@ -90,7 +101,7 @@ pub fn build<T: FileSystemAPI>(
         if !fs.exists(&build_dir)? {
             fs.create_dir_all(&build_dir)?;
         }
-    
+
         // Copy static files
         if fs.exists(&static_dir)? {
             fs.copy_contents(&static_dir, &build_dir)?;
@@ -150,7 +161,7 @@ pub fn build<T: FileSystemAPI>(
             let file_name = name.to_string_lossy();
             if file_name.ends_with(".liquid") {
                 let page_name = file_name.replace(".liquid", "");
-                if let Some(template_str) = fs.with_fs(|f| f.read_to_string(&file.as_path()))? {
+                if let Some(template_str) = fs.with_fs(|f| f.read_to_string(file.as_path()))? {
                     let page = Page::new(page_name, template_str);
                     let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
                     let render_name = file_name.replace(".liquid", ".html");

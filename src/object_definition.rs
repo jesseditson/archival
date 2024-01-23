@@ -65,10 +65,7 @@ impl ObjectDefinition {
             children: HashMap::new(),
         }
     }
-    fn from_definition(
-        name: &String,
-        definition: &Table,
-    ) -> Result<ObjectDefinition, Box<dyn Error>> {
+    fn from_definition(name: &str, definition: &Table) -> Result<ObjectDefinition, Box<dyn Error>> {
         let mut object = ObjectDefinition::new(name);
         for (key, m_value) in definition {
             if let Some(child_table) = m_value.as_table() {
