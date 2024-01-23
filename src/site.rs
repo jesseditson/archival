@@ -41,12 +41,12 @@ impl std::fmt::Display for Site {
 
 pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
     // Load our manifest (should it exist)
-    let manifest = match Manifest::from_file(&Path::new(MANIFEST_FILE_NAME), fs) {
+    let manifest = match Manifest::from_file(Path::new(MANIFEST_FILE_NAME), fs) {
         Ok(m) => m,
         Err(_) => Manifest::default(Path::new("")),
     };
     let odf = Path::new(&manifest.object_definition_file);
-    if !fs.exists(&odf)? {
+    if !fs.exists(odf)? {
         return Err(ArchivalError::new(&format!(
             "Object definition file {} does not exist",
             odf.to_string_lossy()
@@ -55,7 +55,7 @@ pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
     }
 
     // Load our object definitions
-    let objects_table = read_toml(&odf, fs)?;
+    let objects_table = read_toml(odf, fs)?;
     let objects = ObjectDefinition::from_table(&objects_table)?;
     Ok(Site { manifest, objects })
 }
@@ -70,27 +70,27 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<()
 
     // Validate paths
     fs.with_fs(|fs| {
-        if !fs.exists(&objects_dir)? {
+        if !fs.exists(objects_dir)? {
             return Err(ArchivalError::new(&format!(
                 "Objects dir {} does not exist",
                 objects_dir.to_string_lossy()
             ))
             .into());
         }
-        if !fs.exists(&pages_dir)? {
+        if !fs.exists(pages_dir)? {
             return Err(ArchivalError::new(&format!(
                 "Pages dir {} does not exist",
                 pages_dir.to_string_lossy()
             ))
             .into());
         }
-        if !fs.exists(&build_dir)? {
-            fs.create_dir_all(&build_dir)?;
+        if !fs.exists(build_dir)? {
+            fs.create_dir_all(build_dir)?;
         }
 
         // Copy static files
-        if fs.exists(&static_dir)? {
-            fs.copy_contents(&static_dir, &build_dir)?;
+        if fs.exists(static_dir)? {
+            fs.copy_contents(static_dir, build_dir)?;
         }
         Ok(())
     })?;
@@ -150,7 +150,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<()
     }
     // Render regular pages
     println!("Rendering pages...");
-    for file in fs.with_fs(|f| f.walk_dir(&pages_dir))? {
+    for file in fs.with_fs(|f| f.walk_dir(pages_dir))? {
         if let Some(name) = file.file_name() {
             let file_name = name.to_string_lossy();
             if file_name.ends_with(".liquid") {
