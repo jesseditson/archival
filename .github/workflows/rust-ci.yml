@@ -12,40 +12,40 @@ concurrency:
 
 name: CI
 jobs:
-  # lint:
-  #   name: Lint
-  #   runs-on: ubuntu-22.04
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - uses: dtolnay/rust-toolchain@stable
-  #     - uses: Swatinem/rust-cache@v2
+  lint:
+    name: Lint
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
-  #     # make sure all code has been formatted with rustfmt
-  #     - run: rustup component add rustfmt
-  #     - name: check rustfmt
-  #       run: cargo fmt -- --check --color always
+      # make sure all code has been formatted with rustfmt
+      - run: rustup component add rustfmt
+      - name: check rustfmt
+        run: cargo fmt -- --check --color always
 
-  #     # run clippy to verify we have no warnings
-  #     - run: rustup component add clippy
-  #     - run: cargo fetch
-  #     - name: cargo clippy
-  #       run: cargo clippy --all-targets -- -D warnings
+      # run clippy to verify we have no warnings
+      - run: rustup component add clippy
+      - run: cargo fetch
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
 
-  # test:
-  #   name: Test
-  #   strategy:
-  #     matrix:
-  #       os: [ubuntu-22.04, macOS-12, windows-2022]
-  #   runs-on: ${{ matrix.os }}
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - uses: dtolnay/rust-toolchain@stable
-  #     - uses: Swatinem/rust-cache@v2
-  #     - run: cargo fetch
-  #     - name: cargo test build
-  #       run: cargo build --tests --release
-  #     - name: cargo test
-  #       run: cargo test --release
+  test:
+    name: Binary Tests
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macOS-12, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fetch
+      - name: cargo test build
+        run: cargo build --tests --release
+      - name: cargo test binary
+        run: cargo test --release --features=binary
 
   # msrv-check:
   #   name: Minimum Stable Rust Version Check

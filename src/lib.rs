@@ -1,3 +1,4 @@
+mod archival_error;
 mod field_value;
 mod file_system;
 mod file_system_memory;
@@ -12,9 +13,8 @@ mod object_definition;
 mod page;
 mod read_toml;
 mod reserved_fields;
-mod site;
+pub mod site;
 mod tags;
-mod archival_error;
 pub use archival_error::ArchivalError;
 pub use file_system::{FileSystemAPI, WatchableFileSystemAPI};
 #[cfg(feature = "binary")]
@@ -24,6 +24,7 @@ mod constants;
 mod file_system_stdlib;
 #[cfg(feature = "wasm-fs")]
 mod file_system_wasm;
+pub use file_system::unpack_zip;
 pub use file_system_memory::MemoryFileSystem;
 #[cfg(feature = "wasm-fs")]
 pub use file_system_wasm::WasmFileSystem;
@@ -44,7 +45,7 @@ pub fn fetch_site(url: &str) -> Result<Vec<u8>, reqwest_wasm::Error> {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::Path, error::Error};
+    use std::{error::Error, path::Path};
 
     use crate::file_system::unpack_zip;
 

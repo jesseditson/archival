@@ -13,7 +13,8 @@ use std::{
 };
 
 use crate::{
-    site, file_system_mutex::FileSystemMutex, file_system_stdlib, file_system::WatchableFileSystemAPI, ArchivalError,
+    file_system::WatchableFileSystemAPI, file_system_mutex::FileSystemMutex, file_system_stdlib,
+    site, ArchivalError,
 };
 
 static INVALID_COMMAND: &str = "Valid commands are `build` and `run`.";

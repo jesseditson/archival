@@ -13,10 +13,10 @@ mod binary_tests {
 
     #[test]
     fn build_basics() -> Result<(), Box<dyn Error>> {
-        fs::remove_dir_all("target/binary-tests");
-        fs::create_dir_all("target/binary-tests");
-        env::set_current_dir("target/binary-tests");
-        archival::binary(get_args(vec!["build", "tests/fixtures/website"]))?;
+        fs::remove_dir_all("target/binary-tests")?;
+        fs::create_dir_all("target/binary-tests")?;
+        env::set_current_dir("target/binary-tests")?;
+        archival::binary::binary(get_args(vec!["build", "tests/fixtures/website"]))?;
         Ok(())
     }
     #[test]

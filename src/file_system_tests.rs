@@ -58,9 +58,9 @@ mod stdlib {
 
     use super::tests;
     fn get_fs() -> file_system_stdlib::NativeFileSystem {
-        fs::remove_dir_all("target/file-system-tests");
-        fs::create_dir_all("target/file-system-tests");
-        env::set_current_dir("target/file-system-tests");
+        fs::remove_dir_all("target/file-system-tests").unwrap();
+        fs::create_dir_all("target/file-system-tests").unwrap();
+        env::set_current_dir("target/file-system-tests").unwrap();
         file_system_stdlib::NativeFileSystem
     }
     gen_test!(write_and_read_files, get_fs());

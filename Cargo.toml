@@ -12,7 +12,7 @@ name = "archival"
 path = "src/lib.rs"
 
 [features]
-binary = ["dep:ctrlc"]
+binary = ["dep:ctrlc", "stdlib-fs"]
 stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
 wasm-fs = [
     "dep:wasm-bindgen",

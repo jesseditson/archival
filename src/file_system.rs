@@ -1,6 +1,7 @@
 use std::{
     error::Error,
-    path::{Path, PathBuf}, io::{Read, Seek, Cursor},
+    io::{Cursor, Read, Seek},
+    path::{Path, PathBuf},
 };
 
 pub trait FileSystemAPI {
@@ -80,7 +81,7 @@ pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<(), B
         } else {
             if let Some(p) = outpath.parent() {
                 if !fs.exists(p)? {
-                    fs.create_dir_all(&p)?;
+                    fs.create_dir_all(p)?;
                 }
             }
             let mut buffer = vec![];

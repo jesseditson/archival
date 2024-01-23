@@ -2,7 +2,7 @@
 mod wasm_tests {
     use std::{error::Error, path::Path};
 
-    use archival::{fetch_site, load_site, unpack_zip, WasmFileSystem};
+    use archival::{site, unpack_zip, WasmFileSystem};
     use wasm_bindgen_test::*;
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 

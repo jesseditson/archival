@@ -62,9 +62,7 @@ impl ValueView for FieldValue {
     }
     /// Interpret as a string.
     fn to_kstr(&self) -> model::KStringCow<'_> {
-        match self {
-            _ => model::KStringCow::from(self.to_string()),
-        }
+        model::KStringCow::from(self.to_string())
     }
     /// Query the value's state
     fn query_state(&self, state: model::State) -> bool {
@@ -79,9 +77,9 @@ impl ValueView for FieldValue {
     fn as_scalar(&self) -> Option<model::ScalarCow<'_>> {
         match self {
             FieldValue::String(s) => Some(model::ScalarCow::new(s)),
-            FieldValue::Number(n) => Some(model::ScalarCow::new(n.clone())),
+            FieldValue::Number(n) => Some(model::ScalarCow::new(*n)),
             // TODO: should be able to return a datetime value here
-            FieldValue::Date(d) => Some(model::ScalarCow::new(d.clone())),
+            FieldValue::Date(d) => Some(model::ScalarCow::new(*d)),
             FieldValue::Markdown(s) => Some(model::ScalarCow::new(markdown_to_html(
                 s,
                 &ComrakOptions::default(),
@@ -139,15 +137,13 @@ impl FieldValue {
                 },
             )?)),
             FieldType::Date => {
-                let mut date_str = format!(
-                    "{}",
-                    value.as_str().ok_or(InvalidFieldError {
-                        field: key.to_string(),
-                        value: value.to_string(),
-                    })?
-                );
+                let mut date_str = (value.as_str().ok_or(InvalidFieldError {
+                    field: key.to_string(),
+                    value: value.to_string(),
+                })?)
+                .to_string();
                 // Also pretty lazy: check if we're missing time and add it
-                if !date_str.contains(":") {
+                if !date_str.contains(':') {
                     date_str = format!("{} 00:00:00", date_str);
                 }
                 // Supported formats:
