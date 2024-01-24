@@ -1,0 +1,4 @@
+# when we're updating the fixtures, allow just double-clicking the zip and then
+# running zip-website.sh in this folder without having to delete the
+# intermediate folder.
+archival-website

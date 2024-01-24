@@ -189,7 +189,6 @@ mod tests {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs);
-        println!("Archival site exists");
         archival.send_event(ArchivalEvent::AddObject(AddObjectEvent {
             object: "section".to_string(),
             filename: "my-section".to_string(),
@@ -220,7 +219,6 @@ mod tests {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs);
-        println!("Archival site exists");
         archival.send_event(ArchivalEvent::EditField(EditFieldEvent {
             object: "section".to_string(),
             filename: "first".to_string(),

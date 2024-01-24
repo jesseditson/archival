@@ -23,6 +23,7 @@ mod tests {
     ) -> Result<(), Box<dyn Error>> {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
+        println!("files: {:?}", fs.read_dir(Path::new(""))?);
         let root_files: Vec<String> = fs
             .read_dir(Path::new(""))?
             .iter()
