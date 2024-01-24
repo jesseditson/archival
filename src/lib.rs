@@ -20,7 +20,7 @@ use std::path::Path;
 // use std::sync::mpsc::{self, Receiver, Sender};
 
 pub use archival_error::ArchivalError;
-use events::{AddObjectEvent, ArchivalEvent};
+use events::{AddObjectEvent, ArchivalEvent, EditFieldEvent, EditOrderEvent};
 pub use file_system::{FileSystemAPI, WatchableFileSystemAPI};
 #[cfg(feature = "binary")]
 pub mod binary;
@@ -74,6 +74,8 @@ impl<F: FileSystemAPI> Archival<F> {
     pub fn send_event(&self, event: ArchivalEvent) -> Result<(), Box<dyn Error>> {
         match event {
             ArchivalEvent::AddObject(event) => self.add_object(event)?,
+            ArchivalEvent::EditField(event) => self.edit_field(event)?,
+            ArchivalEvent::EditOrder(event) => self.edit_order(event)?,
         }
         // After any event, rebuild
         site::build(&self.site, &self.fs_mutex)
@@ -96,13 +98,76 @@ impl<F: FileSystemAPI> Archival<F> {
             fs.write_str(&path, object.to_toml()?)
         })
     }
+
+    fn edit_field(&self, event: EditFieldEvent) -> Result<(), Box<dyn Error>> {
+        let obj_def = if let Some(o) = self.site.objects.get(&event.object) {
+            o
+        } else {
+            return Err(ArchivalError::new(&format!("object not found: {}", event.object)).into());
+        };
+        let mut all_objects = site::get_objects(&self.site, &self.fs_mutex)?;
+        let mut existing = if let Some(objects) = all_objects.get_mut(&obj_def.name) {
+            if let Some(object) = objects.iter_mut().find(|o| o.filename == event.filename) {
+                object
+            } else {
+                return Err(
+                    ArchivalError::new(&format!("filename not found: {}", event.filename)).into(),
+                );
+            }
+        } else {
+            return Err(
+                ArchivalError::new(&format!("no objects of type: {}", event.object)).into(),
+            );
+        };
+        let path = self
+            .site
+            .manifest
+            .objects_dir
+            .join(Path::new(&obj_def.name))
+            .join(Path::new(&format!("{}.toml", event.filename)));
+        event.path.set_in_object(&mut existing, event.value.into());
+        self.fs_mutex
+            .with_fs(|fs| fs.write_str(&path, existing.to_toml()?))?;
+        Ok(())
+    }
+    fn edit_order(&self, event: EditOrderEvent) -> Result<(), Box<dyn Error>> {
+        let obj_def = if let Some(o) = self.site.objects.get(&event.object) {
+            o
+        } else {
+            return Err(ArchivalError::new(&format!("object not found: {}", event.object)).into());
+        };
+        let mut all_objects = site::get_objects(&self.site, &self.fs_mutex)?;
+        let existing = if let Some(objects) = all_objects.get_mut(&obj_def.name) {
+            if let Some(object) = objects.iter_mut().find(|o| o.filename == event.filename) {
+                object
+            } else {
+                return Err(
+                    ArchivalError::new(&format!("filename not found: {}", event.filename)).into(),
+                );
+            }
+        } else {
+            return Err(
+                ArchivalError::new(&format!("no objects of type: {}", event.object)).into(),
+            );
+        };
+        let path = self
+            .site
+            .manifest
+            .objects_dir
+            .join(Path::new(&obj_def.name))
+            .join(Path::new(&format!("{}.toml", event.filename)));
+        existing.order = event.order;
+        self.fs_mutex
+            .with_fs(|fs| fs.write_str(&path, existing.to_toml()?))?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::error::Error;
 
-    use crate::file_system::unpack_zip;
+    use crate::{file_system::unpack_zip, object::ValuePath};
 
     use super::*;
 
@@ -146,6 +211,29 @@ mod tests {
         let rendered_sections: Vec<_> = index_html.match_indices("<h2>").collect();
         println!("MATCHED: {:?}", rendered_sections);
         assert_eq!(rendered_sections.len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn edit_object() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs);
+        println!("Archival site exists");
+        archival.send_event(ArchivalEvent::EditField(EditFieldEvent {
+            object: "section".to_string(),
+            filename: "first".to_string(),
+            path: ValuePath::new().join(object::ValuePathComponent::key("name")),
+            value: events::EditFieldValue::String("This is the new title".to_string()),
+        }))?;
+        // Sending an event should result in an updated fs
+        let index_html = archival
+            .fs_mutex
+            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join(&"index.html")))?
+            .unwrap();
+        println!("index: {}", index_html);
+        assert!(index_html.contains("This is the new title"));
         Ok(())
     }
 }

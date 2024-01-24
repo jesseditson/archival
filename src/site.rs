@@ -60,8 +60,45 @@ pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
     Ok(Site { manifest, objects })
 }
 
-pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(), Box<dyn Error>> {
+pub fn get_objects<T: FileSystemAPI>(
+    site: &Site,
+    fs: &FileSystemMutex<T>,
+) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
     let mut all_objects: HashMap<String, Vec<Object>> = HashMap::new();
+    let objects_dir = &site.manifest.objects_dir;
+    for (object_name, object_def) in site.objects.iter() {
+        let mut objects: Vec<Object> = Vec::new();
+        let object_files_dir = objects_dir.join(object_name);
+        fs.with_fs(|fs| {
+            if fs.is_dir(objects_dir)? {
+                for file in fs.read_dir(&object_files_dir)? {
+                    if let Some(ext) = file.extension() {
+                        if ext == "toml" {
+                            let obj_table = read_toml(&file, fs)?;
+                            objects.push(Object::from_table(
+                                object_def,
+                                &file
+                                    .with_extension("")
+                                    .file_name()
+                                    .unwrap()
+                                    .to_string_lossy()
+                                    .to_lowercase(),
+                                &obj_table,
+                            )?)
+                        }
+                    }
+                }
+            }
+            Ok(())
+        })?;
+        // Sort objects by order key
+        objects.sort_by(|a, b| a.order.partial_cmp(&b.order).unwrap());
+        all_objects.insert(object_name.clone(), objects);
+    }
+    Ok(all_objects)
+}
+
+pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(), Box<dyn Error>> {
     let objects_dir = &site.manifest.objects_dir;
     let layout_dir = &site.manifest.layout_dir;
     let pages_dir = &site.manifest.pages_dir;
@@ -95,35 +132,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(
         Ok(())
     })?;
 
-    for (object_name, object_def) in site.objects.iter() {
-        let mut objects: Vec<Object> = Vec::new();
-        let object_files_dir = objects_dir.join(object_name);
-        fs.with_fs(|fs| {
-            if fs.is_dir(objects_dir)? {
-                for file in fs.read_dir(&object_files_dir)? {
-                    if let Some(ext) = file.extension() {
-                        if ext == "toml" {
-                            let obj_table = read_toml(&file, fs)?;
-                            objects.push(Object::from_table(
-                                object_def,
-                                &file
-                                    .with_extension("")
-                                    .file_name()
-                                    .unwrap()
-                                    .to_string_lossy()
-                                    .to_lowercase(),
-                                &obj_table,
-                            )?)
-                        }
-                    }
-                }
-            }
-            Ok(())
-        })?;
-        // Sort objects by order key
-        objects.sort_by(|a, b| a.order.partial_cmp(&b.order).unwrap());
-        all_objects.insert(object_name.clone(), objects);
-    }
+    let all_objects = get_objects(site, fs)?;
 
     let liquid_parser = fs.with_fs(|fs| {
         liquid_parser::get(

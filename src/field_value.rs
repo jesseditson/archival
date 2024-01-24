@@ -5,7 +5,10 @@ use std::{
     fmt::{self, Debug},
 };
 
-use crate::object_definition::{FieldType, InvalidFieldError};
+use crate::{
+    events::EditFieldValue,
+    object_definition::{FieldType, InvalidFieldError},
+};
 
 use liquid::{model, ValueView};
 use serde::{Deserialize, Serialize};
@@ -33,6 +36,20 @@ pub enum FieldValue {
 impl fmt::Display for FieldValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_string())
+    }
+}
+
+impl From<EditFieldValue> for FieldValue {
+    fn from(value: EditFieldValue) -> Self {
+        match value {
+            EditFieldValue::String(v) => Self::String(v.to_owned()),
+            EditFieldValue::Markdown(v) => Self::Markdown(v.to_owned()),
+            EditFieldValue::Number(n) => Self::Number(n),
+            EditFieldValue::Date(str) => {
+                let liquid_date = model::DateTime::from_str(&str).unwrap();
+                FieldValue::Date(liquid_date)
+            }
+        }
     }
 }
 
