@@ -47,9 +47,13 @@ impl ValuePath {
             if last_val.is_none() {
                 // At the root, we must have a key string
                 if let ValuePathComponent::Key(k) = cmp {
-                    last_val = object.values.get_mut(&k);
-                } else {
-                    break;
+                    if i_path.len() > 0 {
+                        last_val = object.values.get_mut(&k);
+                        continue;
+                    } else {
+                        object.values.insert(k, value);
+                        break;
+                    }
                 }
             } else {
                 // more than one level deep. We only allow accessing child
@@ -69,8 +73,8 @@ impl ValuePath {
                         }
                     }
                 }
-                break;
             }
+            break;
         }
     }
 }
