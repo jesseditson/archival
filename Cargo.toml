@@ -14,7 +14,16 @@ path = "src/lib.rs"
 [features]
 binary = ["dep:ctrlc", "stdlib-fs"]
 stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
-wasm-fs = ["dep:wasm-bindgen", "dep:web-sys", "dep:wasm-bindgen-futures", "dep:indexed_db_futures", "dep:serde_bytes", "dep:serde-wasm-bindgen", "dep:reqwest-wasm", "dep:typescript-type-def"]
+wasm-fs = [
+    "dep:wasm-bindgen",
+    "dep:web-sys",
+    "dep:wasm-bindgen-futures",
+    "dep:indexed_db_futures",
+    "dep:serde_bytes",
+    "dep:serde-wasm-bindgen",
+    "dep:reqwest-wasm",
+    "dep:typescript-type-def",
+]
 
 [[bin]]
 name = "archival"
@@ -51,7 +60,7 @@ typescript-type-def = { version = "0.5.9", optional = true }
 # shared
 liquid = "0.26.1"
 serde = "1.0.152"
-toml = "0.7.1"
+toml = { version = "0.7.1", features = ["display"] }
 comrak = "0.18"
 liquid-core = "0.26.4"
 liquid-lib = { version = "0.26.4", features = ["shopify", "extra"] }
@@ -59,6 +68,7 @@ regex = "1.10.2"
 thiserror = "1.0.56"
 zip = { version = "0.6.6", default_features = false, features = ["deflate"] }
 reqwest = "0.11.23"
+toml_datetime = "0.6.5"
 
 [dev-dependencies]
 rand = "0.8.5"

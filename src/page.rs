@@ -64,7 +64,7 @@ impl<'a> Page<'a> {
         if let Some(template_info) = &self.template {
             let template = parser.parse(&template_info.content)?;
             let mut context = liquid::object!({
-              "object_name": template_info.object.name,
+              "object_name": template_info.object.object_name,
               "order": template_info.object.order,
               template_info.definition.name.clone(): template_info.object.values.to_value()
             });
@@ -113,7 +113,7 @@ mod tests {
             ),
         ]);
         let artist = Object {
-            name: "tormenta-rey".to_string(),
+            filename: "tormenta-rey".to_string(),
             object_name: "artist".to_string(),
             order: 1,
             values: artist_values,
@@ -132,7 +132,7 @@ mod tests {
         ]);
 
         let page = Object {
-            name: "home".to_string(),
+            filename: "home".to_string(),
             object_name: "page".to_string(),
             order: -1,
             values: page_values,

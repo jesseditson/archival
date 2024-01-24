@@ -5,6 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::ArchivalError;
+
 use super::{FileSystemAPI, WatchableFileSystemAPI};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,10 +57,19 @@ pub struct MemoryFileSystem {
 
 impl FileSystemAPI for MemoryFileSystem {
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
-        Ok(self
+        if self
             .fs
             .get(&path.to_string_lossy().to_lowercase())
-            .is_some())
+            .is_some()
+            || self.is_dir(path)?
+        {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+    fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
+        Ok(self.tree.get(&FileGraphNode::key(path)).is_some())
     }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         self.remove_from_graph(path);
@@ -80,6 +91,9 @@ impl FileSystemAPI for MemoryFileSystem {
         }
     }
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
+        if self.is_dir(path)? {
+            return Err(ArchivalError::new("cannot write to a folder").into());
+        }
         self.write_file(path, contents);
         self.files_changed(vec![path.to_path_buf()])?;
         Ok(())

@@ -36,6 +36,41 @@ impl fmt::Display for FieldValue {
     }
 }
 
+impl From<&FieldValue> for toml::Value {
+    fn from(value: &FieldValue) -> Self {
+        match value {
+            FieldValue::String(v) => Self::String(v.to_owned()),
+            FieldValue::Markdown(v) => Self::String(v.to_owned()),
+            FieldValue::Number(n) => Self::Float(*n),
+            FieldValue::Date(d) => Self::Datetime(toml_datetime::Datetime {
+                date: Some(toml_datetime::Date {
+                    year: d.year() as u16,
+                    month: d.month(),
+                    day: d.day(),
+                }),
+                time: Some(toml_datetime::Time {
+                    hour: d.hour(),
+                    minute: d.minute(),
+                    second: d.second(),
+                    nanosecond: d.nanosecond(),
+                }),
+                offset: None,
+            }),
+            FieldValue::Objects(o) => Self::Array(
+                o.into_iter()
+                    .map(|child| {
+                        let mut vals: toml::map::Map<String, Value> = toml::map::Map::new();
+                        for (key, cv) in child {
+                            vals.insert(key.to_string(), cv.into());
+                        }
+                        Self::Table(vals)
+                    })
+                    .collect(),
+            ),
+        }
+    }
+}
+
 impl ValueView for FieldValue {
     /// Get a `Debug` representation
     fn as_debug(&self) -> &dyn fmt::Debug {

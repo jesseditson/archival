@@ -4,10 +4,12 @@ use std::{
     fmt::{self, Debug},
 };
 
-use crate::reserved_fields::{
-    self, is_reserved_field, reserved_field_from_str, ReservedFieldError,
+use crate::{
+    field_value::FieldValue,
+    reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
 };
 
+use liquid_core::model::DateTime;
 use serde::{Deserialize, Serialize};
 use toml::Table;
 
@@ -42,6 +44,15 @@ impl FieldType {
                 field: string.to_string(),
                 value: "".to_string(),
             }),
+        }
+    }
+
+    pub fn default_value(&self) -> FieldValue {
+        match self {
+            Self::String => FieldValue::String("".to_string()),
+            Self::Number => FieldValue::Number(0.0),
+            Self::Date => FieldValue::Date(DateTime::now()),
+            Self::Markdown => FieldValue::Markdown("".to_string()),
         }
     }
 }

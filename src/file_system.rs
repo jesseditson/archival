@@ -6,6 +6,7 @@ use std::{
 
 pub trait FileSystemAPI {
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
+    fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>>;

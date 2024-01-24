@@ -9,7 +9,10 @@ use std::{
 use wasm_bindgen::JsValue;
 use web_sys::{DomException, IdbKeyRange};
 
-use crate::file_system_memory::{FileGraphNode, Watcher};
+use crate::{
+    file_system_memory::{FileGraphNode, Watcher},
+    ArchivalError,
+};
 
 use super::{FileSystemAPI, WatchableFileSystemAPI};
 
@@ -76,8 +79,14 @@ fn map_idb_err<T>(r: Result<T, DomException>) -> Result<T, IdbError> {
 
 impl FileSystemAPI for WasmFileSystem {
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
-        let f = idb_task(self.get_file(path))?;
-        Ok(f.is_some())
+        if idb_task(self.get_file(path))?.is_some() || self.is_dir(path)? {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+    fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
+        todo!("Need to fetch from graph to exists on folders");
     }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         let db = idb_task(self.get_db())?;
@@ -100,6 +109,9 @@ impl FileSystemAPI for WasmFileSystem {
         }
     }
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
+        if self.is_dir(path)? {
+            return Err(ArchivalError::new("cannot write to a folder").into());
+        }
         idb_task(self.write_file(path, &contents))?;
         self.files_changed(vec![path.to_path_buf()])?;
         Ok(())

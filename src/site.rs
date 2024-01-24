@@ -60,7 +60,7 @@ pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
     Ok(Site { manifest, objects })
 }
 
-pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<(), Box<dyn Error>> {
+pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(), Box<dyn Error>> {
     let mut all_objects: HashMap<String, Vec<Object>> = HashMap::new();
     let objects_dir = &site.manifest.objects_dir;
     let layout_dir = &site.manifest.layout_dir;
@@ -98,14 +98,28 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<()
     for (object_name, object_def) in site.objects.iter() {
         let mut objects: Vec<Object> = Vec::new();
         let object_files_dir = objects_dir.join(object_name);
-        if objects_dir.is_dir() {
-            for file in fs.with_fs(|f| f.read_dir(&object_files_dir))? {
-                if file.ends_with(".toml") {
-                    let obj_table = fs.with_fs(|fs| read_toml(&file, fs))?;
-                    objects.push(Object::from_table(object_def, object_name, &obj_table)?)
+        fs.with_fs(|fs| {
+            if fs.is_dir(objects_dir)? {
+                for file in fs.read_dir(&object_files_dir)? {
+                    if let Some(ext) = file.extension() {
+                        if ext == "toml" {
+                            let obj_table = read_toml(&file, fs)?;
+                            objects.push(Object::from_table(
+                                object_def,
+                                &file
+                                    .with_extension("")
+                                    .file_name()
+                                    .unwrap()
+                                    .to_string_lossy()
+                                    .to_lowercase(),
+                                &obj_table,
+                            )?)
+                        }
+                    }
                 }
             }
-        }
+            Ok(())
+        })?;
         // Sort objects by order key
         objects.sort_by(|a, b| a.order.partial_cmp(&b.order).unwrap());
         all_objects.insert(object_name.clone(), objects);
@@ -123,7 +137,6 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<()
     })?;
 
     // Render template pages
-    println!("Rendering templates...");
     for (name, object_def) in site.objects.iter() {
         if let Some(template) = &object_def.template {
             if let Some(t_objects) = all_objects.get(name) {
@@ -132,14 +145,14 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<()
                     let template_str = fs.with_fs(|f| f.read_to_string(&template_path))?;
                     if let Some(template_str) = template_str {
                         let page = Page::new_with_template(
-                            object.name.clone(),
+                            object.filename.clone(),
                             object_def,
                             object,
                             template_str,
                         );
                         let rendered =
                             layout::post_process(page.render(&liquid_parser, &all_objects)?);
-                        let render_name = format!("{}.html", object.name);
+                        let render_name = format!("{}.html", object.filename);
                         let build_path = build_dir.join(render_name);
 
                         fs.with_fs(|f| f.write_str(&build_path, rendered))?;
@@ -149,7 +162,6 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: FileSystemMutex<T>) -> Result<()
         }
     }
     // Render regular pages
-    println!("Rendering pages...");
     for file in fs.with_fs(|f| f.walk_dir(pages_dir))? {
         if let Some(name) = file.file_name() {
             let file_name = name.to_string_lossy();

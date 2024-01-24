@@ -12,7 +12,7 @@ use toml::Table;
 
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone)]
 pub struct Object {
-    pub name: String,
+    pub filename: String,
     pub object_name: String,
     pub order: i32,
     pub values: ObjectValues,
@@ -50,12 +50,25 @@ impl Object {
                 println!("Unknown field {}", key);
             }
         }
+        // liquid-rust only supports strict parsing. This is reasonable but we
+        // also want to allow empty root keys, so we fill in defaults for any
+        // missing definition keys
+        for (field, def) in &definition.fields {
+            if !values.contains_key(field) {
+                values.insert(field.to_owned(), def.default_value());
+            }
+        }
+        for (cd, def) in &definition.children {
+            if !values.contains_key(cd) {
+                values.insert(def.name.to_owned(), FieldValue::Objects(vec![]));
+            }
+        }
         Ok(values)
     }
 
     pub fn from_table(
         definition: &ObjectDefinition,
-        name: &str,
+        filename: &str,
         table: &Table,
     ) -> Result<Object, Box<dyn Error>> {
         let values = Object::values_from_table(table, definition)?;
@@ -68,12 +81,36 @@ impl Object {
             }
         }
         let object = Object {
-            name: name.to_owned(),
+            filename: filename.to_owned(),
             object_name: definition.name.clone(),
             order,
             values,
         };
         Ok(object)
+    }
+
+    pub fn from_def(
+        definition: &ObjectDefinition,
+        filename: &str,
+        order: i32,
+    ) -> Result<Self, Box<dyn Error>> {
+        let empty = Table::new();
+        let values = Object::values_from_table(&empty, definition)?;
+        Ok(Self {
+            filename: filename.to_owned(),
+            object_name: definition.name.clone(),
+            order,
+            values,
+        })
+    }
+
+    pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
+        let mut write_obj = Table::new();
+        write_obj.insert("order".to_string(), toml::Value::Integer(self.order as i64));
+        for (key, val) in &self.values {
+            write_obj.insert(key.to_string(), val.into());
+        }
+        Ok(toml::to_string_pretty(&write_obj)?)
     }
 }
 
@@ -105,7 +142,7 @@ mod tests {
         let obj = Object::from_table(defs.get("artist").unwrap(), "tormenta-rey", &table)?;
         assert_eq!(obj.order, 1);
         assert_eq!(obj.object_name, "artist");
-        assert_eq!(obj.name, "tormenta-rey");
+        assert_eq!(obj.filename, "tormenta-rey");
         assert_eq!(obj.values.len(), 3);
         assert!(obj.values.get("name").is_some());
         assert!(obj.values.get("tour_dates").is_some());

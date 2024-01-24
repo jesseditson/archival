@@ -33,7 +33,7 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
         match &command_arg[..] {
             "build" => {
                 println!("Building site: {}", &site);
-                site::build(&site, fs_a)?;
+                site::build(&site, &fs_a)?;
             }
             "run" => {
                 println!("Watching site: {}", &site);
@@ -45,7 +45,7 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                         site.manifest.watched_paths(),
                         move |paths| {
                             println!("Changed: {:?}", paths);
-                            site::build(&site, fs_a.clone()).unwrap_or_else(|err| {
+                            site::build(&site, &fs_a.clone()).unwrap_or_else(|err| {
                                 println!("Failed reloading site: {}", err);
                             })
                         },
