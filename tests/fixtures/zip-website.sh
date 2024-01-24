@@ -1,6 +1,6 @@
 #!/bin/bash
 
-rm archival-website.zip
-cd archival-website
+cd "$(dirname "$0")/archival-website"
+rm ../archival-website.zip
 zip -r ../archival-website.zip * .*
 cd -

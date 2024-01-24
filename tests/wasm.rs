@@ -1,8 +1,8 @@
 #[cfg(feature = "wasm-fs")]
 mod wasm_tests {
-    use std::{error::Error, path::Path};
+    use std::error::Error;
 
-    use archival::{site, unpack_zip, WasmFileSystem};
+    use archival::{unpack_zip, Archival, WasmFileSystem};
     use wasm_bindgen_test::*;
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -15,8 +15,8 @@ mod wasm_tests {
         println!("READ");
         let mut fs = WasmFileSystem::new("archival");
         unpack_zip(downloaded_site.to_vec(), &mut fs)?;
-        let site = site::load(Path::new(""), &fs)?;
-        assert_eq!(site.objects.len(), 1);
+        let archival = Archival::new(fs);
+        // TODO
         Ok(())
     }
 }

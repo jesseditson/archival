@@ -54,7 +54,6 @@ impl<'a> Page<'a> {
         parser: &liquid::Parser,
         objects_map: &HashMap<String, Vec<Object>>,
     ) -> Result<String, Box<dyn Error>> {
-        // TODO: can we avoid allocating here using an iterator?
         let mut objects: HashMap<String, Vec<liquid::model::Value>> = HashMap::new();
         for (name, objs) in objects_map {
             let values = objs.iter().map(|o| o.values.to_value()).collect();
@@ -66,7 +65,7 @@ impl<'a> Page<'a> {
             let mut context = liquid::object!({
               "object_name": template_info.object.object_name,
               "order": template_info.object.order,
-              template_info.definition.name.clone(): template_info.object.values.to_value()
+              template_info.definition.name.to_owned(): template_info.object.values.to_value()
             });
             context.extend(globals);
             return Ok(template.render(&context)?);
@@ -204,7 +203,7 @@ mod tests {
 
     #[test]
     fn regular_page() -> Result<(), Box<dyn Error>> {
-        let liquid_parser = liquid_parser::get(None, &MemoryFileSystem::default())?;
+        let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
         let page = Page::new("home".to_string(), page_content().to_string());
         let rendered = page.render(&liquid_parser, &objects_map)?;
@@ -223,7 +222,7 @@ mod tests {
     }
     #[test]
     fn template_page() -> Result<(), Box<dyn Error>> {
-        let liquid_parser = liquid_parser::get(None, &MemoryFileSystem::default())?;
+        let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
         let object = objects_map["artist"].first().unwrap();
         let artist_def = artist_definition();

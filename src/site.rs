@@ -1,10 +1,14 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, error::Error, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    path::Path,
+};
 
 use crate::{
     constants::MANIFEST_FILE_NAME,
     file_system_mutex::FileSystemMutex,
-    liquid_parser,
+    liquid_parser::{self, partial_matcher},
     manifest::Manifest,
     object::Object,
     object_definition::{ObjectDefinition, ObjectDefinitions},
@@ -136,6 +140,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(
 
     let liquid_parser = fs.with_fs(|fs| {
         liquid_parser::get(
+            Some(pages_dir),
             if fs.exists(layout_dir)? {
                 Some(layout_dir)
             } else {
@@ -171,11 +176,22 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(
         }
     }
     // Render regular pages
+    let template_pages: HashSet<&String> = site
+        .objects
+        .values()
+        .map(|object| &object.template)
+        .flatten()
+        .collect();
+    let partial_re = partial_matcher();
     for file in fs.with_fs(|f| f.walk_dir(pages_dir))? {
         if let Some(name) = file.file_name() {
             let file_name = name.to_string_lossy();
             if file_name.ends_with(".liquid") {
                 let page_name = file_name.replace(".liquid", "");
+                if template_pages.contains(&page_name) || partial_re.is_match(&file_name) {
+                    // template pages are not rendered as pages
+                    continue;
+                }
                 if let Some(template_str) = fs.with_fs(|f| f.read_to_string(file.as_path()))? {
                     let page = Page::new(page_name, template_str);
                     let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);

@@ -12,16 +12,24 @@ use crate::{tags::layout::LayoutTag, FileSystemAPI};
 fn liquid_extension() -> Regex {
     Regex::new(r"\.(liquid|html)").unwrap()
 }
-
-#[derive(Default, Debug, Clone)]
-struct LayoutPartialSource {
-    layouts: HashMap<String, String>,
+pub fn partial_matcher() -> Regex {
+    Regex::new(r"^_(.+)\.(liquid|html)").unwrap()
 }
 
-impl LayoutPartialSource {
-    pub fn new(path: Option<&Path>, fs: &impl FileSystemAPI) -> Result<Self, Box<dyn Error>> {
-        let mut layouts = HashMap::new();
-        if let Some(path) = path {
+#[derive(Default, Debug, Clone)]
+struct ArchivalPartialSource {
+    partials: HashMap<String, String>,
+}
+
+impl ArchivalPartialSource {
+    pub fn new(
+        pages_path: Option<&Path>,
+        layout_path: Option<&Path>,
+        fs: &impl FileSystemAPI,
+    ) -> Result<Self, Box<dyn Error>> {
+        let mut partials = HashMap::new();
+        // Add layouts
+        if let Some(path) = layout_path {
             let files = fs.read_dir(path)?;
             let ext_re = liquid_extension();
             for file in files {
@@ -29,44 +37,61 @@ impl LayoutPartialSource {
                     if ext_re.is_match(name) {
                         let template_name = ext_re.replace(name, "").to_string();
                         if let Some(contents) = fs.read_to_string(&file)? {
-                            layouts.insert(template_name, contents);
+                            partials.insert(template_name, contents);
                         } else {
-                            println!("Failed reading {}", file.display());
+                            println!("Failed reading layout {}", file.display());
                         }
                     }
                 }
             }
         }
-        Ok(Self { layouts })
+        if let Some(path) = pages_path {
+            let files = fs.read_dir(path)?;
+            let partial_re = partial_matcher();
+            for file in files {
+                if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
+                    if partial_re.is_match(name) {
+                        let template_name = partial_re.replace(name, "$1").to_string();
+                        if let Some(contents) = fs.read_to_string(&file)? {
+                            partials.insert(template_name, contents);
+                        } else {
+                            println!("Failed reading partial {}", file.display());
+                        }
+                    }
+                }
+            }
+        }
+        Ok(Self { partials })
     }
 }
 
-impl PartialSource for LayoutPartialSource {
+impl PartialSource for ArchivalPartialSource {
     fn contains(&self, name: &str) -> bool {
-        self.layouts.contains_key(name)
+        self.partials.contains_key(name)
     }
 
     fn names(&self) -> Vec<&str> {
         let mut names = vec![];
-        for k in self.layouts.keys() {
+        for k in self.partials.keys() {
             names.push(&k[..]);
         }
         names
     }
 
     fn try_get<'a>(&'a self, name: &str) -> Option<Cow<'a, str>> {
-        self.layouts.get(name).map(|layout| layout.into())
+        self.partials.get(name).map(|p| p.into())
     }
 }
 
 pub fn get(
+    pages_path: Option<&Path>,
     layout_path: Option<&Path>,
     fs: &impl FileSystemAPI,
 ) -> Result<liquid::Parser, Box<dyn Error>> {
-    let layout_partials = EagerCompiler::new(LayoutPartialSource::new(layout_path, fs)?);
+    let partials = EagerCompiler::new(ArchivalPartialSource::new(pages_path, layout_path, fs)?);
     let parser = liquid::ParserBuilder::with_stdlib()
         .tag(LayoutTag)
-        .partials(layout_partials);
+        .partials(partials);
     Ok(parser.build()?)
 }
 
