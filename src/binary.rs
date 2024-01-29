@@ -1,7 +1,5 @@
 #[cfg(feature = "binary")]
 use ctrlc;
-use futures::executor;
-use reqwest;
 use std::{
     env,
     error::Error,
@@ -71,15 +69,4 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
         return Err(ArchivalError::new(INVALID_COMMAND).into());
     }
     Ok(())
-}
-
-pub fn download_site(url: &str) -> Result<Vec<u8>, reqwest::Error> {
-    let response = executor::block_on(reqwest::get(url))?;
-    match response.error_for_status() {
-        Ok(r) => {
-            let r = executor::block_on(r.bytes())?;
-            Ok(r.to_vec())
-        }
-        Err(e) => Err(e),
-    }
 }

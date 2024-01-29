@@ -3,6 +3,7 @@ use std::{
     io::{Cursor, Read, Seek},
     path::{Path, PathBuf},
 };
+use tracing::debug;
 
 pub trait FileSystemAPI {
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
@@ -77,16 +78,23 @@ pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<(), B
         let mut outpath = PathBuf::new();
         outpath.push(relative_path);
 
+        debug!("create {}", outpath.display());
+
         if file.name().ends_with('/') {
+            debug!("directory");
             fs.create_dir_all(&outpath)?;
         } else {
+            debug!("file");
             if let Some(p) = outpath.parent() {
                 if !fs.exists(p)? {
+                    debug!("create {}", p.display());
                     fs.create_dir_all(p)?;
                 }
             }
+            debug!("reading file: {}", outpath.display());
             let mut buffer = vec![];
             file.read_to_end(&mut buffer)?;
+            debug!("writing file: {}", outpath.display());
             fs.write(&outpath, buffer)?;
         }
     }

@@ -38,20 +38,6 @@ use object::Object;
 use site::Site;
 pub mod events;
 
-#[cfg(feature = "wasm-fs")]
-pub fn fetch_site(url: &str) -> Result<Vec<u8>, reqwest_wasm::Error> {
-    use futures::executor;
-
-    let response = executor::block_on(reqwest_wasm::get(url))?;
-    match response.error_for_status() {
-        Ok(r) => {
-            let r = executor::block_on(r.bytes())?;
-            Ok(r.to_vec())
-        }
-        Err(e) => Err(e),
-    }
-}
-
 pub struct Archival<F: FileSystemAPI> {
     fs_mutex: FileSystemMutex<F>,
     // event_receiver: Receiver<ArchivalEvent>,

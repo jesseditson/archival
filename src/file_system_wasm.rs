@@ -1,12 +1,13 @@
-use futures::executor::block_on;
 use indexed_db_futures::prelude::*;
 use std::{
     collections::{HashSet, VecDeque},
     error::Error,
-    future::Future,
+    future::{Future, IntoFuture},
     path::{Path, PathBuf},
 };
+use tracing::debug;
 use wasm_bindgen::JsValue;
+use wasm_bindgen_futures::spawn_local;
 use web_sys::{DomException, IdbKeyRange};
 
 use crate::{
@@ -27,6 +28,7 @@ pub struct WasmFileSystem {
 
 impl WasmFileSystem {
     pub fn new(idb_name: &str) -> Self {
+        debug!("init wasm filesystem");
         Self {
             version: 1,
             idb_name: idb_name.to_owned(),
@@ -79,6 +81,7 @@ fn map_idb_err<T>(r: Result<T, DomException>) -> Result<T, IdbError> {
 
 impl FileSystemAPI for WasmFileSystem {
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
+        debug!("exists {}", path.display());
         if idb_task(self.get_file(path))?.is_some() || self.is_dir(path)? {
             Ok(true)
         } else {
@@ -86,7 +89,16 @@ impl FileSystemAPI for WasmFileSystem {
         }
     }
     fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
-        todo!("Need to fetch from graph to exists on folders");
+        let node_data = idb_task(async {
+            let db = self.get_db().await?;
+            let tx = db.transaction_on_one_with_mode(
+                FILE_GRAPH_STORE_NAME,
+                IdbTransactionMode::Readwrite,
+            )?;
+            let store = tx.object_store(FILE_GRAPH_STORE_NAME)?;
+            store.get_owned(&FileGraphNode::key(path))?.await
+        })?;
+        Ok(node_data.is_some())
     }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         let db = idb_task(self.get_db())?;
@@ -112,6 +124,7 @@ impl FileSystemAPI for WasmFileSystem {
         if self.is_dir(path)? {
             return Err(ArchivalError::new("cannot write to a folder").into());
         }
+        debug!("write: {}", path.display());
         idb_task(self.write_file(path, &contents))?;
         self.files_changed(vec![path.to_path_buf()])?;
         Ok(())
@@ -290,7 +303,6 @@ impl WasmFileSystem {
         let tx =
             db.transaction_on_one_with_mode(FILE_GRAPH_STORE_NAME, IdbTransactionMode::Readwrite)?;
         let store = tx.object_store(FILE_GRAPH_STORE_NAME)?;
-
         // If this is a directory, remove it and its children from the graph
         let node =
             FileGraphNode::from_js_val(path, store.get_owned(&FileGraphNode::key(path))?.await?);
