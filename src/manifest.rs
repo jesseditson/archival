@@ -22,7 +22,7 @@ impl fmt::Display for InvalidManifestError {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Manifest {
     pub object_definition_file: PathBuf,
     pub pages_dir: PathBuf,

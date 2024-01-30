@@ -15,6 +15,7 @@ mod reserved_fields;
 mod site;
 mod tags;
 use events::{AddObjectEvent, ArchivalEvent, EditFieldEvent, EditOrderEvent};
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
 #[cfg(feature = "binary")]
@@ -26,7 +27,6 @@ mod file_system_stdlib;
 mod file_system_wasm;
 use file_system_mutex::FileSystemMutex;
 use object::Object;
-use site::Site;
 
 // Re-exports
 pub mod events;
@@ -38,10 +38,11 @@ pub use file_system_memory::MemoryFileSystem;
 #[cfg(feature = "wasm-fs")]
 pub use file_system_wasm::WasmFileSystem;
 pub use object_definition::ObjectDefinition;
+pub use site::Site;
 
 pub struct Archival<F: FileSystemAPI> {
     fs_mutex: FileSystemMutex<F>,
-    site: Site,
+    pub site: Site,
 }
 
 impl<F: FileSystemAPI> Archival<F> {
@@ -78,13 +79,17 @@ impl<F: FileSystemAPI> Archival<F> {
         })
     }
 
+    pub fn get_objects(&self) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
+        site::get_objects(&self.site, &self.fs_mutex)
+    }
+
     fn edit_field(&self, event: EditFieldEvent) -> Result<(), Box<dyn Error>> {
         let obj_def = if let Some(o) = self.site.objects.get(&event.object) {
             o
         } else {
             return Err(ArchivalError::new(&format!("object not found: {}", event.object)).into());
         };
-        let mut all_objects = site::get_objects(&self.site, &self.fs_mutex)?;
+        let mut all_objects = self.get_objects()?;
         let mut existing = if let Some(objects) = all_objects.get_mut(&obj_def.name) {
             if let Some(object) = objects.iter_mut().find(|o| o.filename == event.filename) {
                 object

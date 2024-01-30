@@ -18,9 +18,11 @@ use crate::{
     ArchivalError, FileSystemAPI,
 };
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Site {
     pub objects: ObjectDefinitions,
+    #[serde(skip)]
     pub manifest: Manifest,
 }
 

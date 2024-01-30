@@ -1,13 +1,11 @@
-use std::{collections::HashMap, error::Error, fmt::Debug};
-
 use crate::{
     field_value::{FieldValue, ObjectValues},
     object_definition::{InvalidFieldError, ObjectDefinition},
     reserved_fields::{self, is_reserved_field},
 };
-
 use liquid::{ObjectView, ValueView};
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, error::Error, fmt::Debug};
 use toml::Table;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -83,6 +81,7 @@ impl ValuePath {
 }
 
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Object {
     pub filename: String,
     pub object_name: String,
@@ -189,9 +188,7 @@ impl Object {
 
 #[cfg(test)]
 mod tests {
-    use liquid::model::DateTime;
-
-    use crate::object_definition::tests::artist_and_page_definition_str;
+    use crate::{field_value::DateTime, object_definition::tests::artist_and_page_definition_str};
 
     use super::*;
 
@@ -232,8 +229,8 @@ mod tests {
             assert!(date.contains_key("date"));
             assert!(date.contains_key("ticket_link"));
             assert_eq!(
-                date.get("date").unwrap(),
-                &FieldValue::Date(DateTime::from_ymd(2022, 12, 22))
+                date.get("date").unwrap().liquid_date(),
+                FieldValue::Date(DateTime::from_ymd(2022, 12, 22)).liquid_date()
             );
             assert_eq!(
                 date.get("ticket_link").unwrap(),

@@ -1,8 +1,7 @@
 use crate::{
-    field_value::FieldValue,
+    field_value::{DateTime, FieldValue},
     reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
 };
-use liquid_core::model::DateTime;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt::Debug};
 use thiserror::Error;
@@ -12,6 +11,8 @@ use toml::Table;
 pub enum InvalidFieldError {
     #[error("unrecognized type {0}")]
     UnrecognizedType(String),
+    #[error("invalid date {0}")]
+    InvalidDate(String),
     #[error("type mismatch for field {field:?} of type {field_type:?} ({value:?})")]
     TypeMismatch {
         field: String,

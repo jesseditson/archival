@@ -3,6 +3,7 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt::{self, Debug},
+    ops::Deref,
 };
 
 use crate::{
@@ -17,11 +18,53 @@ use toml::Value;
 pub type ObjectValues = HashMap<String, FieldValue>;
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
+pub struct DateTime {
+    #[serde(skip)]
+    inner: model::DateTime,
+    raw: String,
+}
+
+impl DateTime {
+    pub fn from(str: &str) -> Result<Self, InvalidFieldError> {
+        let liquid_date = model::DateTime::from_str(&str)
+            .ok_or(InvalidFieldError::InvalidDate(str.to_owned()))?;
+        Ok(Self {
+            inner: liquid_date,
+            raw: str.to_owned(),
+        })
+    }
+    pub fn now() -> Self {
+        let inner = model::DateTime::now();
+        let raw = inner.to_string();
+        Self { inner, raw }
+    }
+    pub fn from_ymd(year: i32, month: u8, date: u8) -> Self {
+        let inner = model::DateTime::from_ymd(year, month, date);
+        let raw = inner.to_string();
+        Self { inner, raw }
+    }
+
+    #[cfg(test)]
+    pub fn as_liquid(&self) -> &model::DateTime {
+        &self.inner
+    }
+}
+
+impl Deref for DateTime {
+    type Target = model::DateTime;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldValue {
     String(String),
     Markdown(String),
     Number(f64),
-    Date(model::DateTime),
+    Date(DateTime),
     Objects(Vec<ObjectValues>),
     Boolean(bool),
 }
@@ -33,6 +76,16 @@ pub enum FieldValue {
 //          .finish()
 //     }
 // }
+
+impl FieldValue {
+    #[cfg(test)]
+    pub fn liquid_date(&self) -> &model::DateTime {
+        match self {
+            FieldValue::Date(d) => d.as_liquid(),
+            _ => panic!("Not a date"),
+        }
+    }
+}
 
 impl fmt::Display for FieldValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -46,10 +99,7 @@ impl From<EditFieldValue> for FieldValue {
             EditFieldValue::String(v) => Self::String(v.to_owned()),
             EditFieldValue::Markdown(v) => Self::Markdown(v.to_owned()),
             EditFieldValue::Number(n) => Self::Number(n),
-            EditFieldValue::Date(str) => {
-                let liquid_date = model::DateTime::from_str(&str).unwrap();
-                FieldValue::Date(liquid_date)
-            }
+            EditFieldValue::Date(str) => FieldValue::Date(DateTime::from(&str).unwrap()),
             EditFieldValue::Boolean(b) => FieldValue::Boolean(b),
         }
     }
@@ -135,7 +185,7 @@ impl ValueView for FieldValue {
             FieldValue::String(s) => Some(model::ScalarCow::new(s)),
             FieldValue::Number(n) => Some(model::ScalarCow::new(*n)),
             // TODO: should be able to return a datetime value here
-            FieldValue::Date(d) => Some(model::ScalarCow::new(*d)),
+            FieldValue::Date(d) => Some(model::ScalarCow::new(**d)),
             FieldValue::Markdown(s) => Some(model::ScalarCow::new(markdown_to_html(
                 s,
                 &ComrakOptions::default(),
@@ -227,13 +277,13 @@ impl FieldValue {
                 //
                 // * `+HHMM`
                 // * `-HHMM`
-                let liquid_date = model::DateTime::from_str(&date_str).ok_or(
-                    InvalidFieldError::TypeMismatch {
-                        field: key.to_owned(),
-                        field_type: field_type.to_string(),
-                        value: value.to_string(),
-                    },
-                )?;
+                // let liquid_date = model::DateTime::from_str(&date_str).ok_or(
+                //     InvalidFieldError::TypeMismatch {
+                //         field: key.to_owned(),
+                //         field_type: field_type.to_string(),
+                //         value: value.to_string(),
+                //     },
+                // )?;
                 // TODO: use this strategy for more accurate values
                 // let toml_date = m_value.as_datetime().ok_or(InvalidFieldError {
                 //     field: key.to_string(),
@@ -247,7 +297,7 @@ impl FieldValue {
                 // let liquid_date =
                 //     DateTime::from_ymd(date.year as i32, date.month, date.day)
                 //         .with_offset(offset);
-                Ok(FieldValue::Date(liquid_date))
+                Ok(FieldValue::Date(DateTime::from(&date_str)?))
             }
         }
     }

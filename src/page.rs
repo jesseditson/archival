@@ -80,7 +80,10 @@ impl<'a> Page<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        field_value::FieldValue, liquid_parser, object_definition::FieldType, MemoryFileSystem,
+        field_value::{DateTime, FieldValue},
+        liquid_parser,
+        object_definition::FieldType,
+        MemoryFileSystem,
     };
 
     use super::*;
@@ -89,7 +92,7 @@ mod tests {
         let tour_dates_objects = vec![HashMap::from([
             (
                 "date".to_string(),
-                FieldValue::Date(liquid::model::DateTime::from_str("12/22/2022 00:00:00").unwrap()),
+                FieldValue::Date(DateTime::from("12/22/2022 00:00:00").unwrap()),
             ),
             (
                 "ticket_link".to_string(),
