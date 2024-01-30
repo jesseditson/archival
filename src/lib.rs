@@ -8,20 +8,15 @@ mod file_system_tests;
 mod filters;
 mod liquid_parser;
 mod manifest;
-mod object;
 mod object_definition;
 mod page;
 mod read_toml;
 mod reserved_fields;
 mod site;
 mod tags;
+use events::{AddObjectEvent, ArchivalEvent, EditFieldEvent, EditOrderEvent};
 use std::error::Error;
 use std::path::Path;
-// use std::sync::mpsc::{self, Receiver, Sender};
-
-pub use archival_error::ArchivalError;
-use events::{AddObjectEvent, ArchivalEvent, EditFieldEvent, EditOrderEvent};
-pub use file_system::{FileSystemAPI, WatchableFileSystemAPI};
 #[cfg(feature = "binary")]
 pub mod binary;
 mod constants;
@@ -29,33 +24,31 @@ mod constants;
 mod file_system_stdlib;
 #[cfg(feature = "wasm-fs")]
 mod file_system_wasm;
-pub use file_system::unpack_zip;
-pub use file_system_memory::MemoryFileSystem;
 use file_system_mutex::FileSystemMutex;
-#[cfg(feature = "wasm-fs")]
-pub use file_system_wasm::WasmFileSystem;
 use object::Object;
 use site::Site;
+
+// Re-exports
 pub mod events;
+pub mod object;
+pub use archival_error::ArchivalError;
+pub use file_system::unpack_zip;
+pub use file_system::{FileSystemAPI, WatchableFileSystemAPI};
+pub use file_system_memory::MemoryFileSystem;
+#[cfg(feature = "wasm-fs")]
+pub use file_system_wasm::WasmFileSystem;
+pub use object_definition::ObjectDefinition;
 
 pub struct Archival<F: FileSystemAPI> {
     fs_mutex: FileSystemMutex<F>,
-    // event_receiver: Receiver<ArchivalEvent>,
-    // pub event_sender: Sender<ArchivalEvent>,
     site: Site,
 }
 
 impl<F: FileSystemAPI> Archival<F> {
-    pub fn new(fs: F) -> Self {
-        // let (event_sender, event_receiver) = mpsc::channel::<ArchivalEvent>();
-        let site = site::load(&fs).unwrap();
+    pub fn new(fs: F) -> Result<Self, Box<dyn Error>> {
+        let site = site::load(&fs)?;
         let fs_mutex = FileSystemMutex::init(fs);
-        Self {
-            fs_mutex,
-            // event_receiver,
-            // event_sender,
-            site,
-        }
+        Ok(Self { fs_mutex, site })
     }
     pub fn send_event(&self, event: ArchivalEvent) -> Result<(), Box<dyn Error>> {
         match event {
@@ -174,7 +167,7 @@ mod tests {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs);
+        let archival = Archival::new(fs)?;
         archival.send_event(ArchivalEvent::AddObject(AddObjectEvent {
             object: "section".to_string(),
             filename: "my-section".to_string(),
@@ -204,11 +197,11 @@ mod tests {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs);
+        let archival = Archival::new(fs)?;
         archival.send_event(ArchivalEvent::EditField(EditFieldEvent {
             object: "section".to_string(),
             filename: "first".to_string(),
-            path: ValuePath::new().join(object::ValuePathComponent::key("name")),
+            path: ValuePath::default().join(object::ValuePathComponent::key("name")),
             value: events::EditFieldValue::String("This is the new title".to_string()),
         }))?;
         // Sending an event should result in an updated fs

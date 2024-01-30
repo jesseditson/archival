@@ -19,6 +19,7 @@ pub enum EditFieldValue {
     Markdown(String),
     Number(f64),
     Date(String),
+    Boolean(bool),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

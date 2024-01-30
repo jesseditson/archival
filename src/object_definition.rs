@@ -29,6 +29,7 @@ pub enum InvalidFieldError {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldType {
     String,
     Number,
@@ -76,10 +77,12 @@ impl FieldType {
 pub type ObjectDefinitions = HashMap<String, ObjectDefinition>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ObjectDefinition {
     pub name: String,
     pub fields: HashMap<String, FieldType>,
     pub template: Option<String>,
+    #[cfg_attr(feature = "typescript", serde(skip))]
     pub children: HashMap<String, ObjectDefinition>,
 }
 

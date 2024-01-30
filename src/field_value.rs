@@ -50,6 +50,7 @@ impl From<EditFieldValue> for FieldValue {
                 let liquid_date = model::DateTime::from_str(&str).unwrap();
                 FieldValue::Date(liquid_date)
             }
+            EditFieldValue::Boolean(b) => FieldValue::Boolean(b),
         }
     }
 }

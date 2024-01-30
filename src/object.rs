@@ -29,10 +29,13 @@ pub struct ValuePath {
     path: Vec<ValuePathComponent>,
 }
 
-impl ValuePath {
-    pub fn new() -> Self {
+impl Default for ValuePath {
+    fn default() -> Self {
         Self { path: vec![] }
     }
+}
+
+impl ValuePath {
     pub fn join(mut self, component: ValuePathComponent) -> Self {
         self.path.push(component);
         self
