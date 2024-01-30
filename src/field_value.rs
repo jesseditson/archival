@@ -23,6 +23,7 @@ pub enum FieldValue {
     Number(f64),
     Date(model::DateTime),
     Objects(Vec<ObjectValues>),
+    Boolean(bool),
 }
 // impl fmt::Debug for Position {
 //     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -73,6 +74,7 @@ impl From<&FieldValue> for toml::Value {
                 }),
                 offset: None,
             }),
+            FieldValue::Boolean(v) => Self::Boolean(v.to_owned()),
             FieldValue::Objects(o) => Self::Array(
                 o.into_iter()
                     .map(|child| {
@@ -110,6 +112,7 @@ impl ValueView for FieldValue {
             FieldValue::Number(_) => "number",
             FieldValue::Date(_) => "date",
             FieldValue::Objects(_) => "objects",
+            FieldValue::Boolean(_) => "boolean",
         }
     }
     /// Interpret as a string.
@@ -152,6 +155,7 @@ impl ValueView for FieldValue {
             FieldValue::Markdown(_) => self.as_scalar().to_value(),
             FieldValue::Number(_) => self.as_scalar().to_value(),
             FieldValue::Date(_) => self.as_scalar().to_value(),
+            FieldValue::Boolean(_) => self.as_scalar().to_value(),
             FieldValue::Objects(_) => self.as_array().to_value(),
         }
     }
@@ -167,8 +171,9 @@ impl FieldValue {
             FieldType::String => Ok(FieldValue::String(
                 value
                     .as_str()
-                    .ok_or(InvalidFieldError {
-                        field: key.to_string(),
+                    .ok_or(InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
                         value: value.to_string(),
                     })?
                     .to_string(),
@@ -176,21 +181,31 @@ impl FieldValue {
             FieldType::Markdown => Ok(FieldValue::Markdown(
                 value
                     .as_str()
-                    .ok_or(InvalidFieldError {
-                        field: key.to_string(),
+                    .ok_or(InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
                         value: value.to_string(),
                     })?
                     .to_string(),
             )),
             FieldType::Number => Ok(FieldValue::Number(value.as_float().ok_or(
-                InvalidFieldError {
-                    field: key.to_string(),
+                InvalidFieldError::TypeMismatch {
+                    field: key.to_owned(),
+                    field_type: field_type.to_string(),
+                    value: value.to_string(),
+                },
+            )?)),
+            FieldType::Boolean => Ok(FieldValue::Boolean(value.as_bool().ok_or(
+                InvalidFieldError::TypeMismatch {
+                    field: key.to_owned(),
+                    field_type: field_type.to_string(),
                     value: value.to_string(),
                 },
             )?)),
             FieldType::Date => {
-                let mut date_str = (value.as_str().ok_or(InvalidFieldError {
-                    field: key.to_string(),
+                let mut date_str = (value.as_str().ok_or(InvalidFieldError::TypeMismatch {
+                    field: key.to_owned(),
+                    field_type: field_type.to_string(),
                     value: value.to_string(),
                 })?)
                 .to_string();
@@ -211,11 +226,13 @@ impl FieldValue {
                 //
                 // * `+HHMM`
                 // * `-HHMM`
-                let liquid_date =
-                    model::DateTime::from_str(&date_str).ok_or(InvalidFieldError {
-                        field: key.to_string(),
+                let liquid_date = model::DateTime::from_str(&date_str).ok_or(
+                    InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
                         value: value.to_string(),
-                    })?;
+                    },
+                )?;
                 // TODO: use this strategy for more accurate values
                 // let toml_date = m_value.as_datetime().ok_or(InvalidFieldError {
                 //     field: key.to_string(),
@@ -240,6 +257,7 @@ impl FieldValue {
             FieldValue::Markdown(n) => n.clone(),
             FieldValue::Number(n) => n.to_string(),
             FieldValue::Date(d) => d.to_rfc2822(),
+            FieldValue::Boolean(b) => b.to_string(),
             FieldValue::Objects(o) => format!("{:?}", o),
         }
     }

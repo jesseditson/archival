@@ -1,28 +1,31 @@
-use std::{
-    collections::HashMap,
-    error::Error,
-    fmt::{self, Debug},
-};
-
 use crate::{
     field_value::FieldValue,
     reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
 };
-
 use liquid_core::model::DateTime;
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, error::Error, fmt::Debug};
+use thiserror::Error;
 use toml::Table;
 
-#[derive(Debug, Clone)]
-pub struct InvalidFieldError {
-    pub field: String,
-    pub value: String,
-}
-impl Error for InvalidFieldError {}
-impl fmt::Display for InvalidFieldError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid field {}: {}", self.field, self.value)
-    }
+#[derive(Error, Debug, Clone)]
+pub enum InvalidFieldError {
+    #[error("unrecognized type {0}")]
+    UnrecognizedType(String),
+    #[error("type mismatch for field {field:?} of type {field_type:?} ({value:?})")]
+    TypeMismatch {
+        field: String,
+        field_type: String,
+        value: String,
+    },
+    #[error("invalid child {key:?}[{index:?}] {child:?}")]
+    InvalidChild {
+        key: String,
+        index: usize,
+        child: String,
+    },
+    #[error("not an array: {key:?} ({value:?})")]
+    NotAnArray { key: String, value: String },
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -31,6 +34,7 @@ pub enum FieldType {
     Number,
     Date,
     Markdown,
+    Boolean,
 }
 
 impl FieldType {
@@ -40,11 +44,22 @@ impl FieldType {
             "number" => Ok(FieldType::Number),
             "date" => Ok(FieldType::Date),
             "markdown" => Ok(FieldType::Markdown),
-            _ => Err(InvalidFieldError {
-                field: string.to_string(),
-                value: "".to_string(),
-            }),
+            "boolean" => Ok(FieldType::Boolean),
+            _ => Err(InvalidFieldError::UnrecognizedType(string.to_string())),
         }
+    }
+
+    pub fn to_str(&self) -> &str {
+        match self {
+            Self::String => "string",
+            Self::Number => "number",
+            Self::Date => "date",
+            Self::Markdown => "markdown",
+            Self::Boolean => "boolean",
+        }
+    }
+    pub fn to_string(&self) -> String {
+        self.to_str().to_string()
     }
 
     pub fn default_value(&self) -> FieldValue {
@@ -53,6 +68,7 @@ impl FieldType {
             Self::Number => FieldValue::Number(0.0),
             Self::Date => FieldValue::Date(DateTime::now()),
             Self::Markdown => FieldValue::Markdown("".to_string()),
+            Self::Boolean => FieldValue::Boolean(false),
         }
     }
 }

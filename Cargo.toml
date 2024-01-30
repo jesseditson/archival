@@ -12,6 +12,7 @@ name = "archival"
 path = "src/lib.rs"
 
 [features]
+typescript = ["dep:typescript-type-def"]
 binary = ["dep:ctrlc", "stdlib-fs"]
 stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
 wasm-fs = [
@@ -19,9 +20,7 @@ wasm-fs = [
     "dep:web-sys",
     "dep:wasm-bindgen-futures",
     "dep:indexed_db_futures",
-    "dep:serde_bytes",
     "dep:serde-wasm-bindgen",
-    "dep:typescript-type-def",
 ]
 
 [[bin]]
@@ -53,7 +52,7 @@ web-sys = { version = "0.3.66", optional = true, features = [
 wasm-bindgen-futures = { version = "0.4.37", optional = true }
 serde-wasm-bindgen = { version = "0.4", optional = true }
 indexed_db_futures = { version = "0.3.0", optional = true }
-serde_bytes = { version = "0.11.12", optional = true }
+serde_bytes = "0.11.12"
 typescript-type-def = { version = "0.5.9", optional = true }
 # shared
 liquid = "0.26.1"

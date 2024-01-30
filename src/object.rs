@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use toml::Table;
 
 #[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "wasm-fs", derive(typescript_type_def::TypeDef))]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ValuePathComponent {
     Key(String),
     Index(usize),
@@ -24,7 +24,7 @@ impl ValuePathComponent {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "wasm-fs", derive(typescript_type_def::TypeDef))]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ValuePath {
     path: Vec<ValuePathComponent>,
 }
@@ -100,15 +100,16 @@ impl Object {
                 values.insert(key.to_string(), field_value);
             } else if let Some(child_def) = definition.children.get(&key.to_string()) {
                 // Children
-                let m_objects = value.as_array().ok_or(InvalidFieldError {
-                    field: key.to_string(),
+                let m_objects = value.as_array().ok_or(InvalidFieldError::NotAnArray {
+                    key: key.to_string(),
                     value: value.to_string(),
                 })?;
                 let mut objects: Vec<ObjectValues> = Vec::new();
                 for (index, object) in m_objects.iter().enumerate() {
-                    let table = object.as_table().ok_or(InvalidFieldError {
-                        field: format!("{}: {}", key, index),
-                        value: value.to_string(),
+                    let table = object.as_table().ok_or(InvalidFieldError::InvalidChild {
+                        key: key.to_owned(),
+                        index,
+                        child: value.to_string(),
                     })?;
                     let object = Object::values_from_table(table, child_def)?;
                     objects.push(object);
