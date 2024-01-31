@@ -1,128 +1,102 @@
 use std::{
     error::Error,
+    io::{Cursor, Read, Seek},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
 };
-
-pub use native::NativeFileSystem;
+use tracing::debug;
 
 pub trait FileSystemAPI {
-    fn remove_dir_all(&self, path: &Path) -> Result<(), Box<dyn Error>>;
-    fn create_dir_all(&self, path: &Path) -> Result<(), Box<dyn Error>>;
+    fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
+    fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
+    fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
+    fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>>;
-    fn read_to_string(&self, path: &Path) -> Result<String, Box<dyn Error>>;
-    fn write(&self, path: &Path, contents: String) -> Result<(), Box<dyn Error>>;
-    fn copy_contents(&self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>>;
+    fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>>;
+    fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>>;
+    fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>>;
+    fn copy_contents(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>>;
+    fn walk_dir(&self, path: &Path) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>>;
 }
 
 pub trait WatchableFileSystemAPI {
     fn watch(
-        self,
+        &mut self,
         root: PathBuf,
         watch_paths: Vec<String>,
-        changed: impl Fn(Arc<Mutex<dyn FileSystemAPI>>, Vec<PathBuf>) + Send + Sync + 'static,
-    ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>>;
+        changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
+    ) -> Result<Box<dyn FnOnce() + '_>, Box<dyn Error>>;
 }
 
-mod native {
-    use fs_extra;
-    use notify::{RecursiveMode, Watcher};
-    use std::{
-        error::Error,
-        fs,
-        path::{Path, PathBuf},
-        sync::{Arc, Mutex},
-    };
+fn has_toplevel<S: Read + Seek>(
+    archive: &mut zip::ZipArchive<S>,
+) -> Result<bool, zip::result::ZipError> {
+    let mut toplevel_dir: Option<PathBuf> = None;
+    if archive.len() < 2 {
+        return Ok(false);
+    }
 
-    use super::{FileSystemAPI, WatchableFileSystemAPI};
-
-    pub struct NativeFileSystem;
-
-    impl FileSystemAPI for NativeFileSystem {
-        fn remove_dir_all(&self, path: &Path) -> Result<(), Box<dyn Error>> {
-            Ok(fs::remove_dir_all(path)?)
+    for i in 0..archive.len() {
+        let file = archive.by_index(i)?.mangled_name();
+        if let Some(toplevel_dir) = &toplevel_dir {
+            if !file.starts_with(toplevel_dir) {
+                return Ok(false);
+            }
+        } else {
+            // First iteration
+            let comp: PathBuf = file.components().take(1).collect();
+            toplevel_dir = Some(comp);
         }
-        fn create_dir_all(&self, path: &Path) -> Result<(), Box<dyn Error>> {
-            Ok(fs::create_dir_all(path)?)
+    }
+    Ok(true)
+}
+
+pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
+    let mut archive = zip::ZipArchive::new(Cursor::new(zipball))?;
+
+    let do_strip_toplevel = has_toplevel(&mut archive)?;
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        let mut relative_path = file.mangled_name();
+
+        if do_strip_toplevel {
+            let base = relative_path
+                .components()
+                .take(1)
+                .fold(PathBuf::new(), |mut p, c| {
+                    p.push(c);
+                    p
+                });
+            relative_path = relative_path.strip_prefix(&base)?.to_path_buf()
         }
-        fn read_dir(&self, path: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn Error>> {
-            let mut files = vec![];
-            for f in fs::read_dir(path)? {
-                if let Ok(f) = f {
-                    files.push(f.path());
+
+        if relative_path.to_string_lossy().is_empty() {
+            // Top-level directory
+            continue;
+        }
+
+        let mut outpath = PathBuf::new();
+        outpath.push(relative_path);
+
+        debug!("create {}", outpath.display());
+
+        if file.name().ends_with('/') {
+            debug!("directory");
+            fs.create_dir_all(&outpath)?;
+        } else {
+            debug!("file");
+            if let Some(p) = outpath.parent() {
+                if !fs.exists(p)? {
+                    debug!("create {}", p.display());
+                    fs.create_dir_all(p)?;
                 }
             }
-            Ok(files)
-        }
-        fn read_to_string(&self, path: &Path) -> Result<String, Box<dyn Error>> {
-            Ok(fs::read_to_string(path)?)
-        }
-        fn write(&self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
-            Ok(fs::write(path, contents)?)
-        }
-        fn copy_contents(&self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {
-            let mut options = fs_extra::dir::CopyOptions::new();
-            options.overwrite = true;
-            options.content_only = true;
-            fs_extra::dir::copy(from, to, &options)?;
-            Ok(())
+            debug!("reading file: {}", outpath.display());
+            let mut buffer = vec![];
+            file.read_to_end(&mut buffer)?;
+            debug!("writing file: {}", outpath.display());
+            fs.write(&outpath, buffer)?;
         }
     }
-
-    impl WatchableFileSystemAPI for NativeFileSystem {
-        fn watch(
-            self,
-            root: PathBuf,
-            watch_paths: Vec<String>,
-            changed: impl Fn(Arc<Mutex<dyn FileSystemAPI>>, Vec<PathBuf>) + Send + Sync + 'static,
-        ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>> {
-            // Automatically select the best implementation for your platform.
-            let self_box = Arc::new(Mutex::new(self));
-            let watch_path = root.to_owned();
-            changed(self_box.clone(), vec![]);
-            let mut watcher =
-                notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-                    match res {
-                        Ok(event) => {
-                            let changed_paths: Vec<PathBuf> = event
-                                .paths
-                                .into_iter()
-                                .filter(|p| {
-                                    if let Ok(rel) = p.strip_prefix(&root) {
-                                        for dir in &watch_paths {
-                                            let mut dir = dir.to_string();
-                                            if let Ok(stripped) =
-                                                Path::new(&dir).strip_prefix(&root)
-                                            {
-                                                dir = stripped.to_string_lossy().into_owned();
-                                            }
-                                            if rel.starts_with(dir) {
-                                                return true;
-                                            }
-                                        }
-                                        false
-                                    } else {
-                                        println!("File changed outside of root: {}", p.display());
-                                        true
-                                    }
-                                })
-                                .collect();
-                            if changed_paths.len() > 0 {
-                                changed(self_box.clone(), changed_paths);
-                            }
-                        }
-                        Err(e) => println!("watch error: {:?}", e),
-                    }
-                })?;
-
-            // Add a path to be watched. All files and directories at that path and
-            // below will be monitored for changes.
-            watcher.watch(&watch_path, RecursiveMode::Recursive)?;
-            let path = watch_path.to_owned();
-            let unwatch = move || {
-                watcher.unwatch(&path).unwrap();
-            };
-            Ok(Box::new(unwatch))
-        }
-    }
+    Ok(())
 }

@@ -54,7 +54,6 @@ impl<'a> Page<'a> {
         parser: &liquid::Parser,
         objects_map: &HashMap<String, Vec<Object>>,
     ) -> Result<String, Box<dyn Error>> {
-        // TODO: can we avoid allocating here using an iterator?
         let mut objects: HashMap<String, Vec<liquid::model::Value>> = HashMap::new();
         for (name, objs) in objects_map {
             let values = objs.iter().map(|o| o.values.to_value()).collect();
@@ -64,14 +63,14 @@ impl<'a> Page<'a> {
         if let Some(template_info) = &self.template {
             let template = parser.parse(&template_info.content)?;
             let mut context = liquid::object!({
-              "object_name": template_info.object.name,
+              "object_name": template_info.object.object_name,
               "order": template_info.object.order,
-              template_info.definition.name.clone(): template_info.object.values.to_value()
+              template_info.definition.name.to_owned(): template_info.object.values.to_value()
             });
             context.extend(globals);
             return Ok(template.render(&context)?);
         } else if let Some(content) = &self.content {
-            let template = parser.parse(&content)?;
+            let template = parser.parse(content)?;
             return Ok(template.render(&globals)?);
         }
         panic!("Pages must have either a template or a path");
@@ -80,7 +79,12 @@ impl<'a> Page<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{field_value::FieldValue, liquid_parser, object_definition::FieldType};
+    use crate::{
+        field_value::{DateTime, FieldValue},
+        liquid_parser,
+        object_definition::FieldType,
+        MemoryFileSystem,
+    };
 
     use super::*;
 
@@ -88,7 +92,7 @@ mod tests {
         let tour_dates_objects = vec![HashMap::from([
             (
                 "date".to_string(),
-                FieldValue::Date(liquid::model::DateTime::from_str("12/22/2022 00:00:00").unwrap()),
+                FieldValue::Date(DateTime::from("12/22/2022 00:00:00").unwrap()),
             ),
             (
                 "ticket_link".to_string(),
@@ -111,7 +115,7 @@ mod tests {
             ),
         ]);
         let artist = Object {
-            name: "tormenta-rey".to_string(),
+            filename: "tormenta-rey".to_string(),
             object_name: "artist".to_string(),
             order: 1,
             values: artist_values,
@@ -130,7 +134,7 @@ mod tests {
         ]);
 
         let page = Object {
-            name: "home".to_string(),
+            filename: "home".to_string(),
             object_name: "page".to_string(),
             order: -1,
             values: page_values,
@@ -202,7 +206,7 @@ mod tests {
 
     #[test]
     fn regular_page() -> Result<(), Box<dyn Error>> {
-        let liquid_parser = liquid_parser::get(None)?;
+        let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
         let page = Page::new("home".to_string(), page_content().to_string());
         let rendered = page.render(&liquid_parser, &objects_map)?;
@@ -221,7 +225,7 @@ mod tests {
     }
     #[test]
     fn template_page() -> Result<(), Box<dyn Error>> {
-        let liquid_parser = liquid_parser::get(None)?;
+        let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
         let object = objects_map["artist"].first().unwrap();
         let artist_def = artist_definition();

@@ -1,10 +1,10 @@
-use std::{env, process};
-
+#[cfg(feature = "binary")]
 use archival::binary;
 
 fn main() {
-    if let Err(e) = binary(env::args()) {
+    #[cfg(feature = "binary")]
+    if let Err(e) = binary::binary(std::env::args()) {
         eprintln!("Error: {e}");
-        process::exit(1);
+        std::process::exit(1);
     }
 }

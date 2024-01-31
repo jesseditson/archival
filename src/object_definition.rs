@@ -1,34 +1,42 @@
-use std::{
-    collections::HashMap,
-    error::Error,
-    fmt::{self, Debug},
+use crate::{
+    field_value::{DateTime, FieldValue},
+    reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
 };
-
-use crate::reserved_fields::{
-    self, is_reserved_field, reserved_field_from_str, ReservedFieldError,
-};
-
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, error::Error, fmt::Debug};
+use thiserror::Error;
 use toml::Table;
 
-#[derive(Debug, Clone)]
-pub struct InvalidFieldError {
-    pub field: String,
-    pub value: String,
-}
-impl Error for InvalidFieldError {}
-impl fmt::Display for InvalidFieldError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid field {}: {}", self.field, self.value)
-    }
+#[derive(Error, Debug, Clone)]
+pub enum InvalidFieldError {
+    #[error("unrecognized type {0}")]
+    UnrecognizedType(String),
+    #[error("invalid date {0}")]
+    InvalidDate(String),
+    #[error("type mismatch for field {field:?} of type {field_type:?} ({value:?})")]
+    TypeMismatch {
+        field: String,
+        field_type: String,
+        value: String,
+    },
+    #[error("invalid child {key:?}[{index:?}] {child:?}")]
+    InvalidChild {
+        key: String,
+        index: usize,
+        child: String,
+    },
+    #[error("not an array: {key:?} ({value:?})")]
+    NotAnArray { key: String, value: String },
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldType {
     String,
     Number,
     Date,
     Markdown,
+    Boolean,
 }
 
 impl FieldType {
@@ -38,10 +46,31 @@ impl FieldType {
             "number" => Ok(FieldType::Number),
             "date" => Ok(FieldType::Date),
             "markdown" => Ok(FieldType::Markdown),
-            _ => Err(InvalidFieldError {
-                field: string.to_string(),
-                value: "".to_string(),
-            }),
+            "boolean" => Ok(FieldType::Boolean),
+            _ => Err(InvalidFieldError::UnrecognizedType(string.to_string())),
+        }
+    }
+
+    pub fn to_str(&self) -> &str {
+        match self {
+            Self::String => "string",
+            Self::Number => "number",
+            Self::Date => "date",
+            Self::Markdown => "markdown",
+            Self::Boolean => "boolean",
+        }
+    }
+    pub fn to_string(&self) -> String {
+        self.to_str().to_string()
+    }
+
+    pub fn default_value(&self) -> FieldValue {
+        match self {
+            Self::String => FieldValue::String("".to_string()),
+            Self::Number => FieldValue::Number(0.0),
+            Self::Date => FieldValue::Date(DateTime::now()),
+            Self::Markdown => FieldValue::Markdown("".to_string()),
+            Self::Boolean => FieldValue::Boolean(false),
         }
     }
 }
@@ -49,10 +78,12 @@ impl FieldType {
 pub type ObjectDefinitions = HashMap<String, ObjectDefinition>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ObjectDefinition {
     pub name: String,
     pub fields: HashMap<String, FieldType>,
     pub template: Option<String>,
+    #[cfg_attr(feature = "typescript", serde(skip))]
     pub children: HashMap<String, ObjectDefinition>,
 }
 
@@ -65,10 +96,7 @@ impl ObjectDefinition {
             children: HashMap::new(),
         }
     }
-    fn from_definition(
-        name: &String,
-        definition: &Table,
-    ) -> Result<ObjectDefinition, Box<dyn Error>> {
+    fn from_definition(name: &str, definition: &Table) -> Result<ObjectDefinition, Box<dyn Error>> {
         let mut object = ObjectDefinition::new(name);
         for (key, m_value) in definition {
             if let Some(child_table) = m_value.as_table() {

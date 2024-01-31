@@ -22,7 +22,7 @@ impl fmt::Display for InvalidManifestError {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Manifest {
     pub object_definition_file: PathBuf,
     pub pages_dir: PathBuf,
@@ -70,8 +70,8 @@ impl Manifest {
         fs: &impl FileSystemAPI,
     ) -> Result<Manifest, Box<dyn Error>> {
         let root = manifest_path.parent().ok_or(InvalidManifestError)?;
-        let mut manifest = Manifest::default(&root);
-        let string = fs.read_to_string(manifest_path)?;
+        let mut manifest = Manifest::default(root);
+        let string = fs.read_to_string(manifest_path)?.unwrap_or_default();
         let values: Table = toml::from_str(&string)?;
         let path_or_err = |value: Value| -> Result<PathBuf, InvalidManifestError> {
             if let Some(string) = value.as_str() {
