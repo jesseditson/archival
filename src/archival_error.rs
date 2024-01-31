@@ -1,6 +1,5 @@
 use std::error::Error;
 
-
 #[derive(Debug)]
 pub struct ArchivalError {
     message: String,
