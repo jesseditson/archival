@@ -218,3 +218,22 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "wasm-fs")]
+mod wasm_tests {
+    use std::error::Error;
+
+    use crate::{site, unpack_zip, MemoryFileSystem};
+
+    #[test]
+    fn serialize_objects() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let site = site::load(&fs)?;
+        let val = serde_json::to_string(&site.objects)?;
+        assert_eq!(val, "");
+        Ok(())
+    }
+}

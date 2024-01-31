@@ -16,14 +16,7 @@ default = ["binary"]
 typescript = ["dep:typescript-type-def"]
 binary = ["dep:ctrlc", "stdlib-fs"]
 stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
-wasm-fs = [
-    "dep:wasm-bindgen",
-    "dep:web-sys",
-    "dep:wasm-bindgen-futures",
-    "dep:indexed_db_futures",
-    "dep:serde-wasm-bindgen",
-    "time/wasm-bindgen",
-]
+wasm-fs = ["dep:wasm-bindgen", "dep:web-sys", "dep:wasm-bindgen-futures", "dep:indexed_db_futures", "dep:serde-wasm-bindgen", "time/wasm-bindgen"]
 
 [[bin]]
 name = "archival"
@@ -72,5 +65,6 @@ time = { version = "0.3.31", features = ["local-offset"] }
 
 [dev-dependencies]
 rand = "0.8.5"
+serde_json = "1.0.113"
 tempfile = "3.5.0"
 wasm-bindgen-test = "0.3.0"
