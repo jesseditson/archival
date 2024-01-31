@@ -4,6 +4,7 @@ use std::{
     error::Error,
     path::Path,
 };
+use tracing::debug;
 
 use crate::{
     constants::MANIFEST_FILE_NAME,
@@ -73,11 +74,13 @@ pub fn get_objects<T: FileSystemAPI>(
     for (object_name, object_def) in site.objects.iter() {
         let mut objects: Vec<Object> = Vec::new();
         let object_files_dir = objects_dir.join(object_name);
+        debug!("scanning {}", object_files_dir.display());
         fs.with_fs(|fs| {
             if fs.is_dir(objects_dir)? {
                 for file in fs.read_dir(&object_files_dir)? {
                     if let Some(ext) = file.extension() {
                         if ext == "toml" {
+                            debug!("parsing {}", file.display());
                             let obj_table = read_toml(&file, fs)?;
                             objects.push(Object::from_table(
                                 object_def,

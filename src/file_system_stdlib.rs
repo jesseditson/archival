@@ -29,7 +29,7 @@ impl FileSystemAPI for NativeFileSystem {
         Ok(fs::metadata(self.get_path(path)).is_ok())
     }
     fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
-        Ok(path.is_dir())
+        Ok(self.get_path(path).is_dir())
     }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         Ok(fs::remove_dir_all(self.get_path(path))?)

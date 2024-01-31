@@ -119,7 +119,7 @@ impl<F: FileSystemAPI> Archival<F> {
         } else {
             return Err(ArchivalError::new(&format!("object not found: {}", event.object)).into());
         };
-        let mut all_objects = site::get_objects(&self.site, &self.fs_mutex)?;
+        let mut all_objects = self.get_objects()?;
         let existing = if let Some(objects) = all_objects.get_mut(&obj_def.name) {
             if let Some(object) = objects.iter_mut().find(|o| o.filename == event.filename) {
                 object

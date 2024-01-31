@@ -22,6 +22,7 @@ wasm-fs = [
     "dep:wasm-bindgen-futures",
     "dep:indexed_db_futures",
     "dep:serde-wasm-bindgen",
+    "time/wasm-bindgen",
 ]
 
 [[bin]]
@@ -67,6 +68,7 @@ thiserror = "1.0.56"
 zip = { version = "0.6.6", default_features = false, features = ["deflate"] }
 toml_datetime = "0.6.5"
 tracing = "0.1.37"
+time = { version = "0.3.31", features = ["local-offset"] }
 
 [dev-dependencies]
 rand = "0.8.5"

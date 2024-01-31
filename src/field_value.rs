@@ -1,18 +1,18 @@
+use crate::{
+    events::EditFieldValue,
+    object_definition::{FieldType, InvalidFieldError},
+};
 use comrak::{markdown_to_html, ComrakOptions};
+use liquid::{model, ValueView};
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     error::Error,
     fmt::{self, Debug},
     ops::Deref,
 };
-
-use crate::{
-    events::EditFieldValue,
-    object_definition::{FieldType, InvalidFieldError},
-};
-
-use liquid::{model, ValueView};
-use serde::{Deserialize, Serialize};
+use time::{format_description, UtcOffset};
 use toml::Value;
 
 pub type ObjectValues = HashMap<String, FieldValue>;
@@ -240,13 +240,20 @@ impl FieldValue {
                     })?
                     .to_string(),
             )),
-            FieldType::Number => Ok(FieldValue::Number(value.as_float().ok_or(
-                InvalidFieldError::TypeMismatch {
-                    field: key.to_owned(),
-                    field_type: field_type.to_string(),
-                    value: value.to_string(),
-                },
-            )?)),
+            FieldType::Number => {
+                let number = if let Some(float_val) = value.as_float() {
+                    Ok(float_val)
+                } else if let Some(int_val) = value.as_integer() {
+                    Ok(int_val as f64)
+                } else {
+                    Err(InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value: value.to_string(),
+                    })
+                }?;
+                Ok(FieldValue::Number(number))
+            }
             FieldType::Boolean => Ok(FieldValue::Boolean(value.as_bool().ok_or(
                 InvalidFieldError::TypeMismatch {
                     field: key.to_owned(),
@@ -261,9 +268,21 @@ impl FieldValue {
                     value: value.to_string(),
                 })?)
                 .to_string();
+                // Legacy: support year-first formats:
+                let year_first_fmt =
+                    Regex::new(r"(?<year>\d{4})[\/-](?<month>\d{2})[\/-](?<day>\d{2})").unwrap();
+                date_str = year_first_fmt
+                    .replace(&date_str, "$month/$day/$year")
+                    .to_string();
                 // Also pretty lazy: check if we're missing time and add it
                 if !date_str.contains(':') {
                     date_str = format!("{} 00:00:00", date_str);
+                }
+                // Append local offset if available
+                if let Ok(offset) = UtcOffset::current_local_offset() {
+                    let fmt =
+                        format_description::parse("[offset_hour sign:mandatory][offset_minute]")?;
+                    date_str = format!("{} {}", date_str, offset.format(&fmt)?);
                 }
                 // Supported formats:
                 //
@@ -278,13 +297,6 @@ impl FieldValue {
                 //
                 // * `+HHMM`
                 // * `-HHMM`
-                // let liquid_date = model::DateTime::from_str(&date_str).ok_or(
-                //     InvalidFieldError::TypeMismatch {
-                //         field: key.to_owned(),
-                //         field_type: field_type.to_string(),
-                //         value: value.to_string(),
-                //     },
-                // )?;
                 // TODO: use this strategy for more accurate values
                 // let toml_date = m_value.as_datetime().ok_or(InvalidFieldError {
                 //     field: key.to_string(),
