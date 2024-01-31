@@ -224,16 +224,16 @@ mod tests {
 mod wasm_tests {
     use std::error::Error;
 
-    use crate::{site, unpack_zip, MemoryFileSystem};
+    use crate::{unpack_zip, Archival, MemoryFileSystem};
 
     #[test]
     fn serialize_objects() -> Result<(), Box<dyn Error>> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let site = site::load(&fs)?;
-        let val = serde_json::to_string(&site.objects)?;
-        assert_eq!(val, "");
+        let archival = Archival::new(fs)?;
+        let _def_json = serde_json::to_string(&archival.site.objects)?;
+        let _obj_json = serde_json::to_string(&archival.get_objects()?)?;
         Ok(())
     }
 }

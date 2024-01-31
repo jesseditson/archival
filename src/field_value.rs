@@ -65,7 +65,7 @@ pub enum FieldValue {
     Markdown(String),
     Number(f64),
     Date(DateTime),
-    #[serde(skip)]
+    #[cfg_attr(feature = "typescript", serde(skip))]
     Objects(Vec<ObjectValues>),
     Boolean(bool),
 }
