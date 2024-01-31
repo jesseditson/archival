@@ -73,7 +73,8 @@ impl Error for IdbError {
 }
 
 fn idb_task<T>(r: impl Future<Output = Result<T, DomException>>) -> Result<T, IdbError> {
-    map_idb_err(block_on(r))
+    todo!("figure out if we can run this future inline or use a different approach");
+    // map_idb_err(block_on(r))
 }
 fn map_idb_err<T>(r: Result<T, DomException>) -> Result<T, IdbError> {
     r.map_err(|e| IdbError::new(&e.message()))
