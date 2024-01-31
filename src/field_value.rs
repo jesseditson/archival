@@ -65,6 +65,7 @@ pub enum FieldValue {
     Markdown(String),
     Number(f64),
     Date(DateTime),
+    #[serde(skip)]
     Objects(Vec<ObjectValues>),
     Boolean(bool),
 }

@@ -38,11 +38,10 @@ pub use file_system_memory::MemoryFileSystem;
 #[cfg(feature = "wasm-fs")]
 pub use file_system_wasm::WasmFileSystem;
 pub use object_definition::ObjectDefinition;
-pub use site::Site;
 
 pub struct Archival<F: FileSystemAPI> {
     fs_mutex: FileSystemMutex<F>,
-    pub site: Site,
+    pub site: site::Site,
 }
 
 impl<F: FileSystemAPI> Archival<F> {
