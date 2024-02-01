@@ -13,6 +13,7 @@ impl fmt::Display for InvalidPageError {
     }
 }
 
+#[derive(Debug)]
 pub struct PageTemplate<'a> {
     pub definition: &'a ObjectDefinition,
     pub object: &'a Object,

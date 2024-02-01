@@ -14,7 +14,8 @@ mod read_toml;
 mod reserved_fields;
 mod site;
 mod tags;
-use events::{AddObjectEvent, ArchivalEvent, EditFieldEvent, EditOrderEvent};
+mod value_path;
+use events::{AddChildEvent, AddObjectEvent, ArchivalEvent, EditFieldEvent, EditOrderEvent};
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
@@ -50,14 +51,18 @@ impl<F: FileSystemAPI> Archival<F> {
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self { fs_mutex, site })
     }
+    pub fn build(&self) -> Result<(), Box<dyn Error>> {
+        site::build(&self.site, &self.fs_mutex)
+    }
     pub fn send_event(&self, event: ArchivalEvent) -> Result<(), Box<dyn Error>> {
         match event {
             ArchivalEvent::AddObject(event) => self.add_object(event)?,
             ArchivalEvent::EditField(event) => self.edit_field(event)?,
             ArchivalEvent::EditOrder(event) => self.edit_order(event)?,
+            ArchivalEvent::AddChild(event) => self.add_child(event)?,
         }
         // After any event, rebuild
-        site::build(&self.site, &self.fs_mutex)
+        self.build()
     }
     // Internal
     fn add_object(&self, event: AddObjectEvent) -> Result<(), Box<dyn Error>> {
@@ -83,66 +88,72 @@ impl<F: FileSystemAPI> Archival<F> {
     }
 
     fn edit_field(&self, event: EditFieldEvent) -> Result<(), Box<dyn Error>> {
-        let obj_def = if let Some(o) = self.site.objects.get(&event.object) {
-            o
-        } else {
-            return Err(ArchivalError::new(&format!("object not found: {}", event.object)).into());
-        };
-        let mut all_objects = self.get_objects()?;
-        let mut existing = if let Some(objects) = all_objects.get_mut(&obj_def.name) {
-            if let Some(object) = objects.iter_mut().find(|o| o.filename == event.filename) {
-                object
-            } else {
-                return Err(
-                    ArchivalError::new(&format!("filename not found: {}", event.filename)).into(),
-                );
-            }
-        } else {
-            return Err(
-                ArchivalError::new(&format!("no objects of type: {}", event.object)).into(),
-            );
-        };
-        let path = self
-            .site
-            .manifest
-            .objects_dir
-            .join(Path::new(&obj_def.name))
-            .join(Path::new(&format!("{}.toml", event.filename)));
-        event.path.set_in_object(&mut existing, event.value.into());
-        self.fs_mutex
-            .with_fs(|fs| fs.write_str(&path, existing.to_toml()?))?;
+        self.write_object(&event.object, &event.filename, |existing| {
+            event.path.set_in_object(existing, event.value.into());
+            Ok(existing)
+        })?;
         Ok(())
     }
     fn edit_order(&self, event: EditOrderEvent) -> Result<(), Box<dyn Error>> {
+        self.write_object(&event.object, &event.filename, |existing| {
+            existing.order = event.order;
+            Ok(existing)
+        })?;
+        Ok(())
+    }
+
+    fn add_child(&self, event: AddChildEvent) -> Result<(), Box<dyn Error>> {
         let obj_def = if let Some(o) = self.site.objects.get(&event.object) {
             o
         } else {
             return Err(ArchivalError::new(&format!("object not found: {}", event.object)).into());
         };
+        self.write_object(&event.object, &event.filename, move |existing| {
+            event.path.add_child(existing, obj_def)?;
+            Ok(existing)
+        })?;
+        Ok(())
+    }
+
+    fn write_object(
+        &self,
+        obj_type: &str,
+        filename: &str,
+        obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
+    ) -> Result<(), Box<dyn Error>> {
         let mut all_objects = self.get_objects()?;
-        let existing = if let Some(objects) = all_objects.get_mut(&obj_def.name) {
-            if let Some(object) = objects.iter_mut().find(|o| o.filename == event.filename) {
-                object
+        if let Some(objects) = all_objects.get_mut(obj_type) {
+            if let Some(object) = objects.iter_mut().find(|o| o.filename == filename) {
+                let object = obj_cb(object)?;
+                let path = self
+                    .site
+                    .manifest
+                    .objects_dir
+                    .join(Path::new(&obj_type))
+                    .join(Path::new(&format!("{}.toml", filename)));
+                self.fs_mutex
+                    .with_fs(|fs| fs.write_str(&path, object.to_toml()?))?;
+                Ok(())
             } else {
-                return Err(
-                    ArchivalError::new(&format!("filename not found: {}", event.filename)).into(),
-                );
+                Err(ArchivalError::new(&format!("filename not found: {}", filename)).into())
             }
         } else {
-            return Err(
-                ArchivalError::new(&format!("no objects of type: {}", event.object)).into(),
-            );
-        };
-        let path = self
-            .site
-            .manifest
-            .objects_dir
-            .join(Path::new(&obj_def.name))
-            .join(Path::new(&format!("{}.toml", event.filename)));
-        existing.order = event.order;
+            Err(ArchivalError::new(&format!("no objects of type: {}", obj_type)).into())
+        }
+    }
+
+    #[cfg(test)]
+    pub fn dist_files(&self) -> Vec<String> {
+        let mut files = vec![];
         self.fs_mutex
-            .with_fs(|fs| fs.write_str(&path, existing.to_toml()?))?;
-        Ok(())
+            .with_fs(|fs| {
+                for file in fs.walk_dir(&self.site.manifest.build_dir)? {
+                    files.push(file.display().to_string());
+                }
+                Ok(())
+            })
+            .unwrap();
+        files
     }
 }
 
@@ -150,7 +161,10 @@ impl<F: FileSystemAPI> Archival<F> {
 mod tests {
     use std::error::Error;
 
-    use crate::{file_system::unpack_zip, object::ValuePath};
+    use crate::{
+        file_system::unpack_zip,
+        value_path::{ValuePath, ValuePathComponent},
+    };
 
     use super::*;
 
@@ -159,10 +173,20 @@ mod tests {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let site = site::load(&fs)?;
-        assert_eq!(site.objects.len(), 2);
-        assert!(site.objects.contains_key("section"));
-        assert!(site.objects.contains_key("post"));
+        let archival = Archival::new(fs)?;
+        assert_eq!(archival.site.objects.len(), 2);
+        assert!(archival.site.objects.contains_key("section"));
+        assert!(archival.site.objects.contains_key("post"));
+        archival.build()?;
+        let dist_files = archival.dist_files();
+        assert!(archival
+            .dist_files()
+            .contains(&"dist/index.html".to_owned()));
+        assert!(archival.dist_files().contains(&"dist/404.html".to_owned()));
+        assert!(archival
+            .dist_files()
+            .contains(&"dist/post/a-post.html".to_owned()));
+        assert_eq!(dist_files.len(), 4);
         Ok(())
     }
 
@@ -175,13 +199,13 @@ mod tests {
         archival.send_event(ArchivalEvent::AddObject(AddObjectEvent {
             object: "section".to_string(),
             filename: "my-section".to_string(),
-            order: 2,
+            order: 3,
         }))?;
         // Sending an event should result in an updated fs
         let sections_dir = archival.site.manifest.objects_dir.join(&"section");
         let sections = archival.fs_mutex.with_fs(|fs| fs.read_dir(&sections_dir))?;
         println!("SECTIONS: {:?}", sections);
-        assert_eq!(sections.len(), 2);
+        assert_eq!(sections.len(), 3);
         let section_toml = archival
             .fs_mutex
             .with_fs(|fs| fs.read_to_string(&sections_dir.join(&"my-section.toml")));
@@ -192,7 +216,7 @@ mod tests {
             .unwrap();
         let rendered_sections: Vec<_> = index_html.match_indices("<h2>").collect();
         println!("MATCHED: {:?}", rendered_sections);
-        assert_eq!(rendered_sections.len(), 2);
+        assert_eq!(rendered_sections.len(), 3);
         Ok(())
     }
 
@@ -205,7 +229,7 @@ mod tests {
         archival.send_event(ArchivalEvent::EditField(EditFieldEvent {
             object: "section".to_string(),
             filename: "first".to_string(),
-            path: ValuePath::default().join(object::ValuePathComponent::key("name")),
+            path: ValuePath::default().join(value_path::ValuePathComponent::key("name")),
             value: events::EditFieldValue::String("This is the new title".to_string()),
         }))?;
         // Sending an event should result in an updated fs
@@ -215,6 +239,71 @@ mod tests {
             .unwrap();
         println!("index: {}", index_html);
         assert!(index_html.contains("This is the new title"));
+        Ok(())
+    }
+    #[test]
+    fn edit_object_order() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        archival.build()?;
+        let index_html = archival
+            .fs_mutex
+            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join(&"index.html")))?
+            .unwrap();
+        println!("index: {}", index_html);
+        assert!(index_html.contains("ORDER: Some Content,More Content"));
+        archival.send_event(ArchivalEvent::EditOrder(EditOrderEvent {
+            object: "section".to_string(),
+            filename: "first".to_string(),
+            order: 12,
+        }))?;
+        // Sending an event should result in an updated fs
+        let index_html = archival
+            .fs_mutex
+            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join(&"index.html")))?
+            .unwrap();
+        println!("index: {}", index_html);
+        assert!(index_html.contains("ORDER: More Content,Some Content"));
+        Ok(())
+    }
+
+    #[test]
+    fn add_child() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        archival.build()?;
+        let post_html = archival
+            .fs_mutex
+            .with_fs(|fs| {
+                fs.read_to_string(&archival.site.manifest.build_dir.join(&"post/a-post.html"))
+            })?
+            .unwrap();
+        // println!("post: {}", post_html);
+        let rendered_links: Vec<_> = post_html.match_indices("<a href=").collect();
+        // println!("LINKS: {:?}", rendered_links);
+        assert_eq!(rendered_links.len(), 1);
+        archival
+            .send_event(ArchivalEvent::AddChild(AddChildEvent {
+                object: "post".to_string(),
+                filename: "a-post".to_string(),
+                path: ValuePath::default().join(ValuePathComponent::key("links")),
+            }))
+            .unwrap();
+        // Sending an event should result in an updated fs
+        let post_html = archival
+            .fs_mutex
+            .with_fs(|fs| {
+                fs.read_to_string(&archival.site.manifest.build_dir.join(&"post/a-post.html"))
+            })?
+            .unwrap();
+        println!("post: {}", post_html);
+        let rendered_links: Vec<_> = post_html.match_indices("<a href=").collect();
+        println!("LINKS: {:?}", rendered_links);
+        assert_eq!(rendered_links.len(), 2);
         Ok(())
     }
 }

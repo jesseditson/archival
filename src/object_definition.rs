@@ -13,7 +13,9 @@ pub enum InvalidFieldError {
     UnrecognizedType(String),
     #[error("invalid date {0}")]
     InvalidDate(String),
-    #[error("type mismatch for field {field:?} of type {field_type:?} ({value:?})")]
+    #[error(
+        "type mismatch for field {field:?} - expected type {field_type:?}, got value {value:?}"
+    )]
     TypeMismatch {
         field: String,
         field_type: String,

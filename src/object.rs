@@ -1,3 +1,4 @@
+pub use crate::value_path::ValuePath;
 use crate::{
     field_value::{FieldValue, ObjectValues},
     object_definition::{InvalidFieldError, ObjectDefinition},
@@ -7,78 +8,6 @@ use liquid::{ObjectView, ValueView};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt::Debug};
 use toml::Table;
-
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
-pub enum ValuePathComponent {
-    Key(String),
-    Index(usize),
-}
-
-impl ValuePathComponent {
-    pub fn key(name: &str) -> Self {
-        Self::Key(name.to_string())
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
-pub struct ValuePath {
-    path: Vec<ValuePathComponent>,
-}
-
-impl Default for ValuePath {
-    fn default() -> Self {
-        Self { path: vec![] }
-    }
-}
-
-impl ValuePath {
-    pub fn join(mut self, component: ValuePathComponent) -> Self {
-        self.path.push(component);
-        self
-    }
-    pub fn set_in_object(&self, object: &mut Object, value: FieldValue) {
-        let mut i_path = self.path.iter().map(|v| match v {
-            ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
-            ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
-        });
-        let mut last_val = None;
-        while let Some(cmp) = i_path.next() {
-            if last_val.is_none() {
-                // At the root, we must have a key string
-                if let ValuePathComponent::Key(k) = cmp {
-                    if i_path.len() > 0 {
-                        last_val = object.values.get_mut(&k);
-                        continue;
-                    } else {
-                        object.values.insert(k, value);
-                        break;
-                    }
-                }
-            } else {
-                // more than one level deep. We only allow accessing child
-                // values, not children themselves - so this finds a child at
-                // the index and then finds a key on it.
-                if let Some(FieldValue::Objects(children)) = last_val {
-                    if let ValuePathComponent::Index(index) = cmp {
-                        if let Some(child) = children.get_mut(index) {
-                            if let Some(ValuePathComponent::Key(k)) = i_path.next() {
-                                if i_path.len() > 0 {
-                                    last_val = child.get_mut(&k);
-                                    continue;
-                                } else {
-                                    child.insert(k, value);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            break;
-        }
-    }
-}
 
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]

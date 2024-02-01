@@ -167,7 +167,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(
                         let rendered =
                             layout::post_process(page.render(&liquid_parser, &all_objects)?);
                         let render_name = format!("{}.html", object.filename);
-                        let build_path = build_dir.join(render_name);
+                        let build_path = build_dir.join(&object_def.name).join(render_name);
 
                         fs.with_fs(|f| f.write_str(&build_path, rendered))?;
                     }

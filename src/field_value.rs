@@ -34,6 +34,29 @@ impl DateTime {
             raw: str.to_owned(),
         })
     }
+    pub fn from_toml(toml_datetime: &toml_datetime::Datetime) -> Result<Self, InvalidFieldError> {
+        // Convert to `YYYY-MM-DD HH:MM:SS`
+        let mut date_str = if let Some(date) = toml_datetime.date {
+            date.to_string()
+        } else {
+            let (y, m, d) = model::DateTime::now().to_calendar_date();
+            format!("{:04}-{:02}-{:02}", y, m as u8, d)
+        };
+        if let Some(time) = toml_datetime.time {
+            date_str += &format!(" {}", time.to_string());
+        } else {
+            date_str += "00:00:00";
+        }
+        let liquid_date = if let Some(dt) = model::DateTime::from_str(&date_str) {
+            dt
+        } else {
+            return Err(InvalidFieldError::InvalidDate(toml_datetime.to_string()));
+        };
+        Ok(Self {
+            inner: liquid_date,
+            raw: toml_datetime.to_string(),
+        })
+    }
     pub fn now() -> Self {
         let inner = model::DateTime::now();
         let raw = inner.to_string();
@@ -43,6 +66,10 @@ impl DateTime {
         let inner = model::DateTime::from_ymd(year, month, date);
         let raw = inner.to_string();
         Self { inner, raw }
+    }
+
+    pub fn to_string(&self) -> String {
+        self.raw.to_owned()
     }
 
     #[cfg(test)]
@@ -102,6 +129,18 @@ impl From<EditFieldValue> for FieldValue {
             EditFieldValue::Number(n) => Self::Number(n),
             EditFieldValue::Date(str) => FieldValue::Date(DateTime::from(&str).unwrap()),
             EditFieldValue::Boolean(b) => FieldValue::Boolean(b),
+        }
+    }
+}
+
+impl From<&FieldType> for FieldValue {
+    fn from(f_type: &FieldType) -> Self {
+        match f_type {
+            FieldType::Boolean => Self::Boolean(false),
+            FieldType::Markdown => Self::Markdown("".to_owned()),
+            FieldType::Number => Self::Number(0.0),
+            FieldType::String => Self::String("".to_owned()),
+            FieldType::Date => Self::Date(DateTime::now()),
         }
     }
 }
@@ -262,6 +301,9 @@ impl FieldValue {
                 },
             )?)),
             FieldType::Date => {
+                if let Value::Datetime(val) = value {
+                    return Ok(FieldValue::Date(DateTime::from_toml(val)?));
+                }
                 let mut date_str = (value.as_str().ok_or(InvalidFieldError::TypeMismatch {
                     field: key.to_owned(),
                     field_type: field_type.to_string(),
@@ -325,4 +367,12 @@ impl FieldValue {
             FieldValue::Objects(o) => format!("{:?}", o),
         }
     }
+}
+
+pub fn def_to_values(def: &HashMap<String, FieldType>) -> HashMap<String, FieldValue> {
+    let mut vals = HashMap::new();
+    for (key, f_type) in def {
+        vals.insert(key.to_string(), FieldValue::from(f_type));
+    }
+    vals
 }
