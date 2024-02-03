@@ -43,6 +43,14 @@ impl std::fmt::Display for Site {
     }
 }
 
+fn get_order(obj: &Object) -> String {
+    if obj.order == -1 {
+        obj.filename.to_owned()
+    } else {
+        format!("{:0>10}", obj.order)
+    }
+}
+
 pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
     // Load our manifest (should it exist)
     let manifest = match Manifest::from_file(Path::new(MANIFEST_FILE_NAME), fs) {
@@ -96,7 +104,7 @@ pub fn get_objects<T: FileSystemAPI>(
             Ok(())
         })?;
         // Sort objects by order key
-        objects.sort_by(|a, b| a.order.partial_cmp(&b.order).unwrap());
+        objects.sort_by(|a, b| get_order(a).partial_cmp(&get_order(b)).unwrap());
         all_objects.insert(object_name.clone(), objects);
     }
     Ok(all_objects)

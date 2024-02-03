@@ -14,6 +14,8 @@ pub enum ValuePathError {
     ChildDefNotFound(String, String),
     #[error("Path {0} was not a children type in {1}")]
     NotChildren(String, String),
+    #[error("Path {0} was not found in {1}")]
+    NotFound(String, String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -101,6 +103,40 @@ impl ValuePath {
             break;
         }
         last_val
+    }
+
+    pub fn get_field_definition<'a>(
+        &self,
+        def: &'a ObjectDefinition,
+    ) -> Result<&'a FieldType, ValuePathError> {
+        let mut i_path = self.path.iter();
+        let mut current_def = def;
+        while let Some(cmp) = i_path.next() {
+            match cmp {
+                ValuePathComponent::Key(k) => {
+                    if let Some(field) = current_def.fields.get(k) {
+                        return Ok(field);
+                    } else if let Some(child) = current_def.children.get(k) {
+                        current_def = child;
+                        continue;
+                    } else {
+                        return Err(ValuePathError::NotFound(
+                            self.to_string(),
+                            format!("{:?}", &def),
+                        ));
+                    }
+                }
+                ValuePathComponent::Index(_) => {
+                    // Value Paths point to specific children, so when looking
+                    // them up in definitions, we just skip over indexes.
+                    continue;
+                }
+            }
+        }
+        Err(ValuePathError::NotFound(
+            self.to_string(),
+            format!("{:?}", &def),
+        ))
     }
 
     pub fn get_child_definition<'a>(

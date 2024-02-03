@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "typescript")]
 use typescript_type_def::TypeDef;
 
-use crate::{field_value::FieldValue, value_path::ValuePath};
+use crate::{value_path::ValuePath, FieldValue};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
@@ -13,36 +13,13 @@ pub enum ArchivalEvent {
     AddChild(AddChildEvent),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
-pub enum EditFieldValue {
-    String(String),
-    Markdown(String),
-    Number(f64),
-    Date(String),
-    Boolean(bool),
-}
-
-impl From<&FieldValue> for EditFieldValue {
-    fn from(value: &FieldValue) -> Self {
-        match value {
-            FieldValue::Boolean(b) => EditFieldValue::Boolean(*b),
-            FieldValue::Number(b) => EditFieldValue::Number(*b),
-            FieldValue::Date(b) => EditFieldValue::Date(b.to_string()),
-            FieldValue::String(b) => EditFieldValue::String(b.to_owned()),
-            FieldValue::Markdown(b) => EditFieldValue::Markdown(b.to_owned()),
-            _ => panic!("Cannot create edit field value from {:?}", value),
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct EditFieldEvent {
     pub object: String,
     pub filename: String,
     pub path: ValuePath,
-    pub value: EditFieldValue,
+    pub value: FieldValue,
 }
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]

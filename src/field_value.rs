@@ -1,7 +1,4 @@
-use crate::{
-    events::EditFieldValue,
-    object_definition::{FieldType, InvalidFieldError},
-};
+use crate::object_definition::{FieldType, InvalidFieldError};
 use comrak::{markdown_to_html, ComrakOptions};
 use liquid::{model, ValueView};
 use regex::Regex;
@@ -12,8 +9,16 @@ use std::{
     fmt::{self, Debug},
     ops::Deref,
 };
+use thiserror::Error;
 use time::{format_description, UtcOffset};
 use toml::Value;
+use tracing::debug;
+
+#[derive(Debug, Error)]
+pub enum FieldValueError {
+    #[error("Invalid value for {0}: {1}")]
+    InvalidValue(String, String),
+}
 
 pub type ObjectValues = HashMap<String, FieldValue>;
 
@@ -105,7 +110,35 @@ pub enum FieldValue {
 //     }
 // }
 
+fn err(f_type: &FieldType, value: String) -> FieldValueError {
+    FieldValueError::InvalidValue(f_type.to_string(), value.to_owned())
+}
+
 impl FieldValue {
+    pub fn val_with_type(f_type: &FieldType, value: String) -> Result<Self, Box<dyn Error>> {
+        let t_val = toml::Value::try_from(&value)?;
+        Ok(match f_type {
+            FieldType::Boolean => Self::Boolean(t_val.as_bool().ok_or(err(f_type, value))?),
+            FieldType::Markdown => {
+                Self::Markdown(t_val.as_str().ok_or(err(f_type, value))?.to_string())
+            }
+            FieldType::Number => Self::Number(
+                t_val.as_float().unwrap_or(
+                    t_val
+                        .as_integer()
+                        .ok_or(err(f_type, value))
+                        .map(|v| v as f64)?,
+                ),
+            ),
+            FieldType::String => {
+                Self::String(t_val.as_str().ok_or(err(f_type, value))?.to_string())
+            }
+            FieldType::Date => Self::Date(DateTime::from_toml(
+                t_val.as_datetime().ok_or(err(f_type, value))?,
+            )?),
+        })
+    }
+
     #[cfg(test)]
     pub fn liquid_date(&self) -> &model::DateTime {
         match self {
@@ -118,18 +151,6 @@ impl FieldValue {
 impl fmt::Display for FieldValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_string())
-    }
-}
-
-impl From<EditFieldValue> for FieldValue {
-    fn from(value: EditFieldValue) -> Self {
-        match value {
-            EditFieldValue::String(v) => Self::String(v.to_owned()),
-            EditFieldValue::Markdown(v) => Self::Markdown(v.to_owned()),
-            EditFieldValue::Number(n) => Self::Number(n),
-            EditFieldValue::Date(str) => FieldValue::Date(DateTime::from(&str).unwrap()),
-            EditFieldValue::Boolean(b) => FieldValue::Boolean(b),
-        }
     }
 }
 

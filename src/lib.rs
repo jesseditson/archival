@@ -16,9 +16,11 @@ mod site;
 mod tags;
 mod value_path;
 use events::{AddChildEvent, AddObjectEvent, ArchivalEvent, EditFieldEvent, EditOrderEvent};
+pub use field_value::FieldValue;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
+use tracing::debug;
 #[cfg(feature = "binary")]
 pub mod binary;
 mod constants;
@@ -89,7 +91,7 @@ impl<F: FileSystemAPI> Archival<F> {
 
     fn edit_field(&self, event: EditFieldEvent) -> Result<(), Box<dyn Error>> {
         self.write_object(&event.object, &event.filename, |existing| {
-            event.path.set_in_object(existing, event.value.into());
+            event.path.set_in_object(existing, event.value);
             Ok(existing)
         })?;
         Ok(())
@@ -121,6 +123,7 @@ impl<F: FileSystemAPI> Archival<F> {
         filename: &str,
         obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
     ) -> Result<(), Box<dyn Error>> {
+        debug!("WRITE {}", filename);
         let mut all_objects = self.get_objects()?;
         if let Some(objects) = all_objects.get_mut(obj_type) {
             if let Some(object) = objects.iter_mut().find(|o| o.filename == filename) {
@@ -131,6 +134,7 @@ impl<F: FileSystemAPI> Archival<F> {
                     .objects_dir
                     .join(Path::new(&obj_type))
                     .join(Path::new(&format!("{}.toml", filename)));
+                debug!("O: {}", object.to_toml()?);
                 self.fs_mutex
                     .with_fs(|fs| fs.write_str(&path, object.to_toml()?))?;
                 Ok(())
@@ -158,7 +162,7 @@ impl<F: FileSystemAPI> Archival<F> {
 }
 
 #[cfg(test)]
-mod tests {
+mod lib {
     use std::error::Error;
 
     use crate::{
@@ -230,7 +234,7 @@ mod tests {
             object: "section".to_string(),
             filename: "first".to_string(),
             path: ValuePath::default().join(value_path::ValuePathComponent::key("name")),
-            value: events::EditFieldValue::String("This is the new title".to_string()),
+            value: FieldValue::String("This is the new title".to_string()),
         }))?;
         // Sending an event should result in an updated fs
         let index_html = archival
