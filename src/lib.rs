@@ -19,7 +19,7 @@ use events::{AddChildEvent, AddObjectEvent, ArchivalEvent, EditFieldEvent, EditO
 pub use field_value::FieldValue;
 use std::collections::HashMap;
 use std::error::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::debug;
 #[cfg(feature = "binary")]
 pub mod binary;
@@ -55,6 +55,34 @@ impl<F: FileSystemAPI> Archival<F> {
     }
     pub fn build(&self) -> Result<(), Box<dyn Error>> {
         site::build(&self.site, &self.fs_mutex)
+    }
+    pub fn object_path(&self, obj_type: &str, filename: &str) -> PathBuf {
+        self.site
+            .manifest
+            .objects_dir
+            .join(Path::new(&obj_type))
+            .join(Path::new(&format!("{}.toml", filename)))
+    }
+    pub fn object_file(&self, obj_type: &str, filename: &str) -> Result<String, Box<dyn Error>> {
+        self.object_file_with(obj_type, filename, |o| Ok(o))
+    }
+    fn object_file_with(
+        &self,
+        obj_type: &str,
+        filename: &str,
+        obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
+    ) -> Result<String, Box<dyn Error>> {
+        let mut all_objects = self.get_objects()?;
+        if let Some(objects) = all_objects.get_mut(obj_type) {
+            if let Some(object) = objects.iter_mut().find(|o| o.filename == filename) {
+                let object = obj_cb(object)?;
+                Ok(object.to_toml()?)
+            } else {
+                Err(ArchivalError::new(&format!("filename not found: {}", filename)).into())
+            }
+        } else {
+            Err(ArchivalError::new(&format!("no objects of type: {}", obj_type)).into())
+        }
     }
     pub fn send_event(&self, event: ArchivalEvent) -> Result<(), Box<dyn Error>> {
         match event {
@@ -124,26 +152,9 @@ impl<F: FileSystemAPI> Archival<F> {
         obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
     ) -> Result<(), Box<dyn Error>> {
         debug!("WRITE {}", filename);
-        let mut all_objects = self.get_objects()?;
-        if let Some(objects) = all_objects.get_mut(obj_type) {
-            if let Some(object) = objects.iter_mut().find(|o| o.filename == filename) {
-                let object = obj_cb(object)?;
-                let path = self
-                    .site
-                    .manifest
-                    .objects_dir
-                    .join(Path::new(&obj_type))
-                    .join(Path::new(&format!("{}.toml", filename)));
-                debug!("O: {}", object.to_toml()?);
-                self.fs_mutex
-                    .with_fs(|fs| fs.write_str(&path, object.to_toml()?))?;
-                Ok(())
-            } else {
-                Err(ArchivalError::new(&format!("filename not found: {}", filename)).into())
-            }
-        } else {
-            Err(ArchivalError::new(&format!("no objects of type: {}", obj_type)).into())
-        }
+        let path = self.object_path(obj_type, filename);
+        let contents = self.object_file_with(obj_type, filename, obj_cb)?;
+        self.fs_mutex.with_fs(|fs| fs.write_str(&path, contents))
     }
 
     #[cfg(test)]
