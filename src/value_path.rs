@@ -1,5 +1,5 @@
 use crate::{
-    field_value::{self, FieldValue},
+    field_value::{self, FieldValue, ObjectValues},
     object::Object,
     object_definition::FieldType,
     ObjectDefinition,
@@ -16,6 +16,8 @@ pub enum ValuePathError {
     NotChildren(String, String),
     #[error("Path {0} was not found in {1}")]
     NotFound(String, String),
+    #[error("Cannot remove {0}")]
+    InvalidRemovePath(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -70,6 +72,10 @@ impl ValuePath {
     pub fn join(mut self, component: ValuePathComponent) -> Self {
         self.path.push(component);
         self
+    }
+
+    pub fn pop(&mut self) -> Option<ValuePathComponent> {
+        self.path.pop()
     }
 
     pub fn get_in_object<'a>(&self, object: &'a Object) -> Option<&'a FieldValue> {
@@ -167,6 +173,25 @@ impl ValuePath {
     ) -> Result<(), ValuePathError> {
         let child_def = self.get_child_definition(obj_def)?;
         let new_child = field_value::def_to_values(child_def);
+        self.modify_children(object, |children| {
+            children.push(new_child);
+        })
+    }
+
+    pub fn remove_child<'a>(&mut self, object: &mut Object) -> Result<(), ValuePathError> {
+        if let Some(ValuePathComponent::Index(index)) = self.pop() {
+            self.modify_children(object, |children| {
+                children.remove(index);
+            })
+        } else {
+            Err(ValuePathError::InvalidRemovePath(self.to_string()))
+        }
+    }
+    fn modify_children<'a>(
+        &self,
+        object: &mut Object,
+        modify: impl FnOnce(&mut Vec<ObjectValues>),
+    ) -> Result<(), ValuePathError> {
         let mut i_path = self.path.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
@@ -201,7 +226,7 @@ impl ValuePath {
             ));
         }
         if let Some(FieldValue::Objects(children)) = last_val {
-            children.push(new_child);
+            modify(children);
         } else {
             return Err(ValuePathError::NotChildren(
                 self.to_string(),

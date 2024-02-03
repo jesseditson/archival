@@ -15,7 +15,9 @@ mod reserved_fields;
 mod site;
 mod tags;
 mod value_path;
-use events::{AddChildEvent, AddObjectEvent, ArchivalEvent, EditFieldEvent, EditOrderEvent};
+use events::{
+    AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
+};
 pub use field_value::FieldValue;
 use std::collections::HashMap;
 use std::error::Error;
@@ -108,20 +110,25 @@ impl<F: FileSystemAPI> Archival<F> {
     pub fn send_event(&self, event: ArchivalEvent) -> Result<(), Box<dyn Error>> {
         match event {
             ArchivalEvent::AddObject(event) => self.add_object(event)?,
+            ArchivalEvent::DeleteObject(event) => self.delete_object(event)?,
             ArchivalEvent::EditField(event) => self.edit_field(event)?,
             ArchivalEvent::EditOrder(event) => self.edit_order(event)?,
             ArchivalEvent::AddChild(event) => self.add_child(event)?,
+            ArchivalEvent::RemoveChild(event) => self.remove_child(event)?,
         }
         // After any event, rebuild
         self.build()
     }
     // Internal
     fn add_object(&self, event: AddObjectEvent) -> Result<(), Box<dyn Error>> {
-        let obj_def = if let Some(o) = self.site.objects.get(&event.object) {
-            o
-        } else {
-            return Err(ArchivalError::new(&format!("object not found: {}", event.object)).into());
-        };
+        let obj_def = self
+            .site
+            .objects
+            .get(&event.object)
+            .ok_or(ArchivalError::new(&format!(
+                "object not found: {}",
+                event.object
+            )))?;
         let path = self
             .site
             .manifest
@@ -132,6 +139,24 @@ impl<F: FileSystemAPI> Archival<F> {
             let object = Object::from_def(obj_def, &event.filename, event.order)?;
             fs.write_str(&path, object.to_toml()?)
         })
+    }
+
+    fn delete_object(&self, event: DeleteObjectEvent) -> Result<(), Box<dyn Error>> {
+        let obj_def = self
+            .site
+            .objects
+            .get(&event.object)
+            .ok_or(ArchivalError::new(&format!(
+                "object not found: {}",
+                event.object
+            )))?;
+        let path = self
+            .site
+            .manifest
+            .objects_dir
+            .join(Path::new(&obj_def.name))
+            .join(Path::new(&format!("{}.toml", event.filename)));
+        self.fs_mutex.with_fs(|fs| fs.delete(&path))
     }
 
     pub fn get_objects(&self) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
@@ -153,14 +178,25 @@ impl<F: FileSystemAPI> Archival<F> {
         Ok(())
     }
 
-    fn add_child(&self, event: AddChildEvent) -> Result<(), Box<dyn Error>> {
-        let obj_def = if let Some(o) = self.site.objects.get(&event.object) {
-            o
-        } else {
-            return Err(ArchivalError::new(&format!("object not found: {}", event.object)).into());
-        };
+    fn add_child(&self, event: ChildEvent) -> Result<(), Box<dyn Error>> {
+        let obj_def = self
+            .site
+            .objects
+            .get(&event.object)
+            .ok_or(ArchivalError::new(&format!(
+                "object not found: {}",
+                event.object
+            )))?;
         self.write_object(&event.object, &event.filename, move |existing| {
             event.path.add_child(existing, obj_def)?;
+            Ok(existing)
+        })?;
+        Ok(())
+    }
+    fn remove_child(&self, event: ChildEvent) -> Result<(), Box<dyn Error>> {
+        self.write_object(&event.object, &event.filename, move |existing| {
+            let mut path = event.path;
+            path.remove_child(existing)?;
             Ok(existing)
         })?;
         Ok(())
@@ -277,6 +313,31 @@ mod lib {
         assert!(index_html.contains("This is the new title"));
         Ok(())
     }
+
+    #[test]
+    fn delete_object() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        archival.send_event(ArchivalEvent::DeleteObject(DeleteObjectEvent {
+            object: "section".to_string(),
+            filename: "first".to_string(),
+        }))?;
+        // Sending an event should result in an updated fs
+        let sections_dir = archival.site.manifest.objects_dir.join(&"section");
+        let sections = archival.fs_mutex.with_fs(|fs| fs.read_dir(&sections_dir))?;
+        println!("SECTIONS: {:?}", sections);
+        assert_eq!(sections.len(), 1);
+        let index_html = archival
+            .fs_mutex
+            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join(&"index.html")))?
+            .unwrap();
+        println!("index: {}", index_html);
+        assert!(!index_html.contains("This is the new title"));
+        Ok(())
+    }
+
     #[test]
     fn edit_object_order() -> Result<(), Box<dyn Error>> {
         let mut fs = MemoryFileSystem::default();
@@ -323,7 +384,7 @@ mod lib {
         // println!("LINKS: {:?}", rendered_links);
         assert_eq!(rendered_links.len(), 1);
         archival
-            .send_event(ArchivalEvent::AddChild(AddChildEvent {
+            .send_event(ArchivalEvent::AddChild(ChildEvent {
                 object: "post".to_string(),
                 filename: "a-post".to_string(),
                 path: ValuePath::default().join(ValuePathComponent::key("links")),
@@ -340,6 +401,36 @@ mod lib {
         let rendered_links: Vec<_> = post_html.match_indices("<a href=").collect();
         println!("LINKS: {:?}", rendered_links);
         assert_eq!(rendered_links.len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn remove_child() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        archival.build()?;
+        archival
+            .send_event(ArchivalEvent::RemoveChild(ChildEvent {
+                object: "post".to_string(),
+                filename: "a-post".to_string(),
+                path: ValuePath::default()
+                    .join(ValuePathComponent::key("links"))
+                    .join(ValuePathComponent::Index(0)),
+            }))
+            .unwrap();
+        // Sending an event should result in an updated fs
+        let post_html = archival
+            .fs_mutex
+            .with_fs(|fs| {
+                fs.read_to_string(&archival.site.manifest.build_dir.join(&"post/a-post.html"))
+            })?
+            .unwrap();
+        println!("post: {}", post_html);
+        let rendered_links: Vec<_> = post_html.match_indices("<a href=").collect();
+        println!("LINKS: {:?}", rendered_links);
+        assert_eq!(rendered_links.len(), 0);
         Ok(())
     }
 }

@@ -8,9 +8,11 @@ use crate::{value_path::ValuePath, FieldValue};
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub enum ArchivalEvent {
     AddObject(AddObjectEvent),
+    DeleteObject(DeleteObjectEvent),
     EditField(EditFieldEvent),
     EditOrder(EditOrderEvent),
-    AddChild(AddChildEvent),
+    AddChild(ChildEvent),
+    RemoveChild(ChildEvent),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,6 +33,13 @@ pub struct EditOrderEvent {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
+pub struct DeleteObjectEvent {
+    pub object: String,
+    pub filename: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct AddObjectEvent {
     pub object: String,
     pub filename: String,
@@ -39,7 +48,7 @@ pub struct AddObjectEvent {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
-pub struct AddChildEvent {
+pub struct ChildEvent {
     pub object: String,
     pub filename: String,
     pub path: ValuePath,

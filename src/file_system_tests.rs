@@ -15,6 +15,9 @@ mod tests {
         let content_o = fs.read_to_string(file.as_path())?;
         assert!(content_o.is_some());
         assert_eq!(content, content_o.unwrap());
+        fs.delete(file.as_path())?;
+        let files = fs.read_dir(dir)?;
+        assert_eq!(files.len(), 0);
         Ok(())
     }
 

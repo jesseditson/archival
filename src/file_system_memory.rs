@@ -90,6 +90,14 @@ impl FileSystemAPI for MemoryFileSystem {
             Ok(None)
         }
     }
+    fn delete(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+        if self.is_dir(path)? {
+            return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
+        }
+        self.delete_file(path);
+        self.files_changed(vec![path.to_path_buf()])?;
+        Ok(())
+    }
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
         if self.is_dir(path)? {
             return Err(ArchivalError::new("cannot write to a folder").into());
@@ -215,10 +223,9 @@ impl MemoryFileSystem {
             }
         }
 
-        let mut last_path: PathBuf;
+        let mut last_path: PathBuf = path.to_path_buf();
         for ancestor in path.ancestors() {
             let a_path = ancestor.to_path_buf();
-            last_path = a_path.to_owned();
             if a_path.to_string_lossy() == path.to_string_lossy() {
                 // We've handled the leaf above
                 continue;
@@ -231,9 +238,10 @@ impl MemoryFileSystem {
             } else {
                 // If the file has siblings, just write the updated value and
                 // stop traversing.
-                self.tree.insert(FileGraphNode::key(path), node);
+                self.tree.insert(FileGraphNode::key(&a_path), node);
                 break;
             }
+            last_path = a_path.to_owned();
         }
     }
 
@@ -241,10 +249,10 @@ impl MemoryFileSystem {
         self.fs.remove(&path.to_string_lossy().to_lowercase());
     }
 
-    // fn delete_file(&mut self, path: &Path) {
-    //     self.delete_file_only(path);
-    //     self.remove_from_graph(path);
-    // }
+    fn delete_file(&mut self, path: &Path) {
+        self.delete_file_only(path);
+        self.remove_from_graph(path);
+    }
 
     fn read_file(&self, path: &Path) -> Option<Vec<u8>> {
         self.fs

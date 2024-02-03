@@ -2,12 +2,11 @@ use indexed_db_futures::prelude::*;
 use std::{
     collections::{HashSet, VecDeque},
     error::Error,
-    future::{Future, IntoFuture},
+    future::Future,
     path::{Path, PathBuf},
 };
 use tracing::debug;
 use wasm_bindgen::JsValue;
-use wasm_bindgen_futures::spawn_local;
 use web_sys::{DomException, IdbKeyRange};
 
 use crate::{
@@ -120,6 +119,14 @@ impl FileSystemAPI for WasmFileSystem {
         } else {
             Ok(None)
         }
+    }
+    fn delete(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+        if self.is_dir(path)? {
+            return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
+        }
+        self.delete_file(path);
+        self.files_changed(vec![path.to_path_buf()])?;
+        Ok(())
     }
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
         if self.is_dir(path)? {
@@ -315,10 +322,9 @@ impl WasmFileSystem {
             }
         }
 
-        let mut last_path: PathBuf;
+        let mut last_path: PathBuf = path.to_path_buf();
         for ancestor in path.ancestors() {
             let a_path = ancestor.to_path_buf();
-            last_path = a_path.to_owned();
             if a_path.to_string_lossy() == path.to_string_lossy() {
                 // We've handled the leaf above
                 continue;
@@ -339,6 +345,7 @@ impl WasmFileSystem {
                 store.put_key_val_owned(a_path.to_string_lossy().to_lowercase(), &val)?;
                 break;
             }
+            last_path = a_path.to_owned();
         }
         tx.await.into_result()?;
         Ok(())
@@ -353,12 +360,12 @@ impl WasmFileSystem {
         Ok(())
     }
 
-    // async fn delete_file(&self, path: &Path) -> Result<(), DomException> {
-    //     let db = self.get_db().await?;
-    //     self.delete_file_only(path, &db).await?;
-    //     self.remove_from_graph(path, &db).await?;
-    //     Ok(())
-    // }
+    async fn delete_file(&self, path: &Path) -> Result<(), DomException> {
+        let db = self.get_db().await?;
+        self.delete_file_only(path, &db).await?;
+        self.remove_from_graph(path, &db).await?;
+        Ok(())
+    }
 
     async fn get_file(&self, path: &Path) -> Result<Option<JsValue>, DomException> {
         let db = self.get_db().await?;

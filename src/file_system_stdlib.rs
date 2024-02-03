@@ -6,6 +6,8 @@ use std::{
 };
 use walkdir::WalkDir;
 
+use crate::ArchivalError;
+
 use super::{FileSystemAPI, WatchableFileSystemAPI};
 
 pub struct NativeFileSystem {
@@ -46,6 +48,12 @@ impl FileSystemAPI for NativeFileSystem {
     }
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
         Ok(Some(fs::read_to_string(self.get_path(path))?))
+    }
+    fn delete(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+        if self.is_dir(path)? {
+            return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
+        }
+        Ok(fs::remove_file(self.get_path(path))?)
     }
     fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
         Ok(fs::write(self.get_path(path), contents)?)
