@@ -187,8 +187,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(
     let template_pages: HashSet<&String> = site
         .objects
         .values()
-        .map(|object| &object.template)
-        .flatten()
+        .flat_map(|object| &object.template)
         .collect();
     let partial_re = partial_matcher();
     for file in fs.with_fs(|f| f.walk_dir(pages_dir))? {

@@ -111,7 +111,7 @@ impl Object {
         for (key, val) in &self.values {
             write_obj.insert(key.to_string(), val.into());
         }
-        Ok(toml::to_string_pretty(&write_obj)?)
+        toml::to_string_pretty(&write_obj)
     }
 }
 

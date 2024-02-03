@@ -3,7 +3,11 @@ use crate::{
     reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, error::Error, fmt::Debug};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt::{Debug, Display},
+};
 use thiserror::Error;
 use toml::Table;
 
@@ -62,9 +66,6 @@ impl FieldType {
             Self::Boolean => "boolean",
         }
     }
-    pub fn to_string(&self) -> String {
-        self.to_str().to_string()
-    }
 
     pub fn default_value(&self) -> FieldValue {
         match self {
@@ -74,6 +75,12 @@ impl FieldType {
             Self::Markdown => FieldValue::Markdown("".to_string()),
             Self::Boolean => FieldValue::Boolean(false),
         }
+    }
+}
+
+impl Display for FieldType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_str())
     }
 }
 

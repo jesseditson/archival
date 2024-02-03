@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     error::Error,
-    fmt::{self, Debug},
+    fmt::{self, Debug, Display},
     ops::Deref,
 };
 use thiserror::Error;
@@ -31,8 +31,8 @@ pub struct DateTime {
 
 impl DateTime {
     pub fn from(str: &str) -> Result<Self, InvalidFieldError> {
-        let liquid_date = model::DateTime::from_str(&str)
-            .ok_or(InvalidFieldError::InvalidDate(str.to_owned()))?;
+        let liquid_date =
+            model::DateTime::from_str(str).ok_or(InvalidFieldError::InvalidDate(str.to_owned()))?;
         Ok(Self {
             inner: liquid_date,
             raw: str.to_owned(),
@@ -47,7 +47,7 @@ impl DateTime {
             format!("{:04}-{:02}-{:02}", y, m as u8, d)
         };
         if let Some(time) = toml_datetime.time {
-            date_str += &format!(" {}", time.to_string());
+            date_str += &format!(" {}", time);
         } else {
             date_str += "00:00:00";
         }
@@ -72,10 +72,6 @@ impl DateTime {
         Self { inner, raw }
     }
 
-    pub fn to_string(&self) -> String {
-        self.raw.to_owned()
-    }
-
     #[cfg(test)]
     pub fn as_liquid(&self) -> &model::DateTime {
         &self.inner
@@ -86,6 +82,12 @@ impl Deref for DateTime {
     type Target = model::DateTime;
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl Display for DateTime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.raw.to_owned())
     }
 }
 
@@ -187,7 +189,7 @@ impl From<&FieldValue> for toml::Value {
             }),
             FieldValue::Boolean(v) => Self::Boolean(v.to_owned()),
             FieldValue::Objects(o) => Self::Array(
-                o.into_iter()
+                o.iter()
                     .map(|child| {
                         let mut vals: toml::map::Map<String, Value> = toml::map::Map::new();
                         for (key, cv) in child {

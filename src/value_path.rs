@@ -42,16 +42,10 @@ impl Display for ValuePathComponent {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ValuePath {
     path: Vec<ValuePathComponent>,
-}
-
-impl Default for ValuePath {
-    fn default() -> Self {
-        Self { path: vec![] }
-    }
 }
 
 impl Display for ValuePath {
@@ -115,9 +109,8 @@ impl ValuePath {
         &self,
         def: &'a ObjectDefinition,
     ) -> Result<&'a FieldType, ValuePathError> {
-        let mut i_path = self.path.iter();
         let mut current_def = def;
-        while let Some(cmp) = i_path.next() {
+        for cmp in self.path.iter() {
             match cmp {
                 ValuePathComponent::Key(k) => {
                     if let Some(field) = current_def.fields.get(k) {
@@ -149,9 +142,8 @@ impl ValuePath {
         &self,
         def: &'a ObjectDefinition,
     ) -> Result<&'a HashMap<String, FieldType>, ValuePathError> {
-        let mut i_path = self.path.iter();
         let mut last_val = def;
-        while let Some(cmp) = i_path.next() {
+        for cmp in self.path.iter() {
             if let ValuePathComponent::Key(k) = cmp {
                 if let Some(child_def) = last_val.children.get(k) {
                     last_val = child_def;
@@ -166,10 +158,10 @@ impl ValuePath {
         Ok(&last_val.fields)
     }
 
-    pub fn add_child<'a>(
+    pub fn add_child(
         &self,
         object: &mut Object,
-        obj_def: &'a ObjectDefinition,
+        obj_def: &ObjectDefinition,
     ) -> Result<(), ValuePathError> {
         let child_def = self.get_child_definition(obj_def)?;
         let new_child = field_value::def_to_values(child_def);
@@ -178,7 +170,7 @@ impl ValuePath {
         })
     }
 
-    pub fn remove_child<'a>(&mut self, object: &mut Object) -> Result<(), ValuePathError> {
+    pub fn remove_child(&mut self, object: &mut Object) -> Result<(), ValuePathError> {
         if let Some(ValuePathComponent::Index(index)) = self.pop() {
             self.modify_children(object, |children| {
                 children.remove(index);
@@ -187,7 +179,7 @@ impl ValuePath {
             Err(ValuePathError::InvalidRemovePath(self.to_string()))
         }
     }
-    fn modify_children<'a>(
+    fn modify_children(
         &self,
         object: &mut Object,
         modify: impl FnOnce(&mut Vec<ObjectValues>),
