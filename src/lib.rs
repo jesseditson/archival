@@ -66,6 +66,27 @@ impl<F: FileSystemAPI> Archival<F> {
     pub fn object_file(&self, obj_type: &str, filename: &str) -> Result<String, Box<dyn Error>> {
         self.object_file_with(obj_type, filename, |o| Ok(o))
     }
+    pub fn write_file(
+        &self,
+        obj_type: &str,
+        filename: &str,
+        contents: String,
+    ) -> Result<(), Box<dyn Error>> {
+        // Validate toml
+        let obj_def = self
+            .site
+            .objects
+            .get(obj_type)
+            .ok_or(ArchivalError::new(&format!(
+                "object not found: {}",
+                obj_type
+            )))?;
+        let table: toml::Table = toml::from_str(&contents)?;
+        let _ = Object::from_table(obj_def, filename, &table)?;
+        // Object is valid, write it
+        self.fs_mutex
+            .with_fs(|fs| fs.write_str(&self.object_path(obj_type, filename), contents))
+    }
     fn object_file_with(
         &self,
         obj_type: &str,
