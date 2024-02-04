@@ -274,17 +274,17 @@ mod lib {
             order: 3,
         }))?;
         // Sending an event should result in an updated fs
-        let sections_dir = archival.site.manifest.objects_dir.join(&"section");
+        let sections_dir = archival.site.manifest.objects_dir.join("section");
         let sections = archival.fs_mutex.with_fs(|fs| fs.read_dir(&sections_dir))?;
         println!("SECTIONS: {:?}", sections);
         assert_eq!(sections.len(), 3);
         let section_toml = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&sections_dir.join(&"my-section.toml")));
+            .with_fs(|fs| fs.read_to_string(&sections_dir.join("my-section.toml")));
         assert!(section_toml.is_ok());
         let index_html = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join(&"index.html")))?
+            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         let rendered_sections: Vec<_> = index_html.match_indices("<h2>").collect();
         println!("MATCHED: {:?}", rendered_sections);
@@ -307,7 +307,7 @@ mod lib {
         // Sending an event should result in an updated fs
         let index_html = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join(&"index.html")))?
+            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
         assert!(index_html.contains("This is the new title"));
@@ -325,13 +325,13 @@ mod lib {
             filename: "first".to_string(),
         }))?;
         // Sending an event should result in an updated fs
-        let sections_dir = archival.site.manifest.objects_dir.join(&"section");
+        let sections_dir = archival.site.manifest.objects_dir.join("section");
         let sections = archival.fs_mutex.with_fs(|fs| fs.read_dir(&sections_dir))?;
         println!("SECTIONS: {:?}", sections);
         assert_eq!(sections.len(), 1);
         let index_html = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join(&"index.html")))?
+            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
         assert!(!index_html.contains("This is the new title"));
@@ -347,7 +347,7 @@ mod lib {
         archival.build()?;
         let index_html = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join(&"index.html")))?
+            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
         assert!(index_html.contains("ORDER: Some Content,More Content"));
@@ -359,7 +359,7 @@ mod lib {
         // Sending an event should result in an updated fs
         let index_html = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join(&"index.html")))?
+            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
         assert!(index_html.contains("ORDER: More Content,Some Content"));
@@ -376,7 +376,7 @@ mod lib {
         let post_html = archival
             .fs_mutex
             .with_fs(|fs| {
-                fs.read_to_string(&archival.site.manifest.build_dir.join(&"post/a-post.html"))
+                fs.read_to_string(&archival.site.manifest.build_dir.join("post/a-post.html"))
             })?
             .unwrap();
         // println!("post: {}", post_html);
@@ -394,7 +394,7 @@ mod lib {
         let post_html = archival
             .fs_mutex
             .with_fs(|fs| {
-                fs.read_to_string(&archival.site.manifest.build_dir.join(&"post/a-post.html"))
+                fs.read_to_string(&archival.site.manifest.build_dir.join("post/a-post.html"))
             })?
             .unwrap();
         println!("post: {}", post_html);
@@ -424,7 +424,7 @@ mod lib {
         let post_html = archival
             .fs_mutex
             .with_fs(|fs| {
-                fs.read_to_string(&archival.site.manifest.build_dir.join(&"post/a-post.html"))
+                fs.read_to_string(&archival.site.manifest.build_dir.join("post/a-post.html"))
             })?
             .unwrap();
         println!("post: {}", post_html);

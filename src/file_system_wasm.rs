@@ -71,7 +71,7 @@ impl Error for IdbError {
     }
 }
 
-fn idb_task<T>(r: impl Future<Output = Result<T, DomException>>) -> Result<T, IdbError> {
+fn idb_task<T>(_r: impl Future<Output = Result<T, DomException>>) -> Result<T, IdbError> {
     todo!("figure out if we can run this future inline or use a different approach");
     // map_idb_err(block_on(r))
 }
@@ -124,7 +124,7 @@ impl FileSystemAPI for WasmFileSystem {
         if self.is_dir(path)? {
             return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
         }
-        self.delete_file(path);
+        idb_task(self.delete_file(path))?;
         self.files_changed(vec![path.to_path_buf()])?;
         Ok(())
     }

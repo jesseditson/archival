@@ -15,7 +15,7 @@ mod wasm_tests {
         println!("READ");
         let mut fs = WasmFileSystem::new("archival");
         unpack_zip(downloaded_site.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs);
+        let _archival = Archival::new(fs);
         // TODO
         Ok(())
     }
