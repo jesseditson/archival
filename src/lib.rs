@@ -19,6 +19,7 @@ use events::{
     AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
 };
 pub use field_value::FieldValue;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
@@ -161,6 +162,12 @@ impl<F: FileSystemAPI> Archival<F> {
 
     pub fn get_objects(&self) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
         site::get_objects(&self.site, &self.fs_mutex)
+    }
+    pub fn get_objects_sorted(
+        &self,
+        sort: impl Fn(&Object, &Object) -> Ordering,
+    ) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
+        site::get_objects_sorted(&self.site, &self.fs_mutex, sort)
     }
 
     fn edit_field(&self, event: EditFieldEvent) -> Result<(), Box<dyn Error>> {

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
+    cmp::Ordering,
     collections::{HashMap, HashSet},
     error::Error,
     path::Path,
@@ -76,6 +77,16 @@ pub fn get_objects<T: FileSystemAPI>(
     site: &Site,
     fs: &FileSystemMutex<T>,
 ) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
+    get_objects_sorted(site, fs, |a, b| {
+        get_order(a).partial_cmp(&get_order(b)).unwrap()
+    })
+}
+
+pub fn get_objects_sorted<T: FileSystemAPI>(
+    site: &Site,
+    fs: &FileSystemMutex<T>,
+    sort: impl Fn(&Object, &Object) -> Ordering,
+) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
     let mut all_objects: HashMap<String, Vec<Object>> = HashMap::new();
     let objects_dir = &site.manifest.objects_dir;
     for (object_name, object_def) in site.objects.iter() {
@@ -104,7 +115,7 @@ pub fn get_objects<T: FileSystemAPI>(
             Ok(())
         })?;
         // Sort objects by order key
-        objects.sort_by(|a, b| get_order(a).partial_cmp(&get_order(b)).unwrap());
+        objects.sort_by(&sort);
         all_objects.insert(object_name.clone(), objects);
     }
     Ok(all_objects)
