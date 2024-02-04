@@ -59,6 +59,12 @@ impl<F: FileSystemAPI> Archival<F> {
     pub fn build(&self) -> Result<(), Box<dyn Error>> {
         site::build(&self.site, &self.fs_mutex)
     }
+    pub fn dist_file(&self, path: &Path) -> Option<String> {
+        let path = self.site.manifest.build_dir.join(path);
+        self.fs_mutex
+            .with_fs(|fs| fs.read_to_string(&path))
+            .unwrap_or(None)
+    }
     pub fn object_path(&self, obj_type: &str, filename: &str) -> PathBuf {
         self.site
             .manifest

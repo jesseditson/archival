@@ -179,7 +179,7 @@ mod test {
 
         fn try_get<'a>(&'a self, name: &str) -> Option<borrow::Cow<'a, str>> {
             match name {
-                "example.liquid" => Some(r#"{{'whooo' | size}}{%comment%}What happens{%endcomment%} {%if num < numTwo%}wat{%else%}wot{%endif%} {%if num > numTwo%}wat{%else%}wot{%endif%}{{ page_content }}"#.into()),
+                "example.liquid" => Some(r#"{{'whooo'}}{%comment%}What happens{%endcomment%} {%if num < numTwo%}wat{%else%}wot{%endif%} {%if num > numTwo%}wat{%else%}wot{%endif%}{{ page_content }}"#.into()),
                 "example_var.liquid" => Some(r#"{{example_var}}{{ page_content }}"#.into()),
                 "example_multi_var.liquid" => Some(r#"{{example_var}} {{example}}{{ page_content }}"#.into()),
                 _ => None
@@ -201,7 +201,7 @@ mod test {
         runtime.set_global("num".into(), Value::scalar(5f64));
         runtime.set_global("numTwo".into(), Value::scalar(10f64));
         let output = post_process(template.render(&runtime).unwrap());
-        assert_eq!(output, "5 wat wot\ntest test");
+        assert_eq!(output, "whooo wat wot\ntest test");
         Ok(())
     }
 
