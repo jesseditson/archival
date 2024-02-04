@@ -45,7 +45,7 @@ jobs:
       - name: cargo test build
         run: cargo build --tests --release
       - name: cargo test binary
-        run: cargo test --release --features=binary -- --test-threads=1
+        run: ./test-bin.sh
 
   # msrv-check:
   #   name: Minimum Stable Rust Version Check
