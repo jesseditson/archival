@@ -63,7 +63,7 @@ mod memory {
 #[cfg(feature = "stdlib-fs")]
 mod stdlib {
     use rand::{distributions::Alphanumeric, Rng};
-    use std::{env, fs, path::Path};
+    use std::{fs, path::Path};
 
     use crate::file_system_stdlib;
 
@@ -77,7 +77,6 @@ mod stdlib {
         let dir = format!("./target/file-system-tests/{}", rand_dir);
         fs::create_dir_all(&dir).unwrap();
         println!("DIR: {}", dir);
-        env::set_current_dir(&dir).unwrap();
         file_system_stdlib::NativeFileSystem::new(Path::new(&dir))
     }
     gen_test!(write_and_read_files, get_fs());
