@@ -162,10 +162,6 @@ mod test {
         options
             .blocks
             .register("if".to_string(), stdlib::IfBlock.into());
-        options.filters.register(
-            "size".to_string(),
-            Box::new(crate::filters::SizeFilterParser),
-        );
         options
     }
 
