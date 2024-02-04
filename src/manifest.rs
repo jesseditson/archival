@@ -93,7 +93,7 @@ impl Manifest {
     }
 
     pub fn watched_paths(&self) -> Vec<String> {
-        vec![
+        [
             &self.object_definition_file,
             &self.objects_dir,
             &self.pages_dir,
