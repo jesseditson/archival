@@ -33,6 +33,7 @@ where
             Err(FileSystemMutexError::LockFailed.into())
         }
     }
+    #[cfg(feature = "binary")]
     pub fn clone(&self) -> Self {
         Self(self.0.clone())
     }
