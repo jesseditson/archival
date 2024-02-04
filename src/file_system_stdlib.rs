@@ -72,8 +72,9 @@ impl FileSystemAPI for NativeFileSystem {
         let iterator = WalkDir::new(self.get_path(path))
             .follow_links(true)
             .into_iter()
-            .filter_map(|e| e.ok());
-        Ok(Box::new(iterator.map(|de| de.into_path())))
+            .filter_map(|e| e.ok())
+            .map(|de| de.into_path());
+        Ok(Box::new(iterator))
     }
 }
 

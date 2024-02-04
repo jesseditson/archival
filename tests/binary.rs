@@ -22,6 +22,8 @@ mod binary_tests {
                 .follow_links(true)
                 .into_iter()
                 .filter_map(|e| e.ok())
+                .map(|de| de.into_path().to_string_lossy().to_string())
+                .collect::<Vec<String>>()
         );
         archival::binary::binary(get_args(vec!["build", "tests/fixtures/website"]))?;
         Ok(())
