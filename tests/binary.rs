@@ -2,6 +2,8 @@
 mod binary_tests {
     use std::{error::Error, fs, path::Path};
 
+    use walkdir::WalkDir;
+
     fn get_args(args: Vec<&str>) -> impl Iterator<Item = String> {
         let mut a = vec!["archival".to_string()];
         for arg in args {
@@ -14,6 +16,13 @@ mod binary_tests {
     fn build_basics() -> Result<(), Box<dyn Error>> {
         _ = fs::remove_dir_all("tests/fixtures/website/dist");
         assert!(Path::new("tests/fixtures/website").exists());
+        println!(
+            "files: {:?}",
+            WalkDir::new(Path::new("tests/fixtures/website"))
+                .follow_links(true)
+                .into_iter()
+                .filter_map(|e| e.ok())
+        );
         archival::binary::binary(get_args(vec!["build", "tests/fixtures/website"]))?;
         Ok(())
     }
