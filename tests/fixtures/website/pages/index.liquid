@@ -1,0 +1,10 @@
+{% layout 'theme' title: "Website" %}
+
+<h1 class="page-title">A Website</h1>
+
+<div class="content">
+    {% for section in objects.section %}
+        <h2>{{section.name}}</h2>
+        <div>{{section.body}}</div>
+    {% endfor %}
+</div>

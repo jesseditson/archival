@@ -1,0 +1,20 @@
+{
+  "name": "archival-website",
+  "version": "0.0.1",
+  "devDependencies": {
+    "@chialab/esbuild-plugin-meta-url": "^0.17.5",
+    "esbuild": "^0.17.18",
+    "npm-run-all": "^4.1.5"
+  },
+  "scripts": {
+    "build": "npm run build:site; npm run build:js",
+    "dev": "npm-run-all -l --parallel \"watch:*\"",
+    "watch:js": "./build-js.mjs --dev",
+    "watch:site": "archival run",
+    "build:js": "./build-js.mjs",
+    "build:site": "archival build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "private": true,
+  "dependencies": {}
+}

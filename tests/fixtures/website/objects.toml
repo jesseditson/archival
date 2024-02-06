@@ -1,0 +1,5 @@
+# This file is used to define the objects available on your site.
+
+[section]
+name = "string"
+body = "markdown"

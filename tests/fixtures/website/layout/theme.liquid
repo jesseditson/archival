@@ -1,0 +1,33 @@
+<!doctype html>
+<html class="no-js" lang="">
+
+<head>
+    <meta charset="utf-8">
+    <title>{{ title }}</title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <meta property="og:title" content="{{ title }}">
+    <meta property="og:type" content="website">
+    <!-- <meta property="og:url" content=""> -->
+    <!-- <meta property="og:image" content=""> -->
+
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="apple-touch-icon" href="/icon.png">
+    <!-- Place favicon.ico in the root directory -->
+
+    <link rel="stylesheet" href="/style/normalize.css">
+    <link rel="stylesheet" href="/style/theme.css">
+    {% if style %}
+    <link rel="stylesheet" href="/style/{{style}}.css">
+    {% endif %}
+
+    <meta name="theme-color" content="#fafafa">
+</head>
+
+<body>
+    {{ page_content }}
+    <script src="/scripts/main.js" type="module"></script>
+</body>
+
+</html>
