@@ -4,6 +4,7 @@ use std::{
     error::Error,
     path::{Path, PathBuf},
 };
+use tracing::debug;
 
 use crate::ArchivalError;
 
@@ -171,6 +172,7 @@ impl MemoryFileSystem {
     }
 
     fn write_file(&mut self, path: &Path, data: Vec<u8>) {
+        debug!("write: {}", path.display());
         self.fs.insert(path.to_string_lossy().to_lowercase(), data);
         self.write_to_graph(path);
     }
@@ -255,6 +257,7 @@ impl MemoryFileSystem {
     }
 
     fn read_file(&self, path: &Path) -> Option<Vec<u8>> {
+        debug!("read {}", path.display());
         self.fs
             .get(&path.to_string_lossy().to_lowercase())
             .map(|v| v.to_vec())

@@ -92,7 +92,6 @@ pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<(), B
                     fs.create_dir_all(p)?;
                 }
             }
-            debug!("reading file: {}", outpath.display());
             let mut buffer = vec![];
             file.read_to_end(&mut buffer)?;
             debug!("writing file: {}", outpath.display());

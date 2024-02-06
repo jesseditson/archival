@@ -57,6 +57,7 @@ impl<F: FileSystemAPI> Archival<F> {
         Ok(Self { fs_mutex, site })
     }
     pub fn build(&self) -> Result<(), Box<dyn Error>> {
+        debug!("build {}", self.site);
         site::build(&self.site, &self.fs_mutex)
     }
     pub fn dist_file(&self, path: &Path) -> Option<String> {

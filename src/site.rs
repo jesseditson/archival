@@ -5,6 +5,7 @@ use std::{
     error::Error,
     path::Path,
 };
+use tracing::debug;
 
 use crate::{
     constants::MANIFEST_FILE_NAME,
@@ -149,8 +150,11 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(
         }
 
         // Copy static files
+        debug!("copying files from {}", static_dir.display());
         if fs.exists(static_dir)? {
             fs.copy_contents(static_dir, build_dir)?;
+        } else {
+            debug!("static dir {} does not exist.", static_dir.display());
         }
         Ok(())
     })?;
@@ -187,7 +191,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(
                             layout::post_process(page.render(&liquid_parser, &all_objects)?);
                         let render_name = format!("{}.html", object.filename);
                         let build_path = build_dir.join(&object_def.name).join(render_name);
-
+                        debug!("rendering {}", build_path.display());
                         fs.with_fs(|f| f.write_str(&build_path, rendered))?;
                     }
                 }
@@ -214,7 +218,9 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(
                     let page = Page::new(page_name, template_str);
                     let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
                     let render_name = file_name.replace(".liquid", ".html");
-                    fs.with_fs(|f| f.write_str(&build_dir.join(render_name), rendered))?;
+                    let render_path = build_dir.join(render_name);
+                    debug!("rendering {}", render_path.display());
+                    fs.with_fs(|f| f.write_str(&render_path, rendered))?;
                 } else {
                     println!("template not found: {}", file.display());
                 }
