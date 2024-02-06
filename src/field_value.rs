@@ -114,8 +114,9 @@ impl DateTime {
             inner
         } else {
             let date_str = Self::parse_date_string(self.raw.to_string())
-                .expect(&format!("Invalid date value {}", self.raw));
-            model::DateTime::from_str(&date_str).expect(&format!("Invalid date value {}", self.raw))
+                .unwrap_or_else(|_| format!("Invalid date value {}", self.raw));
+            model::DateTime::from_str(&date_str)
+                .unwrap_or_else(|| panic!("Invalid date value {}", self.raw))
         }
     }
 }
