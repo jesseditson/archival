@@ -152,7 +152,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &FileSystemMutex<T>) -> Result<(
         // Copy static files
         debug!("copying files from {}", static_dir.display());
         if fs.exists(static_dir)? {
-            fs.copy_contents(static_dir, build_dir)?;
+            fs.copy_recursive(static_dir, build_dir)?;
         } else {
             debug!("static dir {} does not exist.", static_dir.display());
         }

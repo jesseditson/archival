@@ -249,11 +249,13 @@ mod lib {
         file_system::unpack_zip,
         value_path::{ValuePath, ValuePathComponent},
     };
+    use tracing_test::traced_test;
 
     use super::*;
 
     #[test]
-    fn load_site_from_zip() -> Result<(), Box<dyn Error>> {
+    #[traced_test]
+    fn load_and_build_site_from_zip() -> Result<(), Box<dyn Error>> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -270,7 +272,12 @@ mod lib {
         assert!(archival
             .dist_files()
             .contains(&"dist/post/a-post.html".to_owned()));
-        assert_eq!(dist_files.len(), 4);
+        assert!(archival
+            .dist_files()
+            .contains(&"dist/img/guy.webp".to_owned()));
+        assert_eq!(dist_files.len(), 18);
+        let guy = archival.dist_file(&Path::new("img/guy.webp"));
+        assert!(guy.is_some());
         Ok(())
     }
 

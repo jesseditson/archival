@@ -16,7 +16,7 @@ pub trait FileSystemAPI {
     fn delete(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>>;
     fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>>;
-    fn copy_contents(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>>;
+    fn copy_recursive(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>>;
     fn walk_dir(&self, path: &Path) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>>;
 }
 
@@ -83,10 +83,8 @@ pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<(), B
         debug!("create {}", outpath.display());
 
         if file.name().ends_with('/') {
-            debug!("directory");
             fs.create_dir_all(&outpath)?;
         } else {
-            debug!("file");
             if let Some(p) = outpath.parent() {
                 if !fs.exists(p)? {
                     debug!("create {}", p.display());

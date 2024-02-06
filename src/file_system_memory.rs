@@ -113,10 +113,26 @@ impl FileSystemAPI for MemoryFileSystem {
     fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
         self.write(path, contents.as_bytes().to_vec())
     }
-    fn copy_contents(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {
-        if let Some(file) = self.read_file(from) {
-            self.write_file(to, file);
-            self.files_changed(vec![to.to_path_buf()])?;
+    fn copy_recursive(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {
+        debug!("copy {} -> {}", from.display(), to.display());
+        let mut changed_paths = vec![];
+        if !self.is_dir(from)? {
+            if let Some(file) = self.read_file(from) {
+                self.write_file(to, file);
+                changed_paths.push(to.to_path_buf());
+            }
+        } else {
+            for child in self.walk_dir(from)? {
+                let dest = to.join(child.strip_prefix(from)?);
+                debug!("copy {} -> {}", child.display(), dest.display());
+                if let Some(file) = self.read_file(&child) {
+                    self.write_file(&dest, file);
+                    changed_paths.push(to.to_path_buf());
+                }
+            }
+        }
+        if !changed_paths.is_empty() {
+            self.files_changed(changed_paths)?;
         }
         Ok(())
     }
