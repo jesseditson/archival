@@ -16,6 +16,7 @@ mod binary_tests {
     fn build_basics() -> Result<(), Box<dyn Error>> {
         _ = fs::remove_dir_all("tests/fixtures/website/dist");
         assert!(Path::new("tests/fixtures/website").exists());
+        println!("current dir: {}", std::env::current_dir()?.display());
         println!(
             "files: {:?}",
             WalkDir::new(Path::new("tests/fixtures/website"))
