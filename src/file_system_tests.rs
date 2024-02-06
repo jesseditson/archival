@@ -18,6 +18,11 @@ mod tests {
         fs.delete(file.as_path())?;
         let files = fs.read_dir(dir)?;
         assert_eq!(files.len(), 0);
+        let file = dir.join("myfile.bin");
+        let content: Vec<u8> = vec![0, 3, 4];
+        fs.write(file.as_path(), content.clone())?;
+        let content_o = fs.read(file.as_path())?;
+        assert_eq!(content_o.unwrap(), content);
         Ok(())
     }
 

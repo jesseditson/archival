@@ -11,6 +11,7 @@ pub trait FileSystemAPI {
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>>;
+    fn read(&self, path: &Path) -> Result<Option<Vec<u8>>, Box<dyn Error>>;
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>>;
     fn delete(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>>;

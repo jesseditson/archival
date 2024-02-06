@@ -84,6 +84,9 @@ impl FileSystemAPI for MemoryFileSystem {
         let files = self.get_files(path);
         Ok(files.iter().map(|pb| pb.to_path_buf()).collect())
     }
+    fn read(&self, path: &Path) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+        Ok(self.read_file(path))
+    }
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
         if let Some(file) = self.read_file(path) {
             Ok(Some(std::str::from_utf8(&file)?.to_string()))

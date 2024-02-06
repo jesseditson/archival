@@ -46,6 +46,9 @@ impl FileSystemAPI for NativeFileSystem {
         }
         Ok(files)
     }
+    fn read(&self, path: &Path) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+        Ok(Some(fs::read(self.get_path(path))?))
+    }
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
         Ok(Some(fs::read_to_string(self.get_path(path))?))
     }
