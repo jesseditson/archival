@@ -7,7 +7,6 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt::{self, Debug, Display},
-    ops::Deref,
 };
 use thiserror::Error;
 use time::{format_description, UtcOffset};
@@ -25,7 +24,7 @@ pub type ObjectValues = HashMap<String, FieldValue>;
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct DateTime {
     #[serde(skip)]
-    inner: model::DateTime,
+    inner: Option<model::DateTime>,
     raw: String,
 }
 
@@ -34,7 +33,7 @@ impl DateTime {
         let liquid_date =
             model::DateTime::from_str(str).ok_or(InvalidFieldError::InvalidDate(str.to_owned()))?;
         Ok(Self {
-            inner: liquid_date,
+            inner: Some(liquid_date),
             raw: str.to_owned(),
         })
     }
@@ -49,7 +48,7 @@ impl DateTime {
         if let Some(time) = toml_datetime.time {
             date_str += &format!(" {}", time);
         } else {
-            date_str += "00:00:00";
+            date_str += " 00:00:00";
         }
         let liquid_date = if let Some(dt) = model::DateTime::from_str(&date_str) {
             dt
@@ -57,31 +56,67 @@ impl DateTime {
             return Err(InvalidFieldError::InvalidDate(toml_datetime.to_string()));
         };
         Ok(Self {
-            inner: liquid_date,
+            inner: Some(liquid_date),
             raw: toml_datetime.to_string(),
         })
     }
     pub fn now() -> Self {
         let inner = model::DateTime::now();
         let raw = inner.to_string();
-        Self { inner, raw }
+        Self {
+            inner: Some(inner),
+            raw,
+        }
     }
     pub fn from_ymd(year: i32, month: u8, date: u8) -> Self {
         let inner = model::DateTime::from_ymd(year, month, date);
         let raw = inner.to_string();
-        Self { inner, raw }
+        Self {
+            inner: Some(inner),
+            raw,
+        }
     }
 
-    #[cfg(test)]
-    pub fn as_liquid(&self) -> &model::DateTime {
-        &self.inner
+    // Supported formats:
+    //
+    // * `default` - `YYYY-MM-DD HH:MM:SS`
+    // * `day_month` - `DD Month YYYY HH:MM:SS`
+    // * `day_mon` - `DD Mon YYYY HH:MM:SS`
+    // * `mdy` -  `MM/DD/YYYY HH:MM:SS`
+    // * `dow_mon` - `Dow Mon DD HH:MM:SS YYYY`
+    //
+    // Offsets in one of the following forms, and are catenated with any of
+    // the above formats.
+    //
+    // * `+HHMM`
+    // * `-HHMM`
+    pub fn parse_date_string(mut date_str: String) -> Result<String, Box<dyn Error>> {
+        // Legacy: support year-first formats:
+        let year_first_fmt =
+            Regex::new(r"(?<year>\d{4})[\/-](?<month>\d{2})[\/-](?<day>\d{2})").unwrap();
+        date_str = year_first_fmt
+            .replace(&date_str, "$month/$day/$year")
+            .to_string();
+        // Also pretty lazy: check if we're missing time and add it
+        if !date_str.contains(':') {
+            date_str = format!("{} 00:00:00", date_str);
+        }
+        // Append local offset if available
+        if let Ok(offset) = UtcOffset::current_local_offset() {
+            let fmt = format_description::parse("[offset_hour sign:mandatory][offset_minute]")?;
+            date_str = format!("{} {}", date_str, offset.format(&fmt)?);
+        }
+        Ok(date_str)
     }
-}
 
-impl Deref for DateTime {
-    type Target = model::DateTime;
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+    pub fn as_datetime(&self) -> model::DateTime {
+        if let Some(inner) = self.inner {
+            inner
+        } else {
+            let date_str = Self::parse_date_string(self.raw.to_string())
+                .expect(&format!("Invalid date value {}", self.raw));
+            model::DateTime::from_str(&date_str).expect(&format!("Invalid date value {}", self.raw))
+        }
     }
 }
 
@@ -141,9 +176,9 @@ impl FieldValue {
     }
 
     #[cfg(test)]
-    pub fn liquid_date(&self) -> &model::DateTime {
+    pub fn liquid_date(&self) -> model::DateTime {
         match self {
-            FieldValue::Date(d) => d.as_liquid(),
+            FieldValue::Date(d) => d.as_datetime(),
             _ => panic!("Not a date"),
         }
     }
@@ -173,20 +208,23 @@ impl From<&FieldValue> for toml::Value {
             FieldValue::String(v) => Self::String(v.to_owned()),
             FieldValue::Markdown(v) => Self::String(v.to_owned()),
             FieldValue::Number(n) => Self::Float(*n),
-            FieldValue::Date(d) => Self::Datetime(toml_datetime::Datetime {
-                date: Some(toml_datetime::Date {
-                    year: d.year() as u16,
-                    month: d.month(),
-                    day: d.day(),
-                }),
-                time: Some(toml_datetime::Time {
-                    hour: d.hour(),
-                    minute: d.minute(),
-                    second: d.second(),
-                    nanosecond: d.nanosecond(),
-                }),
-                offset: None,
-            }),
+            FieldValue::Date(d) => {
+                let d = d.as_datetime();
+                Self::Datetime(toml_datetime::Datetime {
+                    date: Some(toml_datetime::Date {
+                        year: d.year() as u16,
+                        month: d.month(),
+                        day: d.day(),
+                    }),
+                    time: Some(toml_datetime::Time {
+                        hour: d.hour(),
+                        minute: d.minute(),
+                        second: d.second(),
+                        nanosecond: d.nanosecond(),
+                    }),
+                    offset: None,
+                })
+            }
             FieldValue::Boolean(v) => Self::Boolean(v.to_owned()),
             FieldValue::Objects(o) => Self::Array(
                 o.iter()
@@ -247,7 +285,7 @@ impl ValueView for FieldValue {
             FieldValue::String(s) => Some(model::ScalarCow::new(s)),
             FieldValue::Number(n) => Some(model::ScalarCow::new(*n)),
             // TODO: should be able to return a datetime value here
-            FieldValue::Date(d) => Some(model::ScalarCow::new(**d)),
+            FieldValue::Date(d) => Some(model::ScalarCow::new((*d).as_datetime())),
             FieldValue::Markdown(s) => Some(model::ScalarCow::new(markdown_to_html(
                 s,
                 &ComrakOptions::default(),
@@ -332,48 +370,7 @@ impl FieldValue {
                     value: value.to_string(),
                 })?)
                 .to_string();
-                // Legacy: support year-first formats:
-                let year_first_fmt =
-                    Regex::new(r"(?<year>\d{4})[\/-](?<month>\d{2})[\/-](?<day>\d{2})").unwrap();
-                date_str = year_first_fmt
-                    .replace(&date_str, "$month/$day/$year")
-                    .to_string();
-                // Also pretty lazy: check if we're missing time and add it
-                if !date_str.contains(':') {
-                    date_str = format!("{} 00:00:00", date_str);
-                }
-                // Append local offset if available
-                if let Ok(offset) = UtcOffset::current_local_offset() {
-                    let fmt =
-                        format_description::parse("[offset_hour sign:mandatory][offset_minute]")?;
-                    date_str = format!("{} {}", date_str, offset.format(&fmt)?);
-                }
-                // Supported formats:
-                //
-                // * `default` - `YYYY-MM-DD HH:MM:SS`
-                // * `day_month` - `DD Month YYYY HH:MM:SS`
-                // * `day_mon` - `DD Mon YYYY HH:MM:SS`
-                // * `mdy` -  `MM/DD/YYYY HH:MM:SS`
-                // * `dow_mon` - `Dow Mon DD HH:MM:SS YYYY`
-                //
-                // Offsets in one of the following forms, and are catenated with any of
-                // the above formats.
-                //
-                // * `+HHMM`
-                // * `-HHMM`
-                // TODO: use this strategy for more accurate values
-                // let toml_date = m_value.as_datetime().ok_or(InvalidFieldError {
-                //     field: key.to_string(),
-                // })?;
-                // let date = toml_date.date.ok_or(InvalidFieldError {
-                //     field: key.to_string(),
-                // })?;
-                // let offset = toml_date.offset.ok_or(InvalidFieldError {
-                //     field: key.to_string(),
-                // })?;
-                // let liquid_date =
-                //     DateTime::from_ymd(date.year as i32, date.month, date.day)
-                //         .with_offset(offset);
+                date_str = DateTime::parse_date_string(date_str)?;
                 Ok(FieldValue::Date(DateTime::from(&date_str)?))
             }
         }
@@ -384,7 +381,7 @@ impl FieldValue {
             FieldValue::String(s) => s.clone(),
             FieldValue::Markdown(n) => n.clone(),
             FieldValue::Number(n) => n.to_string(),
-            FieldValue::Date(d) => d.to_rfc2822(),
+            FieldValue::Date(d) => d.as_datetime().to_rfc2822(),
             FieldValue::Boolean(b) => b.to_string(),
             FieldValue::Objects(o) => format!("{:?}", o),
         }
