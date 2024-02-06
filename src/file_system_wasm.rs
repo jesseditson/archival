@@ -113,6 +113,9 @@ impl FileSystemAPI for WasmFileSystem {
         let files = idb_task(self.get_files(path))?;
         Ok(files.into_iter().collect())
     }
+    fn read(&self, path: &Path) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+        Ok(idb_task(self.read_file(path))?)
+    }
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
         if let Some(file) = idb_task(self.read_file(path))? {
             Ok(Some(std::str::from_utf8(&file)?.to_string()))
