@@ -1,6 +1,6 @@
 [package]
 name = "archival"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "Unlicense"
 description = "The simplest CMS in existence"
@@ -16,7 +16,14 @@ default = ["binary"]
 typescript = ["dep:typescript-type-def"]
 binary = ["dep:ctrlc", "stdlib-fs"]
 stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
-wasm-fs = ["dep:wasm-bindgen", "dep:web-sys", "dep:wasm-bindgen-futures", "dep:indexed_db_futures", "dep:serde-wasm-bindgen", "time/wasm-bindgen"]
+wasm-fs = [
+    "dep:wasm-bindgen",
+    "dep:web-sys",
+    "dep:wasm-bindgen-futures",
+    "dep:indexed_db_futures",
+    "dep:serde-wasm-bindgen",
+    "time/wasm-bindgen",
+]
 
 [[bin]]
 name = "archival"
