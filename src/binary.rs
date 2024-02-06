@@ -26,7 +26,7 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
             .iter()
             .map(|c| format!("`{}`", c))
             .collect::<Vec<String>>()
-            .join(",")
+            .join(", ")
     );
     let command_arg = if let Some(cmd) = args.next() {
         if VALID_COMMANDS.contains(&&cmd[..]) {
@@ -38,7 +38,6 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
         return Err(ArchivalError::new(&invalid_command_msg).into());
     };
     let path_arg = args.next();
-    println!("PATH: {:?}", path_arg);
     if let Some(path) = path_arg {
         build_dir = build_dir.join(path);
     }
