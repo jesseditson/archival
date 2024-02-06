@@ -276,7 +276,7 @@ mod lib {
             .dist_files()
             .contains(&"dist/img/guy.webp".to_owned()));
         assert_eq!(dist_files.len(), 18);
-        let guy = archival.dist_file(&Path::new("img/guy.webp"));
+        let guy = archival.dist_file(Path::new("img/guy.webp"));
         assert!(guy.is_some());
         Ok(())
     }
