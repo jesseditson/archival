@@ -16,25 +16,10 @@ default = ["binary"]
 typescript = ["dep:typescript-type-def"]
 binary = ["dep:ctrlc", "dep:tokio", "dep:tracing-subscriber", "stdlib-fs"]
 stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
-wasm-fs = [
-    "dep:wasm-bindgen",
-    "dep:web-sys",
-    "dep:wasm-bindgen-futures",
-    "dep:indexed_db_futures",
-    "dep:serde-wasm-bindgen",
-    "time/wasm-bindgen",
-]
 
 [[bin]]
 name = "archival"
 path = "src/main.rs"
-
-## Eventually:
-## https://github.com/rust-lang/cargo/issues/1197
-# [target.'cfg(target_arch = "wasm32")'.features]
-# default = ["wasm-fs"]
-# [target.'cfg(not(target_arch = "wasm32"))'.features]
-# default = ["stdlib-fs", "binary"]
 
 [dependencies]
 # binary
@@ -48,18 +33,7 @@ walkdir = { version = "2.3.3", optional = true }
 fs_extra = { version = "1.3.0", optional = true }
 notify = { version = "6.1.1", optional = true }
 futures = { version = "0.3.30", features = ["executor"] }
-# wasm-fs
-wasm-bindgen = { version = "0.2.87", features = [
-    "serde-serialize",
-], optional = true }
-web-sys = { version = "0.3.66", optional = true, features = [
-    "IdbKeyRange",
-    "DomException",
-] }
-wasm-bindgen-futures = { version = "0.4.37", optional = true }
-serde-wasm-bindgen = { version = "0.4", optional = true }
-indexed_db_futures = { version = "0.3.0", optional = true }
-serde_bytes = "0.11.12"
+# typescript
 typescript-type-def = { version = "0.5.9", optional = true }
 # shared
 liquid = "0.26.1"

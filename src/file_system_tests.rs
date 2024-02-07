@@ -85,15 +85,3 @@ mod stdlib {
     gen_test!(write_and_read_files, get_fs());
     gen_test!(unzip_to_fs, get_fs());
 }
-
-// #[cfg(feature = "wasm-fs")]
-// mod wasm {
-//     use crate::file_system_wasm;
-
-//     use super::tests;
-//     fn get_fs() -> file_system_wasm::WasmFileSystem {
-//         file_system_wasm::WasmFileSystem::new("test")
-//     }
-//     gen_test!(write_and_read_files, get_fs());
-//     gen_test!(unzip_to_fs, get_fs());
-// }

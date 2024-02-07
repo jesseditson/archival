@@ -29,8 +29,6 @@ pub mod binary;
 mod constants;
 #[cfg(feature = "stdlib-fs")]
 mod file_system_stdlib;
-#[cfg(feature = "wasm-fs")]
-mod file_system_wasm;
 use file_system_mutex::FileSystemMutex;
 use object::Object;
 
@@ -41,8 +39,6 @@ pub use archival_error::ArchivalError;
 pub use file_system::unpack_zip;
 pub use file_system::FileSystemAPI;
 pub use file_system_memory::MemoryFileSystem;
-#[cfg(feature = "wasm-fs")]
-pub use file_system_wasm::WasmFileSystem;
 pub use object_definition::ObjectDefinition;
 
 pub struct Archival<F: FileSystemAPI> {
@@ -457,8 +453,7 @@ mod lib {
 }
 
 #[cfg(test)]
-#[cfg(feature = "wasm-fs")]
-mod wasm_tests {
+mod memory_fs_tests {
     use std::error::Error;
 
     use crate::{unpack_zip, Archival, MemoryFileSystem};
