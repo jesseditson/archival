@@ -58,7 +58,7 @@ impl<F: FileSystemAPI> Archival<F> {
     }
     pub fn build(&self) -> Result<(), Box<dyn Error>> {
         debug!("build {}", self.site);
-        site::build(&self.site, &self.fs_mutex)
+        self.fs_mutex.with_fs(|fs| site::build(&self.site, fs))
     }
     pub fn dist_file(&self, path: &Path) -> Option<Vec<u8>> {
         let path = self.site.manifest.build_dir.join(path);
@@ -166,13 +166,15 @@ impl<F: FileSystemAPI> Archival<F> {
     }
 
     pub fn get_objects(&self) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
-        site::get_objects(&self.site, &self.fs_mutex)
+        self.fs_mutex
+            .with_fs(|fs| site::get_objects(&self.site, fs))
     }
     pub fn get_objects_sorted(
         &self,
         sort: impl Fn(&Object, &Object) -> Ordering,
     ) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
-        site::get_objects_sorted(&self.site, &self.fs_mutex, sort)
+        self.fs_mutex
+            .with_fs(|fs| site::get_objects_sorted(&self.site, fs, sort))
     }
 
     fn edit_field(&self, event: EditFieldEvent) -> Result<(), Box<dyn Error>> {

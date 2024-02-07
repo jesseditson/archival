@@ -8,6 +8,7 @@ use std::{
         Arc,
     },
 };
+use tracing::{debug, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use crate::{
@@ -47,43 +48,45 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
         build_dir = build_dir.join(path);
     }
     let fs_a = FileSystemMutex::init(file_system_stdlib::NativeFileSystem::new(&build_dir));
-    let site = fs_a.with_fs(|fs| site::load(fs))?;
-    match &command_arg[..] {
-        "build" => {
-            println!("Building site: {}", &site);
-            site::build(&site, &fs_a)?;
-        }
-        "run" => {
-            println!("Watching site: {}", &site);
-            fs_a.clone().with_fs(|fs| {
+    fs_a.with_fs(|fs| {
+        let site = site::load(fs)?;
+        match &command_arg[..] {
+            "build" => {
+                println!("Building site: {}", &site);
+                site::build(&site, fs)
+            }
+            "run" => {
+                println!("Watching site: {}", &site);
+                let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
                 // This won't leak because the process is ended when we
                 // abort anyway
                 _ = fs.watch(
                     fs.root.to_owned(),
                     site.manifest.watched_paths(),
                     move |paths| {
-                        println!("Changed: {:?}", paths);
-                        site::build(&site, &fs_a.clone()).unwrap_or_else(|err| {
-                            println!("Failed reloading site: {}", err);
-                        })
+                        debug!("Changed: {:?}", paths);
+                        if let Err(e) = tx.send(0) {
+                            warn!("Failed sending change event: {}", e);
+                        }
                     },
                 )?;
-                Ok(())
-            })?;
-            let aborted = Arc::new(AtomicBool::new(false));
-            let aborted_clone = aborted.clone();
-            ctrlc::set_handler(move || {
-                aborted_clone.store(true, Ordering::SeqCst);
-            })?;
-            loop {
-                if aborted.load(Ordering::SeqCst) {
-                    exit(0);
+                let aborted = Arc::new(AtomicBool::new(false));
+                let aborted_clone = aborted.clone();
+                ctrlc::set_handler(move || {
+                    aborted_clone.store(true, Ordering::SeqCst);
+                })?;
+                loop {
+                    if rx.try_recv().is_ok() {
+                        if let Err(e) = site::build(&site, fs) {
+                            warn!("Build failed: {}", e);
+                        }
+                    }
+                    if aborted.load(Ordering::SeqCst) {
+                        exit(0);
+                    }
                 }
             }
+            _ => Err(ArchivalError::new(&invalid_command_msg).into()),
         }
-        _ => {
-            return Err(ArchivalError::new(&invalid_command_msg).into());
-        }
-    }
-    Ok(())
+    })
 }

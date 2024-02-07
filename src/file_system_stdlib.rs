@@ -4,6 +4,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use tracing::debug;
 use walkdir::WalkDir;
 
 use crate::ArchivalError;
@@ -94,6 +95,7 @@ impl WatchableFileSystemAPI for NativeFileSystem {
         let mut watcher = notify::recommended_watcher(
             move |res: Result<notify::Event, notify::Error>| match res {
                 Ok(event) => {
+                    debug!("Change: {:?}", event);
                     let changed_paths: Vec<PathBuf> = event
                         .paths
                         .into_iter()
