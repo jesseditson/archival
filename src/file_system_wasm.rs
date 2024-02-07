@@ -1,6 +1,7 @@
+use crate::{file_system::FileSystemAPI, file_system_memory::FileGraphNode, ArchivalError};
 use indexed_db_futures::prelude::*;
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::HashSet,
     error::Error,
     future::Future,
     path::{Path, PathBuf},
@@ -9,20 +10,12 @@ use tracing::debug;
 use wasm_bindgen::JsValue;
 use web_sys::{DomException, IdbKeyRange};
 
-use crate::{
-    file_system_memory::{FileGraphNode, Watcher},
-    ArchivalError,
-};
-
-use super::{FileSystemAPI, WatchableFileSystemAPI};
-
 static FILES_STORE_NAME: &str = "files";
 static FILE_GRAPH_STORE_NAME: &str = "file_graph";
 
 pub struct WasmFileSystem {
     idb_name: String,
     version: u32,
-    change_handlers: VecDeque<Watcher>,
 }
 
 impl WasmFileSystem {
@@ -31,7 +24,6 @@ impl WasmFileSystem {
         Self {
             version: 1,
             idb_name: idb_name.to_owned(),
-            change_handlers: VecDeque::new(),
         }
     }
 }
@@ -128,7 +120,6 @@ impl FileSystemAPI for WasmFileSystem {
             return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
         }
         idb_task(self.delete_file(path))?;
-        self.files_changed(vec![path.to_path_buf()])?;
         Ok(())
     }
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
@@ -137,7 +128,6 @@ impl FileSystemAPI for WasmFileSystem {
         }
         debug!("write: {}", path.display());
         idb_task(self.write_file(path, &contents))?;
-        self.files_changed(vec![path.to_path_buf()])?;
         Ok(())
     }
     fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
@@ -161,9 +151,6 @@ impl FileSystemAPI for WasmFileSystem {
                 }
             }
         }
-        if !changed_paths.is_empty() {
-            self.files_changed(changed_paths)?;
-        }
         Ok(())
     }
     fn walk_dir(&self, path: &Path) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
@@ -184,49 +171,7 @@ impl FileSystemAPI for WasmFileSystem {
     }
 }
 
-impl WatchableFileSystemAPI for WasmFileSystem {
-    fn watch(
-        &self,
-        _root: PathBuf,
-        _watch_paths: Vec<String>,
-        _changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
-    ) -> Result<Box<dyn FnOnce() + '_>, Box<dyn Error>> {
-        todo!("Not implemented");
-        // let watcher = Watcher {
-        //     root,
-        //     paths: watch_paths,
-        //     changed: Box::new(changed),
-        // };
-        // self.change_handlers.push_back(watcher);
-        // let idx = self.change_handlers.len() - 1;
-        // Ok(Box::new(move || {
-        //     self.change_handlers.remove(idx);
-        // }))
-    }
-}
-
-fn copy_path_arr(arr: &[PathBuf]) -> Vec<PathBuf> {
-    arr.iter().map(|r| r.to_owned()).collect()
-}
-
 impl WasmFileSystem {
-    fn files_changed(&mut self, paths: Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
-        for ch in &self.change_handlers {
-            for watched in &ch.paths {
-                let fp = ch.root.join(watched);
-                let prefix = &fp.to_string_lossy().to_lowercase();
-                let changed_paths: Vec<PathBuf> = copy_path_arr(&paths)
-                    .into_iter()
-                    .filter(|p| p.to_string_lossy().to_lowercase().starts_with(prefix))
-                    .collect();
-                if !changed_paths.is_empty() {
-                    (ch.changed)(changed_paths);
-                }
-            }
-        }
-        Ok(())
-    }
-
     async fn get_db(&self) -> Result<IdbDatabase, DomException> {
         let mut db_req = IdbDatabase::open_u32(&self.idb_name, self.version)?;
         db_req.set_on_upgrade_needed(Some(|evt: &IdbVersionChangeEvent| -> Result<(), JsValue> {

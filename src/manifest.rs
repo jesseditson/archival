@@ -24,6 +24,7 @@ impl fmt::Display for InvalidManifestError {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Manifest {
+    pub site_url: Option<String>,
     pub object_definition_file: PathBuf,
     pub pages_dir: PathBuf,
     pub objects_dir: PathBuf,
@@ -37,6 +38,7 @@ impl fmt::Display for Manifest {
         write!(
             f,
             r#"
+        site_url: {}
         object file: {}
         objects: {}
         pages: {}
@@ -44,6 +46,7 @@ impl fmt::Display for Manifest {
         layout dir: {}
         build dir: {}
         "#,
+            self.site_url.as_ref().unwrap_or(&"none".to_owned()),
             self.object_definition_file.display(),
             self.objects_dir.display(),
             self.pages_dir.display(),
@@ -57,6 +60,7 @@ impl fmt::Display for Manifest {
 impl Manifest {
     pub fn default(root: &Path) -> Manifest {
         Manifest {
+            site_url: None,
             object_definition_file: root.join(OBJECT_DEFINITION_FILE_NAME),
             pages_dir: root.join(PAGES_DIR_NAME),
             objects_dir: root.join(OBJECTS_DIR_NAME),
@@ -81,6 +85,7 @@ impl Manifest {
         };
         for (key, value) in values.into_iter() {
             match key.as_str() {
+                "site_url" => manifest.site_url = value.as_str().map(|s| s.to_string()),
                 "pages" => manifest.pages_dir = path_or_err(value)?,
                 "objects" => manifest.objects_dir = path_or_err(value)?,
                 "build_dir" => manifest.build_dir = path_or_err(value)?,

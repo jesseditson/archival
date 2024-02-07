@@ -1,3 +1,7 @@
+use crate::{
+    file_system::{FileSystemAPI, WatchableFileSystemAPI},
+    ArchivalError,
+};
 use notify::{RecursiveMode, Watcher};
 use std::{
     error::Error,
@@ -6,10 +10,6 @@ use std::{
 };
 use tracing::warn;
 use walkdir::WalkDir;
-
-use crate::ArchivalError;
-
-use super::{FileSystemAPI, WatchableFileSystemAPI};
 
 pub struct NativeFileSystem {
     pub root: PathBuf,

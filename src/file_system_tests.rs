@@ -1,7 +1,7 @@
 mod tests {
     use std::{error::Error, path::Path};
 
-    use crate::{file_system::unpack_zip, FileSystemAPI, WatchableFileSystemAPI};
+    use crate::{file_system::unpack_zip, FileSystemAPI};
 
     pub fn write_and_read_files(mut fs: impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
         let dir = Path::new("some/deep/path");
@@ -26,9 +26,7 @@ mod tests {
         Ok(())
     }
 
-    pub fn unzip_to_fs(
-        mut fs: impl FileSystemAPI + WatchableFileSystemAPI,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn unzip_to_fs(mut fs: impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         println!("files: {:?}", fs.read_dir(Path::new(""))?);

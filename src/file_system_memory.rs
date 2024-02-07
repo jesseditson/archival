@@ -1,16 +1,14 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet},
     error::Error,
     path::{Path, PathBuf},
-    rc::Rc,
 };
 use tracing::debug;
 
 use crate::ArchivalError;
 
-use super::{FileSystemAPI, WatchableFileSystemAPI};
+use super::FileSystemAPI;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileGraphNode {
@@ -45,17 +43,10 @@ impl FileGraphNode {
     }
 }
 
-pub struct Watcher {
-    pub(crate) root: PathBuf,
-    pub(crate) paths: Vec<String>,
-    pub(crate) changed: Box<dyn Fn(Vec<PathBuf>) + Send + Sync>,
-}
-
 #[derive(Default)]
 pub struct MemoryFileSystem {
     fs: HashMap<String, Vec<u8>>,
     tree: HashMap<String, FileGraphNode>,
-    change_handlers: Rc<RefCell<VecDeque<Watcher>>>,
 }
 
 impl FileSystemAPI for MemoryFileSystem {
@@ -101,7 +92,6 @@ impl FileSystemAPI for MemoryFileSystem {
             return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
         }
         self.delete_file(path);
-        self.files_changed(vec![path.to_path_buf()])?;
         Ok(())
     }
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
@@ -109,7 +99,6 @@ impl FileSystemAPI for MemoryFileSystem {
             return Err(ArchivalError::new("cannot write to a folder").into());
         }
         self.write_file(path, contents);
-        self.files_changed(vec![path.to_path_buf()])?;
         Ok(())
     }
     fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
@@ -133,9 +122,6 @@ impl FileSystemAPI for MemoryFileSystem {
                 }
             }
         }
-        if !changed_paths.is_empty() {
-            self.files_changed(changed_paths)?;
-        }
         Ok(())
     }
     fn walk_dir(&self, path: &Path) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
@@ -150,48 +136,7 @@ impl FileSystemAPI for MemoryFileSystem {
     }
 }
 
-impl WatchableFileSystemAPI for MemoryFileSystem {
-    fn watch(
-        &self,
-        root: PathBuf,
-        watch_paths: Vec<String>,
-        changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
-    ) -> Result<Box<dyn FnOnce() + '_>, Box<dyn Error>> {
-        let watcher = Watcher {
-            root,
-            paths: watch_paths,
-            changed: Box::new(changed),
-        };
-        self.change_handlers.borrow_mut().push_back(watcher);
-        let idx = self.change_handlers.borrow().len() - 1;
-        Ok(Box::new(move || {
-            self.change_handlers.borrow_mut().remove(idx);
-        }))
-    }
-}
-
-fn copy_path_arr(arr: &[PathBuf]) -> Vec<PathBuf> {
-    arr.iter().map(|r| r.to_owned()).collect()
-}
-
 impl MemoryFileSystem {
-    fn files_changed(&mut self, paths: Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
-        for ch in &(*self.change_handlers.borrow()) {
-            for watched in &ch.paths {
-                let fp = ch.root.join(watched);
-                let prefix = &fp.to_string_lossy().to_lowercase();
-                let changed_paths: Vec<PathBuf> = copy_path_arr(&paths)
-                    .into_iter()
-                    .filter(|p| p.to_string_lossy().to_lowercase().starts_with(prefix))
-                    .collect();
-                if !changed_paths.is_empty() {
-                    (ch.changed)(changed_paths);
-                }
-            }
-        }
-        Ok(())
-    }
-
     fn write_file(&mut self, path: &Path, data: Vec<u8>) {
         debug!("write: {}", path.display());
         self.fs.insert(path.to_string_lossy().to_lowercase(), data);

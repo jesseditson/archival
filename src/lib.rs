@@ -39,7 +39,7 @@ pub mod events;
 pub mod object;
 pub use archival_error::ArchivalError;
 pub use file_system::unpack_zip;
-pub use file_system::{FileSystemAPI, WatchableFileSystemAPI};
+pub use file_system::FileSystemAPI;
 pub use file_system_memory::MemoryFileSystem;
 #[cfg(feature = "wasm-fs")]
 pub use file_system_wasm::WasmFileSystem;
