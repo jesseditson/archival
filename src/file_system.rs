@@ -22,7 +22,7 @@ pub trait FileSystemAPI {
 
 pub trait WatchableFileSystemAPI {
     fn watch(
-        &mut self,
+        &self,
         root: PathBuf,
         watch_paths: Vec<String>,
         changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,

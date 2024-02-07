@@ -4,7 +4,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tracing::debug;
+use tracing::warn;
 use walkdir::WalkDir;
 
 use crate::ArchivalError;
@@ -84,22 +84,27 @@ impl FileSystemAPI for NativeFileSystem {
 
 impl WatchableFileSystemAPI for NativeFileSystem {
     fn watch(
-        &mut self,
+        &self,
         root: PathBuf,
         watch_paths: Vec<String>,
         changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
     ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>> {
-        let root = self.get_path(&root);
+        let root = fs::canonicalize(self.get_path(&root)).unwrap();
         let watch_path = root.to_owned();
         changed(vec![]);
         let mut watcher = notify::recommended_watcher(
             move |res: Result<notify::Event, notify::Error>| match res {
                 Ok(event) => {
-                    debug!("Change: {:?}", event);
                     let changed_paths: Vec<PathBuf> = event
                         .paths
                         .into_iter()
                         .filter(|p| {
+                            let p = if let Ok(f) = fs::canonicalize(p) {
+                                f
+                            } else {
+                                warn!("Invalid path {}", p.display());
+                                return false;
+                            };
                             if let Ok(rel) = p.strip_prefix(&root) {
                                 for dir in &watch_paths {
                                     let mut dir = dir.to_string();
@@ -112,7 +117,11 @@ impl WatchableFileSystemAPI for NativeFileSystem {
                                 }
                                 false
                             } else {
-                                println!("File changed outside of root: {}", p.display());
+                                warn!(
+                                    "File changed outside of root ({}): {}",
+                                    root.display(),
+                                    p.display()
+                                );
                                 true
                             }
                         })

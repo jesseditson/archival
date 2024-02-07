@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet, VecDeque},
     error::Error,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 use tracing::debug;
 
@@ -53,7 +55,7 @@ pub struct Watcher {
 pub struct MemoryFileSystem {
     fs: HashMap<String, Vec<u8>>,
     tree: HashMap<String, FileGraphNode>,
-    change_handlers: VecDeque<Watcher>,
+    change_handlers: Rc<RefCell<VecDeque<Watcher>>>,
 }
 
 impl FileSystemAPI for MemoryFileSystem {
@@ -150,7 +152,7 @@ impl FileSystemAPI for MemoryFileSystem {
 
 impl WatchableFileSystemAPI for MemoryFileSystem {
     fn watch(
-        &mut self,
+        &self,
         root: PathBuf,
         watch_paths: Vec<String>,
         changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
@@ -160,10 +162,10 @@ impl WatchableFileSystemAPI for MemoryFileSystem {
             paths: watch_paths,
             changed: Box::new(changed),
         };
-        self.change_handlers.push_back(watcher);
-        let idx = self.change_handlers.len() - 1;
+        self.change_handlers.borrow_mut().push_back(watcher);
+        let idx = self.change_handlers.borrow().len() - 1;
         Ok(Box::new(move || {
-            self.change_handlers.remove(idx);
+            self.change_handlers.borrow_mut().remove(idx);
         }))
     }
 }
@@ -174,7 +176,7 @@ fn copy_path_arr(arr: &[PathBuf]) -> Vec<PathBuf> {
 
 impl MemoryFileSystem {
     fn files_changed(&mut self, paths: Vec<PathBuf>) -> Result<(), Box<dyn Error>> {
-        for ch in &self.change_handlers {
+        for ch in &(*self.change_handlers.borrow()) {
             for watched in &ch.paths {
                 let fp = ch.root.join(watched);
                 let prefix = &fp.to_string_lossy().to_lowercase();

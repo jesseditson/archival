@@ -186,21 +186,22 @@ impl FileSystemAPI for WasmFileSystem {
 
 impl WatchableFileSystemAPI for WasmFileSystem {
     fn watch(
-        &mut self,
-        root: PathBuf,
-        watch_paths: Vec<String>,
-        changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
+        &self,
+        _root: PathBuf,
+        _watch_paths: Vec<String>,
+        _changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
     ) -> Result<Box<dyn FnOnce() + '_>, Box<dyn Error>> {
-        let watcher = Watcher {
-            root,
-            paths: watch_paths,
-            changed: Box::new(changed),
-        };
-        self.change_handlers.push_back(watcher);
-        let idx = self.change_handlers.len() - 1;
-        Ok(Box::new(move || {
-            self.change_handlers.remove(idx);
-        }))
+        todo!("Not implemented");
+        // let watcher = Watcher {
+        //     root,
+        //     paths: watch_paths,
+        //     changed: Box::new(changed),
+        // };
+        // self.change_handlers.push_back(watcher);
+        // let idx = self.change_handlers.len() - 1;
+        // Ok(Box::new(move || {
+        //     self.change_handlers.remove(idx);
+        // }))
     }
 }
 
