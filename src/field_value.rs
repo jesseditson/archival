@@ -291,7 +291,8 @@ impl ValueView for FieldValue {
                 s,
                 &ComrakOptions::default(),
             ))),
-            _ => None,
+            FieldValue::Boolean(b) => Some(model::ScalarCow::new(*b)),
+            FieldValue::Objects(_) => None,
         }
     }
     fn as_array(&self) -> Option<&dyn model::ArrayView> {
