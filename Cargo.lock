@@ -34,9 +34,9 @@ dependencies = [
 
 [[package]]
 name = "anstyle"
-version = "1.0.0"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41ed9a86bf92ae6580e0a31281f65a1b1d867c0cc68d5346e2ae128dddfa6a7d"
+checksum = "8901269c6307e8d93993578286ac0edf7f195079ffff5ebdeea6a59ffb7e36bc"
 
 [[package]]
 name = "anstyle-parse"
@@ -97,6 +97,7 @@ dependencies = [
  "toml",
  "toml_datetime",
  "tracing",
+ "tracing-subscriber",
  "tracing-test",
  "typescript-type-def",
  "walkdir",

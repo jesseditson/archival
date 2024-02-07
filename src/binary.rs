@@ -1,4 +1,3 @@
-#[cfg(feature = "binary")]
 use ctrlc;
 use std::{
     env,
@@ -9,6 +8,7 @@ use std::{
         Arc,
     },
 };
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use crate::{
     file_system::WatchableFileSystemAPI, file_system_mutex::FileSystemMutex, file_system_stdlib,
@@ -18,6 +18,11 @@ use crate::{
 static VALID_COMMANDS: &[&str] = &["build", "run"];
 
 pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
+
     let mut build_dir = env::current_dir()?;
     let _bin_name = args.next();
     let invalid_command_msg = format!(
