@@ -229,7 +229,7 @@ impl<F: FileSystemAPI> Archival<F> {
         let mut files = vec![];
         self.fs_mutex
             .with_fs(|fs| {
-                for file in fs.walk_dir(&self.site.manifest.build_dir)? {
+                for file in fs.walk_dir(&self.site.manifest.build_dir, true)? {
                     files.push(file.display().to_string());
                 }
                 Ok(())
@@ -263,16 +263,13 @@ mod lib {
         assert!(archival.site.objects.contains_key("post"));
         archival.build()?;
         let dist_files = archival.dist_files();
+        println!("dist_files: \n{}", dist_files.join("\n"));
+        assert!(archival.dist_files().contains(&"index.html".to_owned()));
+        assert!(archival.dist_files().contains(&"404.html".to_owned()));
         assert!(archival
             .dist_files()
-            .contains(&"dist/index.html".to_owned()));
-        assert!(archival.dist_files().contains(&"dist/404.html".to_owned()));
-        assert!(archival
-            .dist_files()
-            .contains(&"dist/post/a-post.html".to_owned()));
-        assert!(archival
-            .dist_files()
-            .contains(&"dist/img/guy.webp".to_owned()));
+            .contains(&"post/a-post.html".to_owned()));
+        assert!(archival.dist_files().contains(&"img/guy.webp".to_owned()));
         assert_eq!(dist_files.len(), 18);
         let guy = archival.dist_file(Path::new("img/guy.webp"));
         assert!(guy.is_some());
@@ -292,7 +289,10 @@ mod lib {
         }))?;
         // Sending an event should result in an updated fs
         let sections_dir = archival.site.manifest.objects_dir.join("section");
-        let sections = archival.fs_mutex.with_fs(|fs| fs.read_dir(&sections_dir))?;
+        let sections = archival.fs_mutex.with_fs(|fs| {
+            fs.walk_dir(&sections_dir, false)
+                .map(|d| d.collect::<Vec<PathBuf>>())
+        })?;
         println!("SECTIONS: {:?}", sections);
         assert_eq!(sections.len(), 3);
         let section_toml = archival
@@ -343,7 +343,10 @@ mod lib {
         }))?;
         // Sending an event should result in an updated fs
         let sections_dir = archival.site.manifest.objects_dir.join("section");
-        let sections = archival.fs_mutex.with_fs(|fs| fs.read_dir(&sections_dir))?;
+        let sections = archival.fs_mutex.with_fs(|fs| {
+            fs.walk_dir(&sections_dir, false)
+                .map(|d| d.collect::<Vec<PathBuf>>())
+        })?;
         println!("SECTIONS: {:?}", sections);
         assert_eq!(sections.len(), 1);
         let index_html = archival

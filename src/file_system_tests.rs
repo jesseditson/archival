@@ -1,5 +1,8 @@
 mod tests {
-    use std::{error::Error, path::Path};
+    use std::{
+        error::Error,
+        path::{Path, PathBuf},
+    };
 
     use crate::{file_system::unpack_zip, FileSystemAPI};
 
@@ -8,15 +11,17 @@ mod tests {
         let file = dir.join("myfile.txt");
         let content = "foo bar baz".to_string();
         fs.create_dir_all(dir)?;
+        println!("write: {}", file.as_path().display());
         fs.write_str(file.as_path(), content.to_owned())?;
-        let files = fs.read_dir(dir)?;
+        let files = fs.walk_dir(Path::new(""), false)?.collect::<Vec<PathBuf>>();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0], file);
         let content_o = fs.read_to_string(file.as_path())?;
         assert!(content_o.is_some());
         assert_eq!(content, content_o.unwrap());
         fs.delete(file.as_path())?;
-        let files = fs.read_dir(dir)?;
+        let files = fs.walk_dir(Path::new(""), false)?.collect::<Vec<PathBuf>>();
+        println!("files: {:?}", files);
         assert_eq!(files.len(), 0);
         let file = dir.join("myfile.bin");
         let content: Vec<u8> = vec![0, 3, 4];
@@ -29,15 +34,15 @@ mod tests {
     pub fn unzip_to_fs(mut fs: impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        println!("files: {:?}", fs.read_dir(Path::new(""))?);
-        let root_files: Vec<String> = fs
-            .read_dir(Path::new(""))?
-            .iter()
-            .map(|p| p.file_name().unwrap().to_str().unwrap().to_owned())
-            .collect();
         let ob_def = fs.read_to_string(Path::new("objects.toml"))?;
-        assert!(root_files.contains(&"layout".to_string()));
         assert!(ob_def.is_some());
+        let files = fs
+            .walk_dir(Path::new(""), false)?
+            .map(|p| p.to_string_lossy().to_string())
+            .collect::<Vec<String>>();
+        println!("files: {:?}", files);
+        assert!(files.contains(&"layout/theme.liquid".to_string()));
+        assert!(!files.contains(&"layout".to_string()));
         Ok(())
     }
 }

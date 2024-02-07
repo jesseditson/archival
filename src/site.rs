@@ -30,15 +30,15 @@ impl std::fmt::Display for Site {
         write!(
             f,
             r#"
-        === Objects:
-            {}
-        === Manifest: {}
+    === Objects:
+        {}
+    === Manifest: {}
         "#,
             self.objects
                 .keys()
                 .map(|o| o.as_str().to_string())
                 .collect::<Vec<String>>()
-                .join("\n"),
+                .join("\n        "),
             self.manifest
         )
     }
@@ -93,10 +93,10 @@ pub fn get_objects_sorted<T: FileSystemAPI>(
         let mut objects: Vec<Object> = Vec::new();
         let object_files_dir = objects_dir.join(object_name);
         if fs.is_dir(objects_dir)? {
-            for file in fs.read_dir(&object_files_dir)? {
+            for file in fs.walk_dir(&object_files_dir, false)? {
                 if let Some(ext) = file.extension() {
                     if ext == "toml" {
-                        let obj_table = read_toml(&file, fs)?;
+                        let obj_table = read_toml(&object_files_dir.join(&file), fs)?;
                         objects.push(Object::from_table(
                             object_def,
                             &file
@@ -205,7 +205,8 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &mut T) -> Result<(), Box<dyn Er
         .flat_map(|object| &object.template)
         .collect();
     let partial_re = partial_matcher();
-    for file in fs.walk_dir(pages_dir)? {
+    for file in fs.walk_dir(pages_dir, false)? {
+        let file_path = pages_dir.join(&file);
         if let Some(name) = file.file_name() {
             let file_name = name.to_string_lossy();
             if file_name.ends_with(".liquid") {
@@ -214,7 +215,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &mut T) -> Result<(), Box<dyn Er
                     // template pages are not rendered as pages
                     continue;
                 }
-                if let Some(template_str) = fs.read_to_string(file.as_path())? {
+                if let Some(template_str) = fs.read_to_string(&file_path)? {
                     let page = Page::new(page_name, template_str);
                     let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
                     let render_name = file_name.replace(".liquid", ".html");

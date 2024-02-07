@@ -40,13 +40,6 @@ impl FileSystemAPI for NativeFileSystem {
     fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         Ok(fs::create_dir_all(self.get_path(path))?)
     }
-    fn read_dir(&self, path: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn Error>> {
-        let mut files = vec![];
-        for f in (fs::read_dir(self.get_path(path))?).flatten() {
-            files.push(f.path().strip_prefix(&self.root)?.to_path_buf());
-        }
-        Ok(files)
-    }
     fn read(&self, path: &Path) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
         Ok(Some(fs::read(self.get_path(path))?))
     }
@@ -72,12 +65,25 @@ impl FileSystemAPI for NativeFileSystem {
         fs_extra::dir::copy(self.get_path(from), self.get_path(to), &options)?;
         Ok(())
     }
-    fn walk_dir(&self, path: &Path) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
-        let iterator = WalkDir::new(self.get_path(path))
+    fn walk_dir(
+        &self,
+        path: &Path,
+        include_dirs: bool,
+    ) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
+        let root = self.get_path(path);
+        let iterator = WalkDir::new(&root)
             .follow_links(true)
             .into_iter()
+            .filter(move |e| {
+                if include_dirs {
+                    true
+                } else {
+                    e.as_ref().is_ok_and(|de| de.file_type().is_file())
+                }
+            })
             .filter_map(|e| e.ok())
-            .map(|de| de.into_path());
+            .map(move |de| de.into_path().strip_prefix(&root).map(|p| p.to_path_buf()))
+            .filter_map(|d| d.ok());
         Ok(Box::new(iterator))
     }
 }

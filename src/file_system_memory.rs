@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     error::Error,
+    hash::Hash,
+    ops::Deref,
     path::{Path, PathBuf},
 };
 use tracing::debug;
@@ -10,10 +12,50 @@ use crate::ArchivalError;
 
 use super::FileSystemAPI;
 
+#[derive(Debug, Eq, Serialize, Deserialize)]
+pub struct DirEntry {
+    path: PathBuf,
+    is_file: bool,
+}
+
+impl PartialEq for DirEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+    }
+}
+
+impl Hash for DirEntry {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.path.hash(state);
+    }
+}
+
+impl DirEntry {
+    fn new(path: &Path, is_file: bool) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            is_file,
+        }
+    }
+    fn copy(&self) -> Self {
+        Self {
+            path: self.path.to_owned(),
+            is_file: self.is_file,
+        }
+    }
+}
+
+impl Deref for DirEntry {
+    type Target = PathBuf;
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileGraphNode {
     path: PathBuf,
-    pub(crate) files: HashSet<PathBuf>,
+    pub(crate) files: HashSet<DirEntry>,
 }
 
 impl FileGraphNode {
@@ -29,16 +71,17 @@ impl FileGraphNode {
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()
     }
-    pub fn add(&mut self, path: &PathBuf) {
-        self.files.insert(path.to_owned());
+    pub fn add(&mut self, path: &Path, is_file: bool) {
+        self.files.insert(DirEntry::new(path, is_file));
     }
-    pub fn remove(&mut self, path: &PathBuf) {
-        self.files.remove(path);
+    pub fn remove(&mut self, path: &Path) {
+        // Since we impl PartialEq, is_file doesn't matter for comparison
+        self.files.remove(&DirEntry::new(path, false));
     }
     pub fn copy(&self) -> Self {
         Self {
             path: self.path.to_path_buf(),
-            files: self.files.iter().map(|r| r.to_path_buf()).collect(),
+            files: self.files.iter().map(|r| r.copy()).collect(),
         }
     }
 }
@@ -72,10 +115,6 @@ impl FileSystemAPI for MemoryFileSystem {
     fn create_dir_all(&mut self, _path: &Path) -> Result<(), Box<dyn Error>> {
         // dirs are implicitly created when files are created in them
         Ok(())
-    }
-    fn read_dir(&self, path: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn Error>> {
-        let files = self.get_files(path);
-        Ok(files.iter().map(|pb| pb.to_path_buf()).collect())
     }
     fn read(&self, path: &Path) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
         Ok(self.read_file(path))
@@ -113,10 +152,10 @@ impl FileSystemAPI for MemoryFileSystem {
                 changed_paths.push(to.to_path_buf());
             }
         } else {
-            for child in self.walk_dir(from)? {
-                let dest = to.join(child.strip_prefix(from)?);
-                debug!("copy {} -> {}", child.display(), dest.display());
-                if let Some(file) = self.read_file(&child) {
+            for child in self.walk_dir(from, true)? {
+                let dest = to.join(&child);
+                debug!("copy {} -> {}", from.join(&child).display(), dest.display());
+                if let Some(file) = self.read_file(&from.join(child)) {
                     self.write_file(&dest, file);
                     changed_paths.push(to.to_path_buf());
                 }
@@ -124,13 +163,28 @@ impl FileSystemAPI for MemoryFileSystem {
         }
         Ok(())
     }
-    fn walk_dir(&self, path: &Path) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
+    fn walk_dir(
+        &self,
+        path: &Path,
+        include_dirs: bool,
+    ) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
         let path = path.to_path_buf();
         let children = self.all_children(&path);
         let mut all_files: Vec<PathBuf> = vec![];
         for child in children {
             let node = self.get_node(&child);
-            all_files.append(&mut node.files.into_iter().collect());
+            all_files.append(
+                &mut node
+                    .files
+                    .into_iter()
+                    .filter_map(|de| {
+                        if !include_dirs && !de.is_file {
+                            return None;
+                        }
+                        Some(de.path.strip_prefix(&path).unwrap().to_owned())
+                    })
+                    .collect(),
+            );
         }
         Ok(Box::new(all_files.into_iter()))
     }
@@ -140,18 +194,21 @@ impl MemoryFileSystem {
     fn write_file(&mut self, path: &Path, data: Vec<u8>) {
         debug!("write: {}", path.display());
         self.fs.insert(path.to_string_lossy().to_lowercase(), data);
-        self.write_to_graph(path);
+        self.write_to_graph(path, true);
     }
 
-    fn write_to_graph(&mut self, path: &Path) {
+    fn write_to_graph(&mut self, path: &Path, is_file: bool) {
         // Traverse up the path and add each file to its parent's node
         let mut last_path: PathBuf = PathBuf::new();
+        let mut is_file = is_file;
         for ancestor in path.ancestors() {
             let a_path = ancestor.to_path_buf();
             // Skip the actual file path, since only directories are nodes
             if a_path.to_string_lossy() != path.to_string_lossy() {
                 let mut node = self.get_node(&a_path);
-                node.add(&last_path);
+                node.add(&last_path, is_file);
+                // After we add the first file, everything else will be directories.
+                is_file = false;
                 self.tree.insert(FileGraphNode::key(&a_path), node);
             }
             last_path = a_path.to_owned();
@@ -163,10 +220,6 @@ impl MemoryFileSystem {
             Some(n) => n.copy(),
             None => FileGraphNode::new(path),
         }
-    }
-
-    fn get_files(&self, path: &Path) -> HashSet<PathBuf> {
-        self.get_node(path).files
     }
 
     fn all_children(&self, path: &Path) -> Vec<PathBuf> {

@@ -1,13 +1,12 @@
-use regex::Regex;
-use std::{borrow::Cow, collections::HashMap, error::Error, path::Path};
-
+use crate::{tags::layout::LayoutTag, FileSystemAPI};
 use liquid_core::{
     parser,
     partials::{EagerCompiler, PartialSource},
     runtime, Language, Template,
 };
-
-use crate::{tags::layout::LayoutTag, FileSystemAPI};
+use regex::Regex;
+use std::{borrow::Cow, collections::HashMap, error::Error, path::Path};
+use tracing::error;
 
 fn liquid_extension() -> Regex {
     Regex::new(r"\.(liquid|html)").unwrap()
@@ -30,32 +29,31 @@ impl ArchivalPartialSource {
         let mut partials = HashMap::new();
         // Add layouts
         if let Some(path) = layout_path {
-            let files = fs.read_dir(path)?;
             let ext_re = liquid_extension();
-            for file in files {
+            for file in fs.walk_dir(path, false)? {
                 if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
                     if ext_re.is_match(name) {
                         let template_name = ext_re.replace(name, "").to_string();
-                        if let Some(contents) = fs.read_to_string(&file)? {
+                        if let Some(contents) = fs.read_to_string(&path.join(&file))? {
                             partials.insert(template_name, contents);
                         } else {
-                            println!("Failed reading layout {}", file.display());
+                            error!("Failed reading layout {}", file.display());
                         }
                     }
                 }
             }
         }
         if let Some(path) = pages_path {
-            let files = fs.read_dir(path)?;
             let partial_re = partial_matcher();
-            for file in files {
+            for file in fs.walk_dir(path, false)? {
                 if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
+                    println!("NAME: {}", name);
                     if partial_re.is_match(name) {
                         let template_name = partial_re.replace(name, "$1").to_string();
-                        if let Some(contents) = fs.read_to_string(&file)? {
+                        if let Some(contents) = fs.read_to_string(&path.join(&file))? {
                             partials.insert(template_name, contents);
                         } else {
-                            println!("Failed reading partial {}", file.display());
+                            error!("Failed reading partial {}", file.display());
                         }
                     }
                 }

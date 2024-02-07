@@ -10,14 +10,17 @@ pub trait FileSystemAPI {
     fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
-    fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>>;
     fn read(&self, path: &Path) -> Result<Option<Vec<u8>>, Box<dyn Error>>;
     fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>>;
     fn delete(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>>;
     fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>>;
     fn copy_recursive(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>>;
-    fn walk_dir(&self, path: &Path) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>>;
+    fn walk_dir(
+        &self,
+        path: &Path,
+        include_dirs: bool,
+    ) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>>;
 }
 
 pub trait WatchableFileSystemAPI {

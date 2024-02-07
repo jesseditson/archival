@@ -18,13 +18,14 @@ mod binary_tests {
         assert!(Path::new("tests/fixtures/website").exists());
         println!("current dir: {}", std::env::current_dir()?.display());
         println!(
-            "files: {:?}",
+            r"files: \n{}",
             WalkDir::new(Path::new("tests/fixtures/website"))
                 .follow_links(true)
                 .into_iter()
                 .filter_map(|e| e.ok())
                 .map(|de| de.into_path().to_string_lossy().to_string())
                 .collect::<Vec<String>>()
+                .join("\n")
         );
         archival::binary::binary(get_args(vec!["build", "tests/fixtures/website"]))?;
         Ok(())
