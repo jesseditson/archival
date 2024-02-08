@@ -38,7 +38,7 @@ typescript-type-def = { version = "0.5.9", optional = true }
 # shared
 liquid = "0.26.1"
 serde = "1.0.152"
-toml = { version = "0.7.1", features = ["display"] }
+toml = { version = "0.7.1", features = ["display", "preserve_order"] }
 comrak = "0.18"
 liquid-core = "0.26.4"
 liquid-lib = { version = "0.26.4", features = ["shopify", "extra"] }

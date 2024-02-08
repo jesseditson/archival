@@ -159,6 +159,7 @@ mod tests {
                 "tour_dates".to_string(),
                 ObjectDefinition {
                     name: "tour_dates".to_string(),
+                    field_order: vec!["date".to_string(), "ticket_link".to_string()],
                     fields: tour_dates_fields,
                     template: None,
                     children: HashMap::new(),
@@ -168,6 +169,7 @@ mod tests {
                 "numbers".to_string(),
                 ObjectDefinition {
                     name: "numbers".to_string(),
+                    field_order: vec![],
                     fields: numbers_fields,
                     template: None,
                     children: HashMap::new(),
@@ -176,6 +178,11 @@ mod tests {
         ]);
         ObjectDefinition {
             name: "artist".to_string(),
+            field_order: vec![
+                "name".to_string(),
+                "tour_dates".to_string(),
+                "numbers".to_string(),
+            ],
             fields: artist_def_fields,
             template: Some("artist".to_string()),
             children: artist_children,

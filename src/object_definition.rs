@@ -91,49 +91,48 @@ pub type ObjectDefinitions = HashMap<String, ObjectDefinition>;
 pub struct ObjectDefinition {
     pub name: String,
     pub fields: HashMap<String, FieldType>,
+    pub field_order: Vec<String>,
     pub template: Option<String>,
     #[cfg_attr(feature = "typescript", serde(skip))]
     pub children: HashMap<String, ObjectDefinition>,
 }
 
 impl ObjectDefinition {
-    pub fn new(name: &str) -> ObjectDefinition {
-        ObjectDefinition {
+    pub fn new(name: &str, definition: &Table) -> Result<ObjectDefinition, Box<dyn Error>> {
+        let mut obj_def = ObjectDefinition {
             name: name.to_string(),
             fields: HashMap::new(),
+            field_order: vec![],
             template: None,
             children: HashMap::new(),
-        }
-    }
-    fn from_definition(name: &str, definition: &Table) -> Result<ObjectDefinition, Box<dyn Error>> {
-        let mut object = ObjectDefinition::new(name);
+        };
         for (key, m_value) in definition {
+            obj_def.field_order.push(key.to_string());
             if let Some(child_table) = m_value.as_table() {
-                object.children.insert(
-                    key.clone(),
-                    ObjectDefinition::from_definition(key, child_table)?,
-                );
+                obj_def
+                    .children
+                    .insert(key.clone(), ObjectDefinition::new(key, child_table)?);
             } else if let Some(value) = m_value.as_str() {
                 if key == reserved_fields::TEMPLATE {
-                    object.template = Some(value.to_string());
+                    obj_def.template = Some(value.to_string());
                 } else if is_reserved_field(key) {
                     return Err(Box::new(ReservedFieldError {
                         field: reserved_field_from_str(key),
                     }));
                 } else {
-                    object
+                    obj_def
                         .fields
                         .insert(key.clone(), FieldType::from_str(value)?);
                 }
             }
         }
-        Ok(object)
+        Ok(obj_def)
     }
     pub fn from_table(table: &Table) -> Result<HashMap<String, ObjectDefinition>, Box<dyn Error>> {
         let mut objects: HashMap<String, ObjectDefinition> = HashMap::new();
         for (name, m_def) in table.into_iter() {
             if let Some(def) = m_def.as_table() {
-                objects.insert(name.clone(), ObjectDefinition::from_definition(name, def)?);
+                objects.insert(name.clone(), ObjectDefinition::new(name, def)?);
             }
         }
         Ok(objects)
@@ -172,6 +171,11 @@ pub mod tests {
         assert!(defs.get("artist").is_some());
         assert!(defs.get("page").is_some());
         let artist = defs.get("artist").unwrap();
+        assert_eq!(artist.field_order.len(), 4);
+        assert_eq!(artist.field_order[0], "name".to_string());
+        assert_eq!(artist.field_order[1], "template".to_string());
+        assert_eq!(artist.field_order[2], "tour_dates".to_string());
+        assert_eq!(artist.field_order[3], "numbers".to_string());
         assert!(artist.fields.get("name").is_some());
         assert_eq!(artist.fields.get("name").unwrap(), &FieldType::String);
         assert!(
