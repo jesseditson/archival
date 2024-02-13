@@ -77,8 +77,9 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                 if rx.try_recv().is_ok() {
                     let mut fs = file_system_stdlib::NativeFileSystem::new(&build_dir);
                     let site = site::load(&fs)?;
+                    println!("Rebuilding.");
                     if let Err(e) = site::build(&site, &mut fs) {
-                        warn!("Build failed: {}", e);
+                        println!("Build failed: {}", e);
                     }
                 }
                 if aborted.load(Ordering::SeqCst) {

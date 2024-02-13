@@ -4,9 +4,12 @@ use crate::{
     object_definition::{InvalidFieldError, ObjectDefinition},
     reserved_fields::{self, is_reserved_field},
 };
-use liquid::{ObjectView, ValueView};
+use liquid::{
+    model::{KString, ObjectIndex, Value},
+    ObjectView, ValueView,
+};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, error::Error, fmt::Debug};
+use std::{collections::HashMap, error::Error, fmt::Debug, path::Path};
 use toml::Table;
 
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone)]
@@ -15,6 +18,7 @@ pub struct Object {
     pub filename: String,
     pub object_name: String,
     pub order: i32,
+    pub path: String,
     pub values: ObjectValues,
 }
 
@@ -84,6 +88,10 @@ impl Object {
         let object = Object {
             filename: filename.to_owned(),
             object_name: definition.name.clone(),
+            path: Path::new(&definition.name)
+                .join(filename)
+                .to_string_lossy()
+                .to_string(),
             order,
             values,
         };
@@ -100,6 +108,10 @@ impl Object {
         Ok(Self {
             filename: filename.to_owned(),
             object_name: definition.name.clone(),
+            path: Path::new(&definition.name)
+                .join(filename)
+                .to_string_lossy()
+                .to_string(),
             order,
             values,
         })
@@ -112,6 +124,24 @@ impl Object {
             write_obj.insert(key.to_string(), val.into());
         }
         toml::to_string_pretty(&write_obj)
+    }
+
+    pub fn liquid_object(&self) -> Value {
+        let mut values: liquid::model::Object = self
+            .values
+            .iter()
+            .map(|(k, v)| (KString::from_ref(k.as_index()), v.to_value()))
+            .collect();
+        // Reserved/special
+        if values.contains_key("path") {
+            panic!("Objects may not define path key.");
+        }
+        if values.contains_key("order") {
+            panic!("Objects may not define order key.");
+        }
+        values.insert(KString::from_ref("path"), self.path.to_value());
+        values.insert(KString::from_ref("order"), self.order.to_value());
+        Value::Object(values)
     }
 }
 

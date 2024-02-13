@@ -47,7 +47,6 @@ impl ArchivalPartialSource {
             let partial_re = partial_matcher();
             for file in fs.walk_dir(path, false)? {
                 if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
-                    println!("NAME: {}", name);
                     if partial_re.is_match(name) {
                         let template_name = partial_re.replace(name, "$1").to_string();
                         if let Some(contents) = fs.read_to_string(&path.join(&file))? {

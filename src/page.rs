@@ -57,7 +57,7 @@ impl<'a> Page<'a> {
     ) -> Result<String, Box<dyn Error>> {
         let mut objects: HashMap<String, Vec<liquid::model::Value>> = HashMap::new();
         for (name, objs) in objects_map {
-            let values = objs.iter().map(|o| o.values.to_value()).collect();
+            let values = objs.iter().map(|o| o.liquid_object()).collect();
             objects.insert(name.to_string(), values);
         }
         let globals = liquid::object!({ "objects": objects, "page": self.name });
@@ -66,6 +66,7 @@ impl<'a> Page<'a> {
             let mut context = liquid::object!({
               "object_name": template_info.object.object_name,
               "order": template_info.object.order,
+              "path": template_info.object.path,
               template_info.definition.name.to_owned(): template_info.object.values.to_value()
             });
             context.extend(globals);
@@ -118,6 +119,7 @@ mod tests {
         let artist = Object {
             filename: "tormenta-rey".to_string(),
             object_name: "artist".to_string(),
+            path: "artist/tormenta-rey".to_string(),
             order: 1,
             values: artist_values,
         };
@@ -137,6 +139,7 @@ mod tests {
         let page = Object {
             filename: "home".to_string(),
             object_name: "page".to_string(),
+            path: "home".to_string(),
             order: -1,
             values: page_values,
         };
@@ -193,11 +196,13 @@ mod tests {
         "{% assign page = objects.page | where: \"name\", \"home\" | first %}
         name: {{page.name}}
         content: {{page.content}}
+        page_path: {{page.path}}
         {% for link in page.links %}
           link: {{link.url}}
         {% endfor %}
         {% for artist in objects.artist %}
           artist: {{artist.name}}
+          path: {{artist.path}}
         {% endfor %}
         "
     }
@@ -228,6 +233,11 @@ mod tests {
         assert!(
             rendered.contains("artist: Tormenta Rey"),
             "item from objects"
+        );
+        assert!(rendered.contains("page_path: home"), "path is defined");
+        assert!(
+            rendered.contains("path: artist/tormenta-rey"),
+            "items define paths"
         );
         Ok(())
     }

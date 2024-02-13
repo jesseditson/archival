@@ -177,21 +177,33 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &mut T) -> Result<(), Box<dyn Er
     // Render template pages
     for (name, object_def) in site.objects.iter() {
         if let Some(template) = &object_def.template {
-            if let Some(t_objects) = all_objects.get(name) {
-                for object in t_objects {
-                    let template_path = pages_dir.join(format!("{}.liquid", template));
-                    let template_str = fs.read_to_string(&template_path)?;
-                    if let Some(template_str) = template_str {
+            let template_path = pages_dir.join(format!("{}.liquid", template));
+            debug!("rendering template objects for {}", template_path.display());
+            let template_r = fs.read_to_string(&template_path);
+            if template_r.is_err() {
+                println!("failed rendering {}", template_path.display());
+            }
+            let template_str = template_r?;
+            if let Some(template_str) = template_str {
+                if let Some(t_objects) = all_objects.get(name) {
+                    for object in t_objects {
+                        debug!("rendering {}", object.filename);
                         let page = Page::new_with_template(
                             object.filename.clone(),
                             object_def,
                             object,
-                            template_str,
+                            template_str.to_owned(),
                         );
-                        let rendered =
-                            layout::post_process(page.render(&liquid_parser, &all_objects)?);
+                        let render_o = page.render(&liquid_parser, &all_objects);
+                        if render_o.is_err() {
+                            println!("failed rendering {}", object.filename);
+                        }
+                        let rendered = layout::post_process(render_o?);
                         let render_name = format!("{}.html", object.filename);
-                        let build_path = build_dir.join(&object_def.name).join(render_name);
+                        let t_dir = build_dir.join(&object_def.name);
+                        fs.create_dir_all(&t_dir)?;
+                        let build_path = t_dir.join(render_name);
+                        debug!("write {}", build_path.display());
                         fs.write_str(&build_path, rendered)?;
                     }
                 }
@@ -199,6 +211,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &mut T) -> Result<(), Box<dyn Er
         }
     }
     // Render regular pages
+    debug!("building pages in {}", pages_dir.display());
     let template_pages: HashSet<&String> = site
         .objects
         .values()
@@ -215,9 +228,14 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &mut T) -> Result<(), Box<dyn Er
                     // template pages are not rendered as pages
                     continue;
                 }
+                debug!("rendering {}", file_path.display());
                 if let Some(template_str) = fs.read_to_string(&file_path)? {
                     let page = Page::new(page_name, template_str);
-                    let rendered = layout::post_process(page.render(&liquid_parser, &all_objects)?);
+                    let render_o = page.render(&liquid_parser, &all_objects);
+                    if render_o.is_err() {
+                        println!("failed rendering {}", file_path.display());
+                    }
+                    let rendered = layout::post_process(render_o?);
                     let render_name = file_name.replace(".liquid", ".html");
                     let render_path = build_dir.join(render_name);
                     debug!("rendering {}", render_path.display());

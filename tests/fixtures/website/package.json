@@ -10,9 +10,9 @@
     "build": "npm run build:site; npm run build:js",
     "dev": "npm-run-all -l --parallel \"watch:*\"",
     "watch:js": "./build-js.mjs --dev",
-    "watch:site": "archival run",
+    "watch:site": "bin/archival run",
     "build:js": "./build-js.mjs",
-    "build:site": "archival build",
+    "build:site": "bin/archival build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "private": true,
