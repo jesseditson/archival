@@ -210,6 +210,7 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &mut T) -> Result<(), Box<dyn Er
             }
         }
     }
+
     // Render regular pages
     debug!("building pages in {}", pages_dir.display());
     let template_pages: HashSet<&String> = site
@@ -218,9 +219,9 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &mut T) -> Result<(), Box<dyn Er
         .flat_map(|object| &object.template)
         .collect();
     let partial_re = partial_matcher();
-    for file in fs.walk_dir(pages_dir, false)? {
-        let file_path = pages_dir.join(&file);
-        if let Some(name) = file.file_name() {
+    for rel_path in fs.walk_dir(pages_dir, false)? {
+        let file_path = pages_dir.join(&rel_path);
+        if let Some(name) = rel_path.file_name() {
             let file_name = name.to_string_lossy();
             if file_name.ends_with(".liquid") {
                 let page_name = file_name.replace(".liquid", "");
@@ -236,12 +237,17 @@ pub fn build<T: FileSystemAPI>(site: &Site, fs: &mut T) -> Result<(), Box<dyn Er
                         println!("failed rendering {}", file_path.display());
                     }
                     let rendered = layout::post_process(render_o?);
+                    let mut render_dir = build_dir.to_path_buf();
+                    if let Some(parent_dir) = rel_path.parent() {
+                        render_dir = render_dir.join(parent_dir);
+                        fs.create_dir_all(&render_dir)?;
+                    }
                     let render_name = file_name.replace(".liquid", ".html");
-                    let render_path = build_dir.join(render_name);
+                    let render_path = render_dir.join(render_name);
                     debug!("rendering {}", render_path.display());
                     fs.write_str(&render_path, rendered)?;
                 } else {
-                    println!("template not found: {}", file.display());
+                    println!("page not found: {}", file_path.display());
                 }
             }
         }
