@@ -1,8 +1,6 @@
-use std::{collections::HashMap, error::Error, fmt};
-
-use liquid::{self, ValueView};
-
 use crate::{object::Object, object_definition::ObjectDefinition};
+use liquid::{self, ValueView};
+use std::{collections::HashMap, error::Error, fmt};
 
 #[derive(Debug, Clone)]
 struct InvalidPageError;
@@ -70,8 +68,10 @@ impl<'a> Page<'a> {
               template_info.definition.name.to_owned(): template_info.object.values.to_value()
             });
             context.extend(globals);
+            // tracing::debug!("=== context: \n{}", toml::to_string(&context)?);
             return Ok(template.render(&context)?);
         } else if let Some(content) = &self.content {
+            // tracing::debug!("=== context: \n{}", toml::to_string(&globals)?);
             let template = parser.parse(content)?;
             return Ok(template.render(&globals)?);
         }
