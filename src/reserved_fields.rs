@@ -1,9 +1,12 @@
 use std::{error::Error, fmt};
 
-// These fields may not be used as keys in object definitions.
+// These fields may not be used as keys in object definitions or as the names of
+// objects.
 pub const TEMPLATE: &str = "template";
 pub const ORDER: &str = "order";
+pub const OBJECTS: &str = "objects";
 pub const OBJECT_NAME: &str = "object_name";
+pub const PAGE: &str = "page";
 pub const PAGE_NAME: &str = "page_name";
 
 #[derive(Debug, Clone)]
@@ -23,10 +26,15 @@ pub fn reserved_field_from_str(field: &str) -> &'static str {
         ORDER => ORDER,
         PAGE_NAME => PAGE_NAME,
         TEMPLATE => TEMPLATE,
+        OBJECTS => OBJECTS,
+        PAGE => PAGE,
         _ => panic!("{} is not a reserved field", field),
     }
 }
 
 pub fn is_reserved_field(field: &str) -> bool {
-    matches!(field, OBJECT_NAME | ORDER | PAGE_NAME | TEMPLATE)
+    matches!(
+        field,
+        OBJECT_NAME | ORDER | OBJECTS | PAGE_NAME | PAGE | TEMPLATE
+    )
 }

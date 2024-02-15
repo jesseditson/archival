@@ -53,6 +53,7 @@ impl<'a> Page<'a> {
         parser: &liquid::Parser,
         objects_map: &HashMap<String, Vec<Object>>,
     ) -> Result<String, Box<dyn Error>> {
+        tracing::debug!("rendering {}", self.name);
         let mut objects: HashMap<String, Vec<liquid::model::Value>> = HashMap::new();
         for (name, objs) in objects_map {
             let values = objs.iter().map(|o| o.liquid_object()).collect();
@@ -67,11 +68,11 @@ impl<'a> Page<'a> {
               "path": template_info.object.path,
               template_info.definition.name.to_owned(): template_info.object.values.to_value()
             });
+            tracing::debug!("=== context (template): \n{}", toml::to_string(&context)?);
             context.extend(globals);
-            // tracing::debug!("=== context: \n{}", toml::to_string(&context)?);
             return Ok(template.render(&context)?);
         } else if let Some(content) = &self.content {
-            // tracing::debug!("=== context: \n{}", toml::to_string(&globals)?);
+            tracing::debug!("=== context (page): \n{}", toml::to_string(&globals)?);
             let template = parser.parse(content)?;
             return Ok(template.render(&globals)?);
         }
@@ -128,7 +129,7 @@ mod tests {
             "url".to_string(),
             FieldValue::String("foo.com".to_string()),
         )])];
-        let page_values = HashMap::from([
+        let c_values = HashMap::from([
             (
                 "content".to_string(),
                 FieldValue::Markdown("# hello".to_string()),
@@ -137,17 +138,17 @@ mod tests {
             ("links".to_string(), FieldValue::Objects(links_objects)),
         ]);
 
-        let page = Object {
+        let c = Object {
             filename: "home".to_string(),
-            object_name: "page".to_string(),
+            object_name: "c".to_string(),
             path: "home".to_string(),
             order: -1,
-            values: page_values,
+            values: c_values,
         };
 
         HashMap::from([
             ("artist".to_string(), vec![artist]),
-            ("page".to_string(), vec![page]),
+            ("c".to_string(), vec![c]),
         ])
     }
 
@@ -194,11 +195,11 @@ mod tests {
     }
 
     fn page_content() -> &'static str {
-        "{% assign page = objects.page | where: \"name\", \"home\" | first %}
-        name: {{page.name}}
-        content: {{page.content}}
-        page_path: {{page.path}}
-        {% for link in page.links %}
+        "{% assign c = objects.c | where: \"name\", \"home\" | first %}
+        name: {{c.name}}
+        content: {{c.content}}
+        page_path: {{c.path}}
+        {% for link in c.links %}
           link: {{link.url}}
         {% endfor %}
         {% for artist in objects.artist %}

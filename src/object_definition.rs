@@ -33,6 +33,8 @@ pub enum InvalidFieldError {
     },
     #[error("not an array: {key:?} ({value:?})")]
     NotAnArray { key: String, value: String },
+    #[error("cannot define an object with reserved name {0}")]
+    ReservedObjectNameError(String),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -99,6 +101,9 @@ pub struct ObjectDefinition {
 
 impl ObjectDefinition {
     pub fn new(name: &str, definition: &Table) -> Result<ObjectDefinition, Box<dyn Error>> {
+        if is_reserved_field(name) {
+            return Err(InvalidFieldError::ReservedObjectNameError(name.to_string()).into());
+        }
         let mut obj_def = ObjectDefinition {
             name: name.to_string(),
             fields: HashMap::new(),
@@ -144,7 +149,7 @@ pub mod tests {
 
     use super::*;
 
-    pub fn artist_and_page_definition_str() -> &'static str {
+    pub fn artist_and_example_definition_str() -> &'static str {
         "[artist]
         name = \"string\"
         template = \"artist\"
@@ -154,22 +159,22 @@ pub mod tests {
         [artist.numbers]
         number = \"number\"
         
-        [page]
+        [example]
         content = \"markdown\"
-        [page.links]
+        [example.links]
         url = \"string\""
     }
 
     #[test]
     fn parsing() -> Result<(), Box<dyn Error>> {
-        let table: Table = toml::from_str(artist_and_page_definition_str())?;
+        let table: Table = toml::from_str(artist_and_example_definition_str())?;
         let defs = ObjectDefinition::from_table(&table)?;
 
         println!("{:?}", defs);
 
         assert_eq!(defs.keys().len(), 2);
         assert!(defs.get("artist").is_some());
-        assert!(defs.get("page").is_some());
+        assert!(defs.get("example").is_some());
         let artist = defs.get("artist").unwrap();
         assert_eq!(artist.field_order.len(), 4);
         assert_eq!(artist.field_order[0], "name".to_string());
@@ -199,12 +204,12 @@ pub mod tests {
         assert!(numbers.fields.get("number").is_some());
         assert_eq!(numbers.fields.get("number").unwrap(), &FieldType::Number);
 
-        let page = defs.get("page").unwrap();
-        assert!(page.fields.get("content").is_some());
-        assert_eq!(page.fields.get("content").unwrap(), &FieldType::Markdown);
-        assert_eq!(page.children.len(), 1);
-        assert!(page.children.get("links").is_some());
-        let links = page.children.get("links").unwrap();
+        let example = defs.get("example").unwrap();
+        assert!(example.fields.get("content").is_some());
+        assert_eq!(example.fields.get("content").unwrap(), &FieldType::Markdown);
+        assert_eq!(example.children.len(), 1);
+        assert!(example.children.get("links").is_some());
+        let links = example.children.get("links").unwrap();
         assert!(links.fields.get("url").is_some());
         assert_eq!(links.fields.get("url").unwrap(), &FieldType::String);
 

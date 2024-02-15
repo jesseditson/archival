@@ -147,7 +147,9 @@ impl Object {
 
 #[cfg(test)]
 mod tests {
-    use crate::{field_value::DateTime, object_definition::tests::artist_and_page_definition_str};
+    use crate::{
+        field_value::DateTime, object_definition::tests::artist_and_example_definition_str,
+    };
 
     use super::*;
 
@@ -166,7 +168,7 @@ mod tests {
     #[test]
     fn object_parsing() -> Result<(), Box<dyn Error>> {
         let defs =
-            ObjectDefinition::from_table(&toml::from_str(artist_and_page_definition_str())?)?;
+            ObjectDefinition::from_table(&toml::from_str(artist_and_example_definition_str())?)?;
         let table: Table = toml::from_str(artist_object_str())?;
         let obj = Object::from_table(defs.get("artist").unwrap(), "tormenta-rey", &table)?;
         assert_eq!(obj.order, 1);
