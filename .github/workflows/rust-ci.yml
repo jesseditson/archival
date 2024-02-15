@@ -129,7 +129,7 @@ jobs:
 
   release:
     name: Release
-    # if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/')
     strategy:
       matrix:
         include:
@@ -166,10 +166,16 @@ jobs:
           NAME: archival
           TARGET: ${{ matrix.target }}
         run: .github/scripts/package.sh
+      - name: Generate Changelog
+        uses: heinrichreimer/action-github-changelog-generator@v2.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          output: ${{ github.workspace }}-CHANGELOG.txt
       - name: Publish
         uses: softprops/action-gh-release@v1
         with:
-          draft: true
+          draft: false
+          body_path: ${{ github.workspace }}-CHANGELOG.txt
           files: "archival*"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
