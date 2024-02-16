@@ -8,7 +8,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tracing::warn;
+use tracing::{debug, warn};
 use walkdir::WalkDir;
 
 pub struct NativeFileSystem {
@@ -108,7 +108,7 @@ impl WatchableFileSystemAPI for NativeFileSystem {
                             let p = if let Ok(f) = fs::canonicalize(p) {
                                 f
                             } else {
-                                warn!("Invalid path {}", p.display());
+                                debug!("Invalid path {}", p.display());
                                 return false;
                             };
                             if let Ok(rel) = p.strip_prefix(&root) {
