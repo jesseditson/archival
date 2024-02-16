@@ -166,11 +166,6 @@ jobs:
           NAME: archival
           TARGET: ${{ matrix.target }}
         run: .github/scripts/package.sh
-      - name: Generate Changelog
-        uses: heinrichreimer/action-github-changelog-generator@v2.3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          output: ${{ github.workspace }}-CHANGELOG.txt
       - name: Publish
         uses: softprops/action-gh-release@v1
         with:
