@@ -14,7 +14,15 @@ path = "src/lib.rs"
 [features]
 default = ["binary"]
 typescript = ["dep:typescript-type-def"]
-binary = ["dep:ctrlc", "dep:tokio", "dep:tracing-subscriber", "stdlib-fs"]
+binary = [
+    "dep:ctrlc",
+    "dep:tokio",
+    "dep:tracing-subscriber",
+    "dep:tiny_http",
+    "dep:mime_guess",
+    "dep:clap",
+    "stdlib-fs",
+]
 stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
 
 [[bin]]
@@ -27,6 +35,9 @@ ctrlc = { version = "3.4.2", optional = true }
 tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
 ], optional = true }
+tiny_http = { version = "0.12.0", optional = true }
+mime_guess = { version = "2", optional = true }
+clap = { version = "4.5.1", optional = true, features = ["cargo"] }
 tokio = { version = "1.36.0", features = ["sync"], optional = true }
 # stdlib-fs
 walkdir = { version = "2.3.3", optional = true }

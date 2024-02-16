@@ -30,6 +30,8 @@ pub mod binary;
 mod constants;
 #[cfg(feature = "stdlib-fs")]
 mod file_system_stdlib;
+#[cfg(feature = "binary")]
+mod server;
 use file_system_mutex::FileSystemMutex;
 use object::Object;
 

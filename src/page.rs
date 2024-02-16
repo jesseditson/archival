@@ -62,11 +62,17 @@ impl<'a> Page<'a> {
         let globals = liquid::object!({ "objects": objects, "page": self.name });
         if let Some(template_info) = &self.template {
             let template = parser.parse(&template_info.content)?;
-            let mut context = liquid::object!({
-              "object_name": template_info.object.object_name,
+            let mut object_vals = match template_info.object.values.to_value() {
+                liquid::model::Value::Object(v) => Ok(v),
+                _ => Err(InvalidPageError),
+            }?;
+            object_vals.extend(liquid::object!({
+                "object_name": template_info.object.object_name,
               "order": template_info.object.order,
               "path": template_info.object.path,
-              template_info.definition.name.to_owned(): template_info.object.values.to_value()
+            }));
+            let mut context = liquid::object!({
+              template_info.definition.name.to_owned(): object_vals
             });
             tracing::debug!("=== context (template): \n{}", toml::to_string(&context)?);
             context.extend(globals);
