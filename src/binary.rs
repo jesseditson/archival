@@ -16,7 +16,7 @@ use std::{
 use tracing::{info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-pub fn binary(mut _args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
+pub fn binary(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(EnvFilter::from_default_env())
@@ -47,7 +47,7 @@ pub fn binary(mut _args: impl Iterator<Item = String>) -> Result<(), Box<dyn Err
                         .value_parser(value_parser!(PathBuf)),
                 ),
         );
-    let matches = cmd.get_matches();
+    let matches = cmd.get_matches_from(args);
     if let Some(build) = matches.subcommand_matches("build") {
         if let Some(path) = build.get_one::<PathBuf>("path") {
             build_dir = fs::canonicalize(build_dir.join(path))?;
