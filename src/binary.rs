@@ -3,13 +3,14 @@ use ctrlc;
 use std::{
     env,
     error::Error,
+    fs,
     process::exit,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
 };
-use tracing::{debug, warn};
+use tracing::{info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 static VALID_COMMANDS: &[&str] = &["build", "run"];
@@ -41,7 +42,7 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
     };
     let path_arg = args.next();
     if let Some(path) = path_arg {
-        build_dir = build_dir.join(path);
+        build_dir = fs::canonicalize(build_dir.join(path))?;
     }
     match &command_arg[..] {
         "build" => {
@@ -61,7 +62,7 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                 fs.root.to_owned(),
                 site.manifest.watched_paths(),
                 move |paths| {
-                    debug!("Changed: {:?}", paths);
+                    info!("changed: {:?}", paths);
                     for path in paths {
                         if let Err(e) = tx.send(path) {
                             warn!("Failed sending change event: {}", e);
@@ -73,6 +74,7 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
             let aborted_clone = aborted.clone();
             ctrlc::set_handler(move || {
                 aborted_clone.store(true, Ordering::SeqCst);
+                exit(0);
             })?;
             loop {
                 if let Ok(path) = rx.try_recv() {
@@ -80,10 +82,12 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                         // Flush events
                     }
                     let mut fs = file_system_stdlib::NativeFileSystem::new(&build_dir);
-                    println!("Rebuilding.");
-                    site.invalidate_file(&path);
+                    println!("Rebuilding");
+                    site.invalidate_file(path.strip_prefix(&build_dir)?);
                     if let Err(e) = site.build(&mut fs) {
                         println!("Build failed: {}", e);
+                    } else {
+                        println!("Rebuilt.");
                     }
                 }
                 if aborted.load(Ordering::SeqCst) {

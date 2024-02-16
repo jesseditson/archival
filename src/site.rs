@@ -6,7 +6,7 @@ use std::{
     error::Error,
     path::{Path, PathBuf},
 };
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::{
     constants::MANIFEST_FILE_NAME,
@@ -73,7 +73,7 @@ impl Site {
         }
 
         // Load our object definitions
-        debug!("loading definition {}", odf.display());
+        info!("loading definition {}", odf.display());
         let objects_table = read_toml(odf, fs)?;
         let objects = ObjectDefinition::from_table(&objects_table)?;
         Ok(Site {
@@ -91,8 +91,7 @@ impl Site {
     }
 
     pub fn invalidate_file(&self, file: &Path) {
-        println!("reload {}", file.display());
-        debug!("invalidate {}", file.display());
+        info!("invalidate {}", file.display());
         self.obj_cache.borrow_mut().remove(file);
     }
 
@@ -109,11 +108,12 @@ impl Site {
             if fs.is_dir(objects_dir)? {
                 for file in fs.walk_dir(&object_files_dir, false)? {
                     if let Some(ext) = file.extension() {
-                        let to_cache = if let Some(o) = self.obj_cache.borrow().get(&file) {
+                        let path = object_files_dir.join(&file);
+                        let to_cache = if let Some(o) = self.obj_cache.borrow().get(&path) {
                             objects.push(o.clone());
                             None
                         } else if ext == "toml" {
-                            debug!("parsing {} {}", object_name, file.display());
+                            info!("parsing {}", path.display());
                             let obj_table = read_toml(&object_files_dir.join(&file), fs)?;
                             let o = Object::from_table(
                                 object_def,
@@ -126,8 +126,7 @@ impl Site {
                             None
                         };
                         if let Some(o) = to_cache {
-                            let path = object_files_dir.join(object_name).join(file);
-                            debug!("cache {}", path.display());
+                            info!("cache {}", path.display());
                             self.obj_cache.borrow_mut().insert(path, o);
                         }
                     }
@@ -200,7 +199,7 @@ impl Site {
         for (name, object_def) in self.object_definitions.iter() {
             if let Some(template) = &object_def.template {
                 let template_path = pages_dir.join(format!("{}.liquid", template));
-                debug!("rendering template objects for {}", template_path.display());
+                info!("rendering template objects for {}", template_path.display());
                 let template_r = fs.read_to_string(&template_path);
                 if template_r.is_err() {
                     println!("failed rendering {}", template_path.display());
@@ -209,7 +208,7 @@ impl Site {
                 if let Some(template_str) = template_str {
                     if let Some(t_objects) = all_objects.get(name) {
                         for object in t_objects {
-                            debug!("rendering {}", object.filename);
+                            info!("rendering {}", object.filename);
                             let page = Page::new_with_template(
                                 object.filename.clone(),
                                 object_def,
@@ -234,7 +233,7 @@ impl Site {
         }
 
         // Render regular pages
-        debug!("building pages in {}", pages_dir.display());
+        info!("building pages in {}", pages_dir.display());
         let template_pages: HashSet<&String> = self
             .object_definitions
             .values()
@@ -252,7 +251,7 @@ impl Site {
                         // template pages are not rendered as pages
                         continue;
                     }
-                    debug!("rendering {}", file_path.display());
+                    info!("rendering {}", file_path.display());
                     if let Some(template_str) = fs.read_to_string(&file_path)? {
                         let page = Page::new(page_name, template_str);
                         let render_o = page.render(&liquid_parser, &all_objects);
@@ -267,7 +266,7 @@ impl Site {
                         }
                         let render_name = file_name.replace(".liquid", ".html");
                         let render_path = render_dir.join(render_name);
-                        debug!("rendering {}", render_path.display());
+                        debug!("write {}", render_path.display());
                         fs.write_str(&render_path, rendered)?;
                     } else {
                         println!("page not found: {}", file_path.display());
