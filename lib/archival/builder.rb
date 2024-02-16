@@ -182,8 +182,13 @@ module Archival
       template = @page_templates[page]
       template_path = File.join(dir, page)
       parsed_objects = objects_for_template(template_path)
-      template.render('objects' => parsed_objects,
-                      'template_path' => template_path)
+      begin
+        template.render('objects' => parsed_objects,
+                        'template_path' => template_path)
+      rescue Liquid::Error
+        puts error
+        raise error
+      end
     end
 
     def render_dynamic(type, name)
@@ -198,7 +203,12 @@ module Archival
                'template_path' => template_path
              )
              .merge({ type => obj })
-      template.render(vars)
+      begin
+        template.render(vars)
+      rescue Liquid::Error
+        puts error
+        raise error
+      end
     end
 
     def write_all
@@ -208,18 +218,14 @@ module Archival
                             File.dirname(template))
         Dir.mkdir(out_dir) unless File.exist? out_dir
         out_path = File.join(out_dir, "#{template}.html")
-        File.open(out_path, 'w+') do |file|
-          file.write(render(template))
-        end
+        File.write(out_path, render(template))
       end
       @dynamic_types.each do |type|
         out_dir = File.join(@config.build_dir, type)
         Dir.mkdir(out_dir) unless File.exist? out_dir
         read_objects(type) do |name|
           out_path = File.join(out_dir, "#{name}.html")
-          File.open(out_path, 'w+') do |file|
-            file.write(render_dynamic(type, name))
-          end
+          File.write(out_path, render_dynamic(type, name))
         end
       end
 

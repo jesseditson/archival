@@ -11,7 +11,7 @@
   const CHECK_INTERVAL = 500;
   const DISCONNECTED_INTERVAL = 1000;
   const connectionDot = document.createElement("div");
-  connectionDot.style = `position: absolute; z-index: 9999; bottom: 10px; right: 10px; background-color: ${CONNECTING_COLOR}; width: 15px; height: 15px; border-radius: 50%; opacity: 0.8;`;
+  connectionDot.style = `position: fixed; z-index: 9999; bottom: 10px; right: 10px; background-color: ${CONNECTING_COLOR}; width: 15px; height: 15px; border-radius: 50%; opacity: 0.8;`;
   connectionDot.setAttribute("title", "Archival Dev Server: Connecting");
   connectionDot.addEventListener(
     "mouseenter",
