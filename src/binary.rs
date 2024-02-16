@@ -9,6 +9,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
+    thread, time,
 };
 use tracing::{info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -78,6 +79,8 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
             })?;
             loop {
                 if let Ok(path) = rx.try_recv() {
+                    // Batch changes every 500ms
+                    thread::sleep(time::Duration::from_millis(500));
                     while rx.try_recv().is_ok() {
                         // Flush events
                     }
