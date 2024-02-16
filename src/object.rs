@@ -24,6 +24,7 @@ pub struct Object {
 
 impl Object {
     pub fn values_from_table(
+        file: &Path,
         table: &Table,
         definition: &ObjectDefinition,
     ) -> Result<ObjectValues, Box<dyn Error>> {
@@ -46,13 +47,13 @@ impl Object {
                         index,
                         child: value.to_string(),
                     })?;
-                    let object = Object::values_from_table(table, child_def)?;
+                    let object = Object::values_from_table(file, table, child_def)?;
                     objects.push(object);
                 }
                 let field_value = FieldValue::Objects(objects);
                 values.insert(key.to_string(), field_value);
             } else if !is_reserved_field(key) {
-                println!("Unknown field {}", key);
+                println!("{}: unknown field {}", file.display(), key);
             }
         }
         // liquid-rust only supports strict parsing. This is reasonable but we
@@ -73,10 +74,10 @@ impl Object {
 
     pub fn from_table(
         definition: &ObjectDefinition,
-        filename: &str,
+        file: &Path,
         table: &Table,
     ) -> Result<Object, Box<dyn Error>> {
-        let values = Object::values_from_table(table, definition)?;
+        let values = Object::values_from_table(file, table, definition)?;
         let mut order = -1;
         if let Some(t_order) = table.get(reserved_fields::ORDER) {
             if let Some(int_order) = t_order.as_integer() {
@@ -85,13 +86,14 @@ impl Object {
                 println!("Invalid order {}", t_order);
             }
         }
+        let filename = file.file_name().unwrap().to_string_lossy().to_string();
         let object = Object {
-            filename: filename.to_owned(),
-            object_name: definition.name.clone(),
             path: Path::new(&definition.name)
-                .join(filename)
+                .join(&filename)
                 .to_string_lossy()
                 .to_string(),
+            filename,
+            object_name: definition.name.clone(),
             order,
             values,
         };
@@ -103,15 +105,13 @@ impl Object {
         filename: &str,
         order: i32,
     ) -> Result<Self, Box<dyn Error>> {
+        let path = Path::new(&definition.name).join(filename);
         let empty = Table::new();
-        let values = Object::values_from_table(&empty, definition)?;
+        let values = Object::values_from_table(&path, &empty, definition)?;
         Ok(Self {
             filename: filename.to_owned(),
             object_name: definition.name.clone(),
-            path: Path::new(&definition.name)
-                .join(filename)
-                .to_string_lossy()
-                .to_string(),
+            path: path.to_string_lossy().to_string(),
             order,
             values,
         })
@@ -170,7 +170,11 @@ mod tests {
         let defs =
             ObjectDefinition::from_table(&toml::from_str(artist_and_example_definition_str())?)?;
         let table: Table = toml::from_str(artist_object_str())?;
-        let obj = Object::from_table(defs.get("artist").unwrap(), "tormenta-rey", &table)?;
+        let obj = Object::from_table(
+            defs.get("artist").unwrap(),
+            Path::new("tormenta-rey"),
+            &table,
+        )?;
         assert_eq!(obj.order, 1);
         assert_eq!(obj.object_name, "artist");
         assert_eq!(obj.filename, "tormenta-rey");

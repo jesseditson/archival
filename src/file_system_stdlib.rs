@@ -97,7 +97,7 @@ impl WatchableFileSystemAPI for NativeFileSystem {
     ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>> {
         let root = fs::canonicalize(self.get_path(&root)).unwrap();
         let watch_path = root.to_owned();
-        changed(vec![]);
+        changed(vec![watch_path.to_path_buf()]);
         let mut watcher = notify::recommended_watcher(
             move |res: Result<notify::Event, notify::Error>| match res {
                 Ok(event) => {

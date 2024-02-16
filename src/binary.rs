@@ -1,3 +1,4 @@
+use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, site::Site, ArchivalError};
 use ctrlc;
 use std::{
     env,
@@ -10,8 +11,6 @@ use std::{
 };
 use tracing::{debug, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
-use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, site, ArchivalError};
 
 static VALID_COMMANDS: &[&str] = &["build", "run"];
 
@@ -47,13 +46,13 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
     match &command_arg[..] {
         "build" => {
             let mut fs = file_system_stdlib::NativeFileSystem::new(&build_dir);
-            let site = site::load(&fs)?;
+            let site = Site::load(&fs)?;
             println!("Building site: {}", &site);
-            site::build(&site, &mut fs)
+            site.build(&mut fs)
         }
         "run" => {
             let fs = file_system_stdlib::NativeFileSystem::new(&build_dir);
-            let site = site::load(&fs)?;
+            let site = Site::load(&fs)?;
             println!("Watching site: {}", &site);
             let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
             // This won't leak because the process is ended when we
@@ -63,8 +62,10 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                 site.manifest.watched_paths(),
                 move |paths| {
                     debug!("Changed: {:?}", paths);
-                    if let Err(e) = tx.send(0) {
-                        warn!("Failed sending change event: {}", e);
+                    for path in paths {
+                        if let Err(e) = tx.send(path) {
+                            warn!("Failed sending change event: {}", e);
+                        }
                     }
                 },
             )?;
@@ -74,11 +75,14 @@ pub fn binary(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn Erro
                 aborted_clone.store(true, Ordering::SeqCst);
             })?;
             loop {
-                if rx.try_recv().is_ok() {
+                if let Ok(path) = rx.try_recv() {
+                    while rx.try_recv().is_ok() {
+                        // Flush events
+                    }
                     let mut fs = file_system_stdlib::NativeFileSystem::new(&build_dir);
-                    let site = site::load(&fs)?;
                     println!("Rebuilding.");
-                    if let Err(e) = site::build(&site, &mut fs) {
+                    site.invalidate_file(&path);
+                    if let Err(e) = site.build(&mut fs) {
                         println!("Build failed: {}", e);
                     }
                 }

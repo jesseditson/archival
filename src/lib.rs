@@ -19,6 +19,7 @@ use events::{
     AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
 };
 pub use field_value::FieldValue;
+use site::Site;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
@@ -48,13 +49,13 @@ pub struct Archival<F: FileSystemAPI> {
 
 impl<F: FileSystemAPI> Archival<F> {
     pub fn new(fs: F) -> Result<Self, Box<dyn Error>> {
-        let site = site::load(&fs)?;
+        let site = Site::load(&fs)?;
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self { fs_mutex, site })
     }
     pub fn build(&self) -> Result<(), Box<dyn Error>> {
         debug!("build {}", self.site);
-        self.fs_mutex.with_fs(|fs| site::build(&self.site, fs))
+        self.fs_mutex.with_fs(|fs| self.site.build(fs))
     }
     pub fn dist_file(&self, path: &Path) -> Option<Vec<u8>> {
         let path = self.site.manifest.build_dir.join(path);
@@ -79,14 +80,14 @@ impl<F: FileSystemAPI> Archival<F> {
         // Validate toml
         let obj_def = self
             .site
-            .objects
+            .object_definitions
             .get(obj_type)
             .ok_or(ArchivalError::new(&format!(
                 "object not found: {}",
                 obj_type
             )))?;
         let table: toml::Table = toml::from_str(&contents)?;
-        let _ = Object::from_table(obj_def, filename, &table)?;
+        let _ = Object::from_table(obj_def, Path::new(filename), &table)?;
         // Object is valid, write it
         self.fs_mutex
             .with_fs(|fs| fs.write_str(&self.object_path(obj_type, filename), contents))
@@ -125,7 +126,7 @@ impl<F: FileSystemAPI> Archival<F> {
     fn add_object(&self, event: AddObjectEvent) -> Result<(), Box<dyn Error>> {
         let obj_def = self
             .site
-            .objects
+            .object_definitions
             .get(&event.object)
             .ok_or(ArchivalError::new(&format!(
                 "object not found: {}",
@@ -140,13 +141,15 @@ impl<F: FileSystemAPI> Archival<F> {
         self.fs_mutex.with_fs(|fs| {
             let object = Object::from_def(obj_def, &event.filename, event.order)?;
             fs.write_str(&path, object.to_toml()?)
-        })
+        })?;
+        self.site.invalidate_file(&path);
+        Ok(())
     }
 
     fn delete_object(&self, event: DeleteObjectEvent) -> Result<(), Box<dyn Error>> {
         let obj_def = self
             .site
-            .objects
+            .object_definitions
             .get(&event.object)
             .ok_or(ArchivalError::new(&format!(
                 "object not found: {}",
@@ -158,19 +161,20 @@ impl<F: FileSystemAPI> Archival<F> {
             .objects_dir
             .join(Path::new(&obj_def.name))
             .join(Path::new(&format!("{}.toml", event.filename)));
-        self.fs_mutex.with_fs(|fs| fs.delete(&path))
+        self.fs_mutex.with_fs(|fs| fs.delete(&path))?;
+        self.site.invalidate_file(&path);
+        Ok(())
     }
 
     pub fn get_objects(&self) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
-        self.fs_mutex
-            .with_fs(|fs| site::get_objects(&self.site, fs))
+        self.fs_mutex.with_fs(|fs| self.site.get_objects(fs))
     }
     pub fn get_objects_sorted(
         &self,
         sort: impl Fn(&Object, &Object) -> Ordering,
     ) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
         self.fs_mutex
-            .with_fs(|fs| site::get_objects_sorted(&self.site, fs, sort))
+            .with_fs(|fs| self.site.get_objects_sorted(fs, sort))
     }
 
     fn edit_field(&self, event: EditFieldEvent) -> Result<(), Box<dyn Error>> {
@@ -191,7 +195,7 @@ impl<F: FileSystemAPI> Archival<F> {
     fn add_child(&self, event: ChildEvent) -> Result<(), Box<dyn Error>> {
         let obj_def = self
             .site
-            .objects
+            .object_definitions
             .get(&event.object)
             .ok_or(ArchivalError::new(&format!(
                 "object not found: {}",
@@ -221,7 +225,9 @@ impl<F: FileSystemAPI> Archival<F> {
         debug!("WRITE {}", filename);
         let path = self.object_path(obj_type, filename);
         let contents = self.object_file_with(obj_type, filename, obj_cb)?;
-        self.fs_mutex.with_fs(|fs| fs.write_str(&path, contents))
+        self.fs_mutex.with_fs(|fs| fs.write_str(&path, contents))?;
+        self.site.invalidate_file(&path);
+        Ok(())
     }
 
     #[cfg(test)]
@@ -258,9 +264,9 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        assert_eq!(archival.site.objects.len(), 2);
-        assert!(archival.site.objects.contains_key("section"));
-        assert!(archival.site.objects.contains_key("post"));
+        assert_eq!(archival.site.object_definitions.len(), 2);
+        assert!(archival.site.object_definitions.contains_key("section"));
+        assert!(archival.site.object_definitions.contains_key("post"));
         archival.build()?;
         let dist_files = archival.dist_files();
         println!("dist_files: \n{}", dist_files.join("\n"));
@@ -359,6 +365,7 @@ mod lib {
     }
 
     #[test]
+    #[traced_test]
     fn edit_object_order() -> Result<(), Box<dyn Error>> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
@@ -370,7 +377,9 @@ mod lib {
             .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
-        assert!(index_html.contains("ORDER: Some Content,More Content"));
+        let c1 = index_html.find("1 Some Content").unwrap();
+        let c2 = index_html.find("2 More Content").unwrap();
+        assert!(c1 < c2);
         archival.send_event(ArchivalEvent::EditOrder(EditOrderEvent {
             object: "section".to_string(),
             filename: "first".to_string(),
@@ -382,7 +391,9 @@ mod lib {
             .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
-        assert!(index_html.contains("ORDER: More Content,Some Content"));
+        let c1 = index_html.find("12 Some Content").unwrap();
+        let c2 = index_html.find("2 More Content").unwrap();
+        assert!(c2 < c1);
         Ok(())
     }
 
@@ -467,7 +478,7 @@ mod memory_fs_tests {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        let _def_json = serde_json::to_string(&archival.site.objects)?;
+        let _def_json = serde_json::to_string(&archival.site.object_definitions)?;
         let _obj_json = serde_json::to_string(&archival.get_objects()?)?;
         Ok(())
     }
