@@ -45,6 +45,7 @@ pub enum FieldType {
     Date,
     Markdown,
     Boolean,
+    List,
 }
 
 impl FieldType {
@@ -55,6 +56,7 @@ impl FieldType {
             "date" => Ok(FieldType::Date),
             "markdown" => Ok(FieldType::Markdown),
             "boolean" => Ok(FieldType::Boolean),
+            "list" => Ok(FieldType::List),
             _ => Err(InvalidFieldError::UnrecognizedType(string.to_string())),
         }
     }
@@ -66,6 +68,7 @@ impl FieldType {
             Self::Date => "date",
             Self::Markdown => "markdown",
             Self::Boolean => "boolean",
+            Self::List => "list",
         }
     }
 
@@ -76,6 +79,7 @@ impl FieldType {
             Self::Date => FieldValue::Date(DateTime::now()),
             Self::Markdown => FieldValue::Markdown("".to_string()),
             Self::Boolean => FieldValue::Boolean(false),
+            Self::List => FieldValue::List(vec![]),
         }
     }
 }

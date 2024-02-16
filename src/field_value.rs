@@ -137,6 +137,7 @@ pub enum FieldValue {
     #[cfg_attr(feature = "typescript", serde(skip))]
     Objects(Vec<ObjectValues>),
     Boolean(bool),
+    List(Vec<String>),
 }
 // impl fmt::Debug for Position {
 //     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -173,6 +174,7 @@ impl FieldValue {
             FieldType::Date => Self::Date(DateTime::from_toml(
                 t_val.as_datetime().ok_or(err(f_type, value))?,
             )?),
+            FieldType::List => Self::List(t_val.as_array().ok_or(err(f_type, value))?.to_vec()),
         })
     }
 
