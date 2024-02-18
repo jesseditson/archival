@@ -112,7 +112,9 @@ impl ObjectDefinition {
             children: HashMap::new(),
         };
         for (key, m_value) in definition {
-            obj_def.field_order.push(key.to_string());
+            if !is_reserved_field(key) {
+                obj_def.field_order.push(key.to_string());
+            }
             if let Some(child_table) = m_value.as_table() {
                 obj_def
                     .children
@@ -176,11 +178,11 @@ pub mod tests {
         assert!(defs.get("artist").is_some());
         assert!(defs.get("example").is_some());
         let artist = defs.get("artist").unwrap();
-        assert_eq!(artist.field_order.len(), 4);
+        assert_eq!(artist.field_order.len(), 3);
         assert_eq!(artist.field_order[0], "name".to_string());
-        assert_eq!(artist.field_order[1], "template".to_string());
-        assert_eq!(artist.field_order[2], "tour_dates".to_string());
-        assert_eq!(artist.field_order[3], "numbers".to_string());
+        assert_eq!(artist.field_order[1], "tour_dates".to_string());
+        assert_eq!(artist.field_order[2], "numbers".to_string());
+        assert!(!artist.field_order.contains(&"template".to_string()));
         assert!(artist.fields.get("name").is_some());
         assert_eq!(artist.fields.get("name").unwrap(), &FieldType::String);
         assert!(
