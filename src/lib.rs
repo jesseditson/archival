@@ -7,7 +7,7 @@ mod file_system_mutex;
 mod file_system_tests;
 mod filters;
 mod liquid_parser;
-mod manifest;
+pub mod manifest;
 mod object_definition;
 mod page;
 mod read_toml;
