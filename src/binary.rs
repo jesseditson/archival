@@ -1,6 +1,7 @@
 use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, server, site::Site};
 use clap::{arg, command, value_parser, Command};
 use ctrlc;
+use semver::{Version, VersionReq};
 use std::{
     env,
     error::Error,
@@ -14,14 +15,15 @@ use std::{
     thread, time,
 };
 use tracing::{info, warn};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-pub fn binary(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
-    tracing_subscriber::registry()
-        .with(fmt::layer())
-        .with(EnvFilter::from_default_env())
-        .init();
+const MIN_VERSION: &str = ">=0.4.1";
 
+pub enum ExitStatus {
+    ERROR,
+    OK,
+}
+
+pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn Error>> {
     let mut build_dir = env::current_dir()?;
     let cmd = command!()
         .arg_required_else_help(true)
@@ -46,6 +48,17 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> 
                         .required(false)
                         .value_parser(value_parser!(PathBuf)),
                 ),
+        )
+        .subcommand(
+            Command::new("compat")
+                .about(
+                    "checks the compatibility of this version of archival against a version string",
+                )
+                .arg(
+                    arg!([version] "a version string (e.g. 0.4.1-alpha)")
+                        .required(true)
+                        .value_parser(value_parser!(String)),
+                ),
         );
     let matches = cmd.get_matches_from(args);
     if let Some(build) = matches.subcommand_matches("build") {
@@ -55,7 +68,8 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> 
         let mut fs = file_system_stdlib::NativeFileSystem::new(&build_dir);
         let site = Site::load(&fs)?;
         println!("Building site: {}", &site);
-        site.build(&mut fs)
+        site.build(&mut fs)?;
+        Ok(ExitStatus::OK)
     } else if let Some(run) = matches.subcommand_matches("run") {
         if let Some(path) = run.get_one::<PathBuf>("path") {
             build_dir = fs::canonicalize(build_dir.join(path))?;
@@ -117,6 +131,24 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> 
             if aborted.load(Ordering::SeqCst) {
                 kill_watcher();
                 exit(0);
+            }
+        }
+    } else if let Some(compat) = matches.subcommand_matches("compat") {
+        let req = VersionReq::parse(MIN_VERSION).unwrap();
+        let version_string = compat.get_one::<String>("version").unwrap();
+        match Version::parse(version_string) {
+            Ok(version) => {
+                if req.matches(&version) {
+                    println!("passed compatibility check.");
+                    Ok(ExitStatus::OK)
+                } else {
+                    println!("version {} is incompatible with this version of archival (minimum required version {}).", version, MIN_VERSION);
+                    Ok(ExitStatus::ERROR)
+                }
+            }
+            Err(e) => {
+                println!("invalid version {}: {}", version_string, e);
+                Ok(ExitStatus::ERROR)
             }
         }
     } else {
