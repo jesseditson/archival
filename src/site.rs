@@ -9,6 +9,7 @@ use std::{
 use tracing::{debug, info};
 
 use crate::{
+    check_compatibility,
     constants::MANIFEST_FILE_NAME,
     liquid_parser::{self, partial_matcher},
     manifest::Manifest,
@@ -60,7 +61,16 @@ impl Site {
     pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
         // Load our manifest (should it exist)
         let manifest = match Manifest::from_file(Path::new(MANIFEST_FILE_NAME), fs) {
-            Ok(m) => m,
+            Ok(m) => {
+                // When loading a manifest, check its compatibility.
+                if let Some(manifest_version) = &m.archival_version {
+                    let (compat, message) = check_compatibility(manifest_version);
+                    if !compat {
+                        return Err(ArchivalError::new(&message).into());
+                    }
+                }
+                m
+            }
             Err(_) => Manifest::default(Path::new("")),
         };
         let odf = Path::new(&manifest.object_definition_file);

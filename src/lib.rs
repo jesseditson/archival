@@ -34,6 +34,7 @@ mod file_system_stdlib;
 mod server;
 use file_system_mutex::FileSystemMutex;
 use object::Object;
+use semver::{Version, VersionReq};
 
 // Re-exports
 pub mod events;
@@ -43,6 +44,22 @@ pub use file_system::unpack_zip;
 pub use file_system::FileSystemAPI;
 pub use file_system_memory::MemoryFileSystem;
 pub use object_definition::ObjectDefinition;
+
+const MIN_COMPAT_VERSION: &str = ">=0.4.1";
+pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
+    let req = VersionReq::parse(MIN_COMPAT_VERSION).unwrap();
+    match Version::parse(version_string) {
+        Ok(version) => {
+            if req.matches(&version) {
+                println!();
+                (true, "passed compatibility check.".to_owned())
+            } else {
+                (false, format!("version {} is incompatible with this version of archival (minimum required version {}).", version, MIN_COMPAT_VERSION))
+            }
+        }
+        Err(e) => (false, format!("invalid version {}: {}", version_string, e)),
+    }
+}
 
 pub struct Archival<F: FileSystemAPI> {
     fs_mutex: FileSystemMutex<F>,
@@ -73,6 +90,7 @@ impl<F: FileSystemAPI> Archival<F> {
     pub fn object_file(&self, obj_type: &str, filename: &str) -> Result<String, Box<dyn Error>> {
         self.object_file_with(obj_type, filename, |o| Ok(o))
     }
+
     pub fn write_file(
         &self,
         obj_type: &str,

@@ -1,10 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     fmt,
     path::{Path, PathBuf},
 };
-
-use serde::{Deserialize, Serialize};
 use toml::{Table, Value};
 
 use crate::{constants::LAYOUT_DIR_NAME, file_system::FileSystemAPI};
@@ -24,6 +23,7 @@ impl fmt::Display for InvalidManifestError {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Manifest {
+    pub archival_version: Option<String>,
     pub site_url: Option<String>,
     pub object_definition_file: PathBuf,
     pub pages_dir: PathBuf,
@@ -38,6 +38,7 @@ impl fmt::Display for Manifest {
         write!(
             f,
             r#"
+        archival_version: {}
         site_url: {}
         object file: {}
         objects: {}
@@ -46,6 +47,9 @@ impl fmt::Display for Manifest {
         layout dir: {}
         build dir: {}
         "#,
+            self.archival_version
+                .as_ref()
+                .unwrap_or(&"unknown".to_owned()),
             self.site_url.as_ref().unwrap_or(&"none".to_owned()),
             self.object_definition_file.display(),
             self.objects_dir.display(),
@@ -60,6 +64,7 @@ impl fmt::Display for Manifest {
 impl Manifest {
     pub fn default(root: &Path) -> Manifest {
         Manifest {
+            archival_version: None,
             site_url: None,
             object_definition_file: root.join(OBJECT_DEFINITION_FILE_NAME),
             pages_dir: root.join(PAGES_DIR_NAME),
@@ -85,6 +90,9 @@ impl Manifest {
         };
         for (key, value) in values.into_iter() {
             match key.as_str() {
+                "archival_version" => {
+                    manifest.archival_version = value.as_str().map(|s| s.to_string())
+                }
                 "site_url" => manifest.site_url = value.as_str().map(|s| s.to_string()),
                 "pages" => manifest.pages_dir = path_or_err(value)?,
                 "objects" => manifest.objects_dir = path_or_err(value)?,

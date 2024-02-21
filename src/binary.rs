@@ -1,7 +1,9 @@
-use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, server, site::Site};
+use crate::{
+    check_compatibility, file_system::WatchableFileSystemAPI, file_system_stdlib, server,
+    site::Site,
+};
 use clap::{arg, command, value_parser, Command};
 use ctrlc;
-use semver::{Version, VersionReq};
 use std::{
     env,
     error::Error,
@@ -15,8 +17,6 @@ use std::{
     thread, time,
 };
 use tracing::{info, warn};
-
-const MIN_VERSION: &str = ">=0.4.1";
 
 pub enum ExitStatus {
     ERROR,
@@ -134,22 +134,11 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn 
             }
         }
     } else if let Some(compat) = matches.subcommand_matches("compat") {
-        let req = VersionReq::parse(MIN_VERSION).unwrap();
-        let version_string = compat.get_one::<String>("version").unwrap();
-        match Version::parse(version_string) {
-            Ok(version) => {
-                if req.matches(&version) {
-                    println!("passed compatibility check.");
-                    Ok(ExitStatus::OK)
-                } else {
-                    println!("version {} is incompatible with this version of archival (minimum required version {}).", version, MIN_VERSION);
-                    Ok(ExitStatus::ERROR)
-                }
-            }
-            Err(e) => {
-                println!("invalid version {}: {}", version_string, e);
-                Ok(ExitStatus::ERROR)
-            }
+        let (compat, message) = check_compatibility(compat.get_one::<String>("version").unwrap());
+        println!("{}", message);
+        match compat {
+            true => Ok(ExitStatus::OK),
+            false => Ok(ExitStatus::ERROR),
         }
     } else {
         panic!("No command provided.");
