@@ -1,5 +1,5 @@
 use crate::{
-    field_value::{self, FieldValue, ObjectValues},
+    fields::{field_value, FieldValue, ObjectValues},
     object::Object,
     object_definition::FieldType,
     ObjectDefinition,

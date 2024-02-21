@@ -1,5 +1,5 @@
 use crate::{
-    field_value::{DateTime, FieldValue},
+    fields::{DateTime, FieldValue},
     reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
 };
 use serde::{Deserialize, Serialize};
