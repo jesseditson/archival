@@ -1,7 +1,7 @@
 pub use crate::value_path::ValuePath;
 use crate::{
-    field_value::{FieldValue, ObjectValues},
-    object_definition::{InvalidFieldError, ObjectDefinition},
+    fields::{FieldValue, InvalidFieldError, ObjectValues},
+    object_definition::ObjectDefinition,
     reserved_fields::{self, is_reserved_field},
 };
 use liquid::{
@@ -147,9 +147,7 @@ impl Object {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        field_value::DateTime, object_definition::tests::artist_and_example_definition_str,
-    };
+    use crate::{fields::DateTime, object_definition::tests::artist_and_example_definition_str};
 
     use super::*;
 

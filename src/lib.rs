@@ -1,5 +1,4 @@
 mod archival_error;
-mod field_value;
 mod file_system;
 mod file_system_memory;
 mod file_system_mutex;
@@ -18,7 +17,8 @@ mod value_path;
 use events::{
     AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
 };
-pub use field_value::FieldValue;
+mod fields;
+pub use fields::FieldValue;
 use site::Site;
 use std::cmp::Ordering;
 use std::collections::HashMap;

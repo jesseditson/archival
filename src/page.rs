@@ -1,5 +1,5 @@
 use crate::{object::Object, object_definition::ObjectDefinition};
-use liquid::{self, ValueView};
+use liquid::ValueView;
 use std::{collections::HashMap, error::Error, fmt};
 
 #[derive(Debug, Clone)]
@@ -90,10 +90,8 @@ impl<'a> Page<'a> {
 mod tests {
 
     use crate::{
-        field_value::{DateTime, FieldValue},
-        liquid_parser,
-        object_definition::FieldType,
-        MemoryFileSystem,
+        fields::{DateTime, FieldType, FieldValue},
+        liquid_parser, MemoryFileSystem,
     };
 
     use super::*;
