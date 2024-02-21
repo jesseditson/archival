@@ -1,4 +1,4 @@
-use crate::object_definition::{FieldType, InvalidFieldError};
+use super::{FieldType, InvalidFieldError};
 use comrak::{markdown_to_html, ComrakOptions};
 use liquid::{model, ValueView};
 use serde::{Deserialize, Serialize};
@@ -31,15 +31,6 @@ pub enum FieldValue {
     Objects(Vec<ObjectValues>),
     Boolean(bool),
 }
-// impl fmt::Debug for Position {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         f.debug_tuple("")
-//          .field(&self.longitude)
-//          .field(&self.latitude)
-//          .finish()
-//     }
-// }
-
 fn err(f_type: &FieldType, value: String) -> FieldValueError {
     FieldValueError::InvalidValue(f_type.to_string(), value.to_owned())
 }

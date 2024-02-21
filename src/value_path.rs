@@ -1,7 +1,6 @@
 use crate::{
-    fields::{field_value, FieldValue, ObjectValues},
+    fields::{field_value, FieldType, FieldValue, ObjectValues},
     object::Object,
-    object_definition::FieldType,
     ObjectDefinition,
 };
 use serde::{Deserialize, Serialize};

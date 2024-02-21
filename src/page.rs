@@ -90,10 +90,8 @@ impl<'a> Page<'a> {
 mod tests {
 
     use crate::{
-        fields::{DateTime, FieldValue},
-        liquid_parser,
-        object_definition::FieldType,
-        MemoryFileSystem,
+        fields::{DateTime, FieldType, FieldValue},
+        liquid_parser, MemoryFileSystem,
     };
 
     use super::*;

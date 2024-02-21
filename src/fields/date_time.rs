@@ -1,4 +1,4 @@
-use crate::object_definition::InvalidFieldError;
+use super::InvalidFieldError;
 use liquid::model;
 use regex::Regex;
 use serde::{Deserialize, Serialize};

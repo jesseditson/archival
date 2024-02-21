@@ -1,7 +1,7 @@
 pub use crate::value_path::ValuePath;
 use crate::{
-    fields::{FieldValue, ObjectValues},
-    object_definition::{InvalidFieldError, ObjectDefinition},
+    fields::{FieldValue, InvalidFieldError, ObjectValues},
+    object_definition::ObjectDefinition,
     reserved_fields::{self, is_reserved_field},
 };
 use liquid::{

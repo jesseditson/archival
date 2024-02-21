@@ -1,4 +1,6 @@
-pub mod date_time;
-pub mod field_value;
+mod date_time;
+pub(crate) mod field_type;
+pub(crate) mod field_value;
 pub use date_time::DateTime;
+pub use field_type::{FieldType, InvalidFieldError};
 pub use field_value::{FieldValue, ObjectValues};
