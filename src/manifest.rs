@@ -6,7 +6,10 @@ use std::{
 };
 use toml::{Table, Value};
 
-use crate::{constants::LAYOUT_DIR_NAME, file_system::FileSystemAPI};
+use crate::{
+    constants::{CDN_URL, LAYOUT_DIR_NAME},
+    file_system::FileSystemAPI,
+};
 
 use super::constants::{
     BUILD_DIR_NAME, OBJECTS_DIR_NAME, OBJECT_DEFINITION_FILE_NAME, PAGES_DIR_NAME, STATIC_DIR_NAME,
@@ -31,6 +34,7 @@ pub struct Manifest {
     pub build_dir: PathBuf,
     pub static_dir: PathBuf,
     pub layout_dir: PathBuf,
+    pub cdn_url: String,
 }
 
 impl fmt::Display for Manifest {
@@ -72,6 +76,7 @@ impl Manifest {
             build_dir: root.join(BUILD_DIR_NAME),
             static_dir: root.join(STATIC_DIR_NAME),
             layout_dir: root.join(LAYOUT_DIR_NAME),
+            cdn_url: CDN_URL.to_string(),
         }
     }
     pub fn from_file(
