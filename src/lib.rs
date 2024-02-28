@@ -427,7 +427,13 @@ mod lib {
         let post_html = archival
             .fs_mutex
             .with_fs(|fs| {
-                fs.read_to_string(&archival.site.manifest.build_dir.join("post/a-post.html"))
+                fs.read_to_string(
+                    &archival
+                        .site
+                        .manifest
+                        .build_dir
+                        .join(Path::new("post/a-post.html")),
+                )
             })?
             .unwrap();
         // println!("post: {}", post_html);
@@ -445,7 +451,13 @@ mod lib {
         let post_html = archival
             .fs_mutex
             .with_fs(|fs| {
-                fs.read_to_string(&archival.site.manifest.build_dir.join("post/a-post.html"))
+                fs.read_to_string(
+                    &archival
+                        .site
+                        .manifest
+                        .build_dir
+                        .join(Path::new("post/a-post.html")),
+                )
             })?
             .unwrap();
         println!("post: {}", post_html);
@@ -475,7 +487,13 @@ mod lib {
         let post_html = archival
             .fs_mutex
             .with_fs(|fs| {
-                fs.read_to_string(&archival.site.manifest.build_dir.join("post/a-post.html"))
+                fs.read_to_string(
+                    &archival
+                        .site
+                        .manifest
+                        .build_dir
+                        .join(Path::new("post/a-post.html")),
+                )
             })?
             .unwrap();
         println!("post: {}", post_html);
