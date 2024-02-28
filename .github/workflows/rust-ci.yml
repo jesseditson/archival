@@ -123,6 +123,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+      - run: apt install libssl-dev
       - run: cargo fetch
       - name: cargo publish
         run: cargo publish --dry-run --all-features --target ${{ matrix.target }}
