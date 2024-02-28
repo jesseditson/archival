@@ -112,19 +112,16 @@ jobs:
   publish-check:
     name: Publish Check
     runs-on: ubuntu-22.04
-    container: ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge
     strategy:
       matrix:
         include:
-          - target: aarch64-unknown-linux-musl
+          - target: x86_64-unknown-linux-musl
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - run: apt-get -y update
-      - run: apt install -y libssl-dev
       - run: cargo fetch
       - name: cargo publish
         run: cargo publish --dry-run --all-features --target ${{ matrix.target }}
