@@ -13,6 +13,8 @@ mod read_toml;
 mod reserved_fields;
 mod site;
 mod tags;
+#[cfg(test)]
+mod test_utils;
 mod value_path;
 use events::{
     AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
@@ -271,6 +273,7 @@ mod lib {
 
     use crate::{
         file_system::unpack_zip,
+        test_utils::as_path_str,
         value_path::{ValuePath, ValuePathComponent},
     };
     use tracing_test::traced_test;
@@ -290,12 +293,12 @@ mod lib {
         archival.build()?;
         let dist_files = archival.dist_files();
         println!("dist_files: \n{}", dist_files.join("\n"));
-        assert!(archival.dist_files().contains(&"index.html".to_owned()));
-        assert!(archival.dist_files().contains(&"404.html".to_owned()));
+        assert!(archival.dist_files().contains(&as_path_str("index.html")));
+        assert!(archival.dist_files().contains(&as_path_str("404.html")));
         assert!(archival
             .dist_files()
-            .contains(&"post/a-post.html".to_owned()));
-        assert!(archival.dist_files().contains(&"img/guy.webp".to_owned()));
+            .contains(&as_path_str("post/a-post.html")));
+        assert!(archival.dist_files().contains(&as_path_str("img/guy.webp")));
         assert_eq!(dist_files.len(), 18);
         let guy = archival.dist_file(Path::new("img/guy.webp"));
         assert!(guy.is_some());

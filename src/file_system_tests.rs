@@ -4,7 +4,7 @@ mod tests {
         path::{Path, PathBuf},
     };
 
-    use crate::{file_system::unpack_zip, FileSystemAPI};
+    use crate::{file_system::unpack_zip, test_utils::as_path_str, FileSystemAPI};
 
     pub fn write_and_read_files(mut fs: impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
         let dir = Path::new("some/deep/path");
@@ -41,7 +41,7 @@ mod tests {
             .map(|p| p.to_string_lossy().to_string())
             .collect::<Vec<String>>();
         println!("files: {:?}", files);
-        assert!(files.contains(&"layout/theme.liquid".to_string()));
+        assert!(files.contains(&as_path_str("layout/theme.liquid")));
         assert!(!files.contains(&"layout".to_string()));
         Ok(())
     }
