@@ -75,10 +75,3 @@ serde_json = "1.0.113"
 tempfile = "3.5.0"
 tracing-test = "0.2.4"
 wasm-bindgen-test = "0.3.0"
-
-[workspace.metadata.cross.target.aarch64-unknown-linux-musl]
-# Install libssl-dev:arm64, see <https://github.com/cross-rs/cross/blob/main/docs/custom_images.md#adding-dependencies-to-existing-images>
-pre-build = [
-    "dpkg --add-architecture $CROSS_DEB_ARCH",
-    "apt-get update && apt-get --assume-yes install libssl-dev:$CROSS_DEB_ARCH",
-]
