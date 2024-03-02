@@ -13,9 +13,9 @@ runs:
       uses: actions/checkout@v4
     - name: Setup Node
       uses: actions/setup-node@v4
-    - name: Archival Prebuild
-      run: bin/archival prebuild
-      shell: bash
+    # - name: Archival Prebuild
+    #   run: bin/archival prebuild
+    #   shell: bash
     - name: Build with Archival
       run: bin/archival build
       shell: bash
