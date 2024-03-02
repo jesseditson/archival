@@ -1,3 +1,4 @@
+use crate::manifest::ManifestField;
 use crate::{
     check_compatibility, constants::AUTH_URL, file_system::WatchableFileSystemAPI,
     file_system_stdlib, server, site::Site,
@@ -40,6 +41,29 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn 
             ),
         )
         .subcommand(
+            Command::new("manifest")
+                .about("prints a manifest value")
+                .arg(
+                    arg!([field] "a field to print")
+                        .required(true)
+                        .value_parser(value_parser!(ManifestField)),
+                )
+                .arg(
+                    arg!([path] "an optional path to an archival site")
+                        .required(false)
+                        .value_parser(value_parser!(PathBuf)),
+                ),
+        )
+        .subcommand(
+            Command::new("prebuild")
+                .about("prints external build commands, if configured.")
+                .arg(
+                    arg!([path] "an optional path to build")
+                        .required(false)
+                        .value_parser(value_parser!(PathBuf)),
+                ),
+        )
+        .subcommand(
             Command::new("run")
                 .about("auto-rebuild an archival site")
                 .arg(
@@ -78,6 +102,32 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn 
         let site = Site::load(&fs)?;
         println!("Building site: {}", &site);
         site.build(&mut fs)?;
+        Ok(ExitStatus::OK)
+    } else if let Some(m) = matches.subcommand_matches("manifest") {
+        let field = m.get_one::<ManifestField>("field").unwrap();
+        if let Some(path) = m.get_one::<PathBuf>("path") {
+            build_dir = fs::canonicalize(build_dir.join(path))?;
+        }
+        let fs = file_system_stdlib::NativeFileSystem::new(&build_dir);
+        let site = Site::load(&fs)?;
+        print!("{}", site.manifest.field(field).unwrap_or("".to_string()));
+        Ok(ExitStatus::OK)
+    } else if let Some(bc) = matches.subcommand_matches("prebuild") {
+        if let Some(path) = bc.get_one::<PathBuf>("path") {
+            build_dir = fs::canonicalize(build_dir.join(path))?;
+        }
+        let fs = file_system_stdlib::NativeFileSystem::new(&build_dir);
+        let site = Site::load(&fs)?;
+        for s in site.manifest.prebuild {
+            let cmd_parts: Vec<&str> = s.split_whitespace().collect();
+            if !cmd_parts.is_empty() {
+                println!("runnning {}", s);
+                std::process::Command::new(cmd_parts[0])
+                    .args(&cmd_parts[1..])
+                    .spawn()
+                    .unwrap_or_else(|_| panic!("command failed: {}", s));
+            }
+        }
         Ok(ExitStatus::OK)
     } else if let Some(run) = matches.subcommand_matches("run") {
         if let Some(path) = run.get_one::<PathBuf>("path") {

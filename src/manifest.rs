@@ -1,3 +1,4 @@
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
@@ -15,17 +16,6 @@ use super::constants::{
     BUILD_DIR_NAME, OBJECTS_DIR_NAME, OBJECT_DEFINITION_FILE_NAME, PAGES_DIR_NAME, STATIC_DIR_NAME,
 };
 
-static MANIFEST_FIELD_KEYS: &[&str] = &[
-    "archival_version",
-    "site_url",
-    "object file",
-    "objects",
-    "pages",
-    "static files",
-    "layout dir",
-    "build dir",
-];
-
 #[derive(Debug, Clone)]
 struct InvalidManifestError;
 impl Error for InvalidManifestError {}
@@ -38,6 +28,7 @@ impl fmt::Display for InvalidManifestError {
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Manifest {
     pub archival_version: Option<String>,
+    pub prebuild: Vec<String>,
     pub site_url: Option<String>,
     pub object_definition_file: PathBuf,
     pub pages_dir: PathBuf,
@@ -46,6 +37,18 @@ pub struct Manifest {
     pub static_dir: PathBuf,
     pub layout_dir: PathBuf,
     pub cdn_url: String,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum ManifestField {
+    ArchivalVersion,
+    SiteUrl,
+    ObjectsDir,
+    PagesDir,
+    BuildDir,
+    StaticDir,
+    LayoutDir,
+    CDNUrl,
 }
 
 impl fmt::Display for Manifest {
@@ -80,6 +83,7 @@ impl Manifest {
     pub fn default(root: &Path) -> Manifest {
         Manifest {
             archival_version: None,
+            prebuild: vec![],
             site_url: None,
             object_definition_file: root.join(OBJECT_DEFINITION_FILE_NAME),
             pages_dir: root.join(PAGES_DIR_NAME),
@@ -110,6 +114,11 @@ impl Manifest {
                     manifest.archival_version = value.as_str().map(|s| s.to_string())
                 }
                 "site_url" => manifest.site_url = value.as_str().map(|s| s.to_string()),
+                "prebuild" => {
+                    manifest.prebuild = value
+                        .as_array()
+                        .map_or(vec![], |v| v.iter().map(|s| s.to_string()).collect())
+                }
                 "pages" => manifest.pages_dir = path_or_err(value)?,
                 "objects" => manifest.objects_dir = path_or_err(value)?,
                 "build_dir" => manifest.build_dir = path_or_err(value)?,
@@ -121,23 +130,54 @@ impl Manifest {
         Ok(manifest)
     }
 
+    pub fn field(&self, field: &ManifestField) -> Option<String> {
+        match field {
+            ManifestField::ArchivalVersion => self.archival_version.to_owned(),
+            ManifestField::SiteUrl => self.site_url.to_owned(),
+            ManifestField::ObjectsDir => Some(self.pages_dir.to_string_lossy().to_string()),
+            ManifestField::PagesDir => Some(self.pages_dir.to_string_lossy().to_string()),
+            ManifestField::BuildDir => Some(self.build_dir.to_string_lossy().to_string()),
+            ManifestField::StaticDir => Some(self.static_dir.to_string_lossy().to_string()),
+            ManifestField::LayoutDir => Some(self.layout_dir.to_string_lossy().to_string()),
+            ManifestField::CDNUrl => Some(self.cdn_url.to_owned()),
+        }
+    }
+
     pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
         let mut write_obj = Table::new();
-        for key in MANIFEST_FIELD_KEYS {
-            let value = match *key {
-                "archival_version" => self.archival_version.to_owned(),
-                "site_url" => self.site_url.to_owned(),
-                "pages" => Some(self.pages_dir.to_string_lossy().to_string()),
-                "objects" => Some(self.objects_dir.to_string_lossy().to_string()),
-                "build_dir" => Some(self.build_dir.to_string_lossy().to_string()),
-                "static_dir" => Some(self.static_dir.to_string_lossy().to_string()),
-                "layout_dir" => Some(self.layout_dir.to_string_lossy().to_string()),
+        for key in [
+            "archival_version",
+            "site_url",
+            "object file",
+            "objects",
+            "pages",
+            "static_dir",
+            "layout_dir",
+            "build_dir",
+        ] {
+            let value = match key {
+                "archival_version" => self.field(&ManifestField::ArchivalVersion),
+                "site_url" => self.field(&ManifestField::SiteUrl),
+                "pages" => self.field(&ManifestField::PagesDir),
+                "objects" => self.field(&ManifestField::ObjectsDir),
+                "build_dir" => self.field(&ManifestField::BuildDir),
+                "static_dir" => self.field(&ManifestField::StaticDir),
+                "layout_dir" => self.field(&ManifestField::ObjectsDir),
                 _ => None,
             };
             if let Some(value) = value {
                 write_obj.insert(key.to_string(), Value::String(value));
             }
         }
+        write_obj.insert(
+            "prebuild".to_string(),
+            Value::Array(
+                self.prebuild
+                    .iter()
+                    .map(|v| Value::String(v.to_string()))
+                    .collect(),
+            ),
+        );
         toml::to_string_pretty(&write_obj)
     }
 
