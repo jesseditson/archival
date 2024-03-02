@@ -28,6 +28,14 @@ pub enum ExitStatus {
     ERROR,
     OK,
 }
+impl ExitStatus {
+    pub fn code(&self) -> i32 {
+        match self {
+            ExitStatus::ERROR => 1,
+            ExitStatus::OK => 0,
+        }
+    }
+}
 
 pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn Error>> {
     let mut build_dir = env::current_dir()?;
