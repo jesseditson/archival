@@ -21,7 +21,7 @@ runs:
       uses: actions/setup-node@v4
     - name: Set Build Dir
       id: dist
-      run: echo "archival-dist=\"./$(bin/archival manifest build-dir)\"" >> $GITHUB_OUTPUT
+      run: echo "dist=\"$(bin/archival manifest build-dir)\"" >> $GITHUB_OUTPUT
       shell: bash
     - name: Archival Prebuild
       run: bin/archival prebuild
@@ -30,7 +30,7 @@ runs:
       run: bin/archival build
       shell: bash
     - name: Deploy
-      uses: s0/git-publish-subdir-action@develop
+      uses: s0/git-publish-subdir-action@v2.6.0
       env:
         REPO: self
         BRANCH: ${{ inputs.branch }}
