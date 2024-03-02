@@ -5,6 +5,9 @@ branding:
   icon: "archive"
   color: "green"
 inputs:
+  token:
+    description: "github token to use. Typically secrets.GITHUB_TOKEN"
+    required: true
   branch:
     description: "branch to write output to"
     required: false
@@ -32,4 +35,4 @@ runs:
         REPO: self
         BRANCH: ${{ inputs.branch }}
         FOLDER: ${{ steps.dist.outputs.archival-dist }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ inputs.token }}
