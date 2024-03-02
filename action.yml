@@ -34,5 +34,5 @@ runs:
       env:
         REPO: self
         BRANCH: ${{ inputs.branch }}
-        FOLDER: ${{ steps.dist.outputs.archival-dist }}
+        FOLDER: ${{ steps.dist.outputs.dist }}
         GITHUB_TOKEN: ${{ inputs.token }}
