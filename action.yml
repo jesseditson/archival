@@ -23,9 +23,9 @@ runs:
       id: dist
       run: echo "archival-dist=$(bin/archival manifest build-dir)" >> $GITHUB_OUTPUT
       shell: bash
-    # - name: Archival Prebuild
-    #   run: bin/archival prebuild
-    #   shell: bash
+    - name: Archival Prebuild
+      run: bin/archival prebuild
+      shell: bash
     - name: Build with Archival
       run: bin/archival build
       shell: bash
