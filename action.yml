@@ -35,17 +35,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Node
         uses: actions/setup-node@v4
-        with:
-          cache: ${{ steps.detect-package-manager.outputs.manager }}
-      - name: Restore cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            public
-            .cache
-          key: ${{ runner.os }}-archival-build-${{ hashFiles('public') }}
-          restore-keys: |
-            ${{ runner.os }}-archival-build-
+      - name: Get build dir
+        id: build-dir
+        run: echo "build-dir=\"./$(bin/archival manifest build-dir)\"" >> $GITHUB_OUTPUT
+        shell: bash
       - name: Archival Prebuild
         run: bin/archival prebuild
       - name: Build with Archival
@@ -53,7 +46,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "./$(bin/archival manifest build-dir)"
+          path: ${{ steps.build-dir.outputs.build-dir }}
 
   # Deployment job
   deploy:
