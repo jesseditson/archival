@@ -105,6 +105,15 @@ impl Site {
         self.obj_cache.borrow_mut().remove(file);
     }
 
+    pub fn modify_manifest<T: FileSystemAPI>(
+        &mut self,
+        fs: &mut T,
+        modify: impl FnOnce(&mut Manifest),
+    ) -> Result<(), Box<dyn Error>> {
+        modify(&mut self.manifest);
+        fs.write_str(Path::new(MANIFEST_FILE_NAME), self.manifest.to_toml()?)
+    }
+
     pub fn get_objects_sorted<T: FileSystemAPI>(
         &self,
         fs: &T,

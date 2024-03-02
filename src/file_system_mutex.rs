@@ -33,4 +33,11 @@ where
             Err(FileSystemMutexError::LockFailed.into())
         }
     }
+    pub fn take_fs(self) -> F {
+        let lock = match Arc::try_unwrap(self.0) {
+            Ok(l) => l,
+            Err(_) => panic!("attempt to take fs while borrowed."),
+        };
+        lock.into_inner().expect("attempt to take fs while locked.")
+    }
 }

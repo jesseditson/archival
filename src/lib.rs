@@ -21,12 +21,13 @@ use events::{
 };
 mod fields;
 pub use fields::FieldValue;
+use manifest::Manifest;
 use site::Site;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 #[cfg(feature = "binary")]
 pub mod binary;
 mod constants;
@@ -46,6 +47,8 @@ pub use file_system::unpack_zip;
 pub use file_system::FileSystemAPI;
 pub use file_system_memory::MemoryFileSystem;
 pub use object_definition::ObjectDefinition;
+
+pub static ARCHIVAL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const MIN_COMPAT_VERSION: &str = ">=0.4.1";
 pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
@@ -69,6 +72,18 @@ pub struct Archival<F: FileSystemAPI> {
 }
 
 impl<F: FileSystemAPI> Archival<F> {
+    pub fn is_compatible(fs: &F) -> Result<bool, Box<dyn Error>> {
+        let site = Site::load(fs)?;
+        if let Some(version_str) = &site.manifest.archival_version {
+            let (ok, msg) = check_compatibility(version_str);
+            if !ok {
+                error!("incompatible: {}", msg);
+            }
+            Ok(ok)
+        } else {
+            Ok(true)
+        }
+    }
     pub fn new(fs: F) -> Result<Self, Box<dyn Error>> {
         let site = Site::load(&fs)?;
         let fs_mutex = FileSystemMutex::init(fs);
@@ -90,7 +105,7 @@ impl<F: FileSystemAPI> Archival<F> {
             .join(Path::new(&format!("{}.toml", filename)))
     }
     pub fn object_file(&self, obj_type: &str, filename: &str) -> Result<String, Box<dyn Error>> {
-        self.object_file_with(obj_type, filename, |o| Ok(o))
+        self.modify_object_file(obj_type, filename, |o| Ok(o))
     }
 
     pub fn write_file(
@@ -114,7 +129,7 @@ impl<F: FileSystemAPI> Archival<F> {
         self.fs_mutex
             .with_fs(|fs| fs.write_str(&self.object_path(obj_type, filename), contents))
     }
-    fn object_file_with(
+    fn modify_object_file(
         &self,
         obj_type: &str,
         filename: &str,
@@ -246,10 +261,24 @@ impl<F: FileSystemAPI> Archival<F> {
     ) -> Result<(), Box<dyn Error>> {
         info!("write {}", filename);
         let path = self.object_path(obj_type, filename);
-        let contents = self.object_file_with(obj_type, filename, obj_cb)?;
+        let contents = self.modify_object_file(obj_type, filename, obj_cb)?;
         self.fs_mutex.with_fs(|fs| fs.write_str(&path, contents))?;
         self.site.invalidate_file(&path);
         Ok(())
+    }
+
+    pub fn modify_manifest(
+        &mut self,
+        modify: impl FnOnce(&mut Manifest),
+    ) -> Result<(), Box<dyn Error>> {
+        self.fs_mutex.with_fs(|fs| {
+            self.site.modify_manifest(fs, modify)?;
+            Ok(())
+        })
+    }
+
+    pub fn take_fs(self) -> F {
+        self.fs_mutex.take_fs()
     }
 
     #[cfg(test)]

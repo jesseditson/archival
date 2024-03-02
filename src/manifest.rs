@@ -15,6 +15,17 @@ use super::constants::{
     BUILD_DIR_NAME, OBJECTS_DIR_NAME, OBJECT_DEFINITION_FILE_NAME, PAGES_DIR_NAME, STATIC_DIR_NAME,
 };
 
+static MANIFEST_FIELD_KEYS: &[&str] = &[
+    "archival_version",
+    "site_url",
+    "object file",
+    "objects",
+    "pages",
+    "static files",
+    "layout dir",
+    "build dir",
+];
+
 #[derive(Debug, Clone)]
 struct InvalidManifestError;
 impl Error for InvalidManifestError {}
@@ -108,6 +119,26 @@ impl Manifest {
             }
         }
         Ok(manifest)
+    }
+
+    pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
+        let mut write_obj = Table::new();
+        for key in MANIFEST_FIELD_KEYS {
+            let value = match *key {
+                "archival_version" => self.archival_version.to_owned(),
+                "site_url" => self.site_url.to_owned(),
+                "pages" => Some(self.pages_dir.to_string_lossy().to_string()),
+                "objects" => Some(self.objects_dir.to_string_lossy().to_string()),
+                "build_dir" => Some(self.build_dir.to_string_lossy().to_string()),
+                "static_dir" => Some(self.static_dir.to_string_lossy().to_string()),
+                "layout_dir" => Some(self.layout_dir.to_string_lossy().to_string()),
+                _ => None,
+            };
+            if let Some(value) = value {
+                write_obj.insert(key.to_string(), Value::String(value));
+            }
+        }
+        toml::to_string_pretty(&write_obj)
     }
 
     pub fn watched_paths(&self) -> Vec<String> {
