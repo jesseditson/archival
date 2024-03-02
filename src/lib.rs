@@ -56,7 +56,6 @@ pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
     match Version::parse(version_string) {
         Ok(version) => {
             if req.matches(&version) {
-                println!();
                 (true, "passed compatibility check.".to_owned())
             } else {
                 (false, format!("version {} is incompatible with this version of archival (minimum required version {}).", version, MIN_COMPAT_VERSION))

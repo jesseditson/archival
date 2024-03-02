@@ -6,7 +6,7 @@ use std::{
     error::Error,
     path::{Path, PathBuf},
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::{
     check_compatibility,
@@ -221,7 +221,7 @@ impl Site {
                 info!("rendering template objects for {}", template_path.display());
                 let template_r = fs.read_to_string(&template_path);
                 if template_r.is_err() {
-                    println!("failed rendering {}", template_path.display());
+                    warn!("failed rendering {}", template_path.display());
                 }
                 let template_str = template_r?;
                 if let Some(template_str) = template_str {
@@ -236,7 +236,7 @@ impl Site {
                             );
                             let render_o = page.render(&liquid_parser, &all_objects);
                             if render_o.is_err() {
-                                println!("failed rendering {}", object.filename);
+                                warn!("failed rendering {}", object.filename);
                             }
                             let rendered = layout::post_process(render_o?);
                             let render_name = format!("{}.html", object.filename);
@@ -275,7 +275,7 @@ impl Site {
                         let page = Page::new(page_name, template_str);
                         let render_o = page.render(&liquid_parser, &all_objects);
                         if render_o.is_err() {
-                            println!("failed rendering {}", file_path.display());
+                            warn!("failed rendering {}", file_path.display());
                         }
                         let rendered = layout::post_process(render_o?);
                         let mut render_dir = build_dir.to_path_buf();
@@ -288,7 +288,7 @@ impl Site {
                         debug!("write {}", render_path.display());
                         fs.write_str(&render_path, rendered)?;
                     } else {
-                        println!("page not found: {}", file_path.display());
+                        warn!("page not found: {}", file_path.display());
                     }
                 }
             }

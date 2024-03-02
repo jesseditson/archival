@@ -11,6 +11,7 @@ use liquid::{
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt::Debug, path::Path};
 use toml::Table;
+use tracing::warn;
 
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
@@ -53,7 +54,7 @@ impl Object {
                 let field_value = FieldValue::Objects(objects);
                 values.insert(key.to_string(), field_value);
             } else if !is_reserved_field(key) {
-                println!("{}: unknown field {}", file.display(), key);
+                warn!("{}: unknown field {}", file.display(), key);
             }
         }
         // liquid-rust only supports strict parsing. This is reasonable but we
@@ -83,7 +84,7 @@ impl Object {
             if let Some(int_order) = t_order.as_integer() {
                 order = int_order as i32;
             } else {
-                println!("Invalid order {}", t_order);
+                warn!("Invalid order {}", t_order);
             }
         }
         let filename = file.file_name().unwrap().to_string_lossy().to_string();
