@@ -21,7 +21,7 @@ runs:
       uses: actions/setup-node@v4
     - name: Set Build Dir
       id: dist
-      run: echo "dist=\"$(bin/archival manifest build-dir)\"" >> $GITHUB_OUTPUT
+      run: echo "dist=$(bin/archival manifest build-dir)" >> $GITHUB_OUTPUT
       shell: bash
     - name: Archival Prebuild
       run: bin/archival prebuild
