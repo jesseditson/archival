@@ -13,6 +13,10 @@ runs:
       uses: actions/checkout@v4
     - name: Setup Node
       uses: actions/setup-node@v4
+    - name: Set Build Dir
+      id: dist
+      run: echo "archival-dist=$(bin/archival manifest build-dir)" >> $GITHUB_OUTPUT
+      shell: bash
     # - name: Archival Prebuild
     #   run: bin/archival prebuild
     #   shell: bash
@@ -22,4 +26,4 @@ runs:
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: "./$(bin/archival manifest build-dir)"
+        path: ${{ steps.dist.outputs.archival-dist }}
