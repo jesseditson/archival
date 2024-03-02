@@ -15,8 +15,10 @@ runs:
       uses: actions/setup-node@v4
     - name: Archival Prebuild
       run: bin/archival prebuild
+      shell: bash
     - name: Build with Archival
       run: bin/archival build
+      shell: bash
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
