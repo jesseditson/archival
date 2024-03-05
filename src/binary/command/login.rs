@@ -1,9 +1,14 @@
 use super::BinaryCommand;
-use crate::{binary::ExitStatus, constants::AUTH_URL};
+use crate::{
+    binary::ExitStatus,
+    constants::{AUTH_URL, CLI_TOKEN_PUBLIC_KEY},
+};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::ArgMatches;
 use indicatif::{ProgressBar, ProgressStyle};
 use nanoid::nanoid;
 use reqwest::StatusCode;
+use rsa::{pkcs8::DecodePublicKey, sha2::Sha256, Oaep, RsaPublicKey};
 use std::{fs, path::Path, thread, time::Duration};
 
 pub struct Command {}
@@ -26,8 +31,13 @@ impl BinaryCommand for Command {
             &home::home_dir().expect("unable to determine $HOME"),
             ".archivalrc",
         );
-        let login_token = nanoid!(21);
-        let auth_url = format!("{}?code={}", AUTH_URL, login_token);
+        let secret_client_id = nanoid!(21);
+        let public_key = RsaPublicKey::from_public_key_pem(CLI_TOKEN_PUBLIC_KEY)?;
+        let mut rng = rand::thread_rng();
+        let padding = Oaep::new::<Sha256>();
+        let enc_data = public_key.encrypt(&mut rng, padding, secret_client_id.as_bytes())?;
+        let b64_encoded = STANDARD.encode(enc_data);
+        let auth_url = format!("{}?code={}", AUTH_URL, urlencoding::encode(&b64_encoded));
         let token_url = format!("{}/token", AUTH_URL);
         println!("To log in, open this URL in your browser\n{}", auth_url);
         let bar = ProgressBar::new_spinner();
@@ -40,7 +50,7 @@ impl BinaryCommand for Command {
             loop {
                 if let Ok(response) = client
                     .post(token_url.to_owned())
-                    .body(login_token.to_owned())
+                    .body(secret_client_id.to_owned())
                     .send()
                 {
                     let status = response.status();
