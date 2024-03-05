@@ -2,7 +2,7 @@
 mod binary_tests {
     use std::{error::Error, fs, path::Path};
 
-    use archival::binary::ExitStatus;
+    use archival::binary::command::ExitStatus;
     use tracing_test::traced_test;
     use walkdir::WalkDir;
 
@@ -47,7 +47,7 @@ mod binary_tests {
     fn compatiblity_ok() -> Result<(), Box<dyn Error>> {
         assert!(matches!(
             archival::binary::binary(get_args(vec!["compat", "0.4.1"]))?,
-            ExitStatus::OK
+            ExitStatus::Ok
         ));
         Ok(())
     }
@@ -57,7 +57,7 @@ mod binary_tests {
     fn compatiblity_not_ok() -> Result<(), Box<dyn Error>> {
         assert!(matches!(
             archival::binary::binary(get_args(vec!["compat", "0.1.1"]))?,
-            ExitStatus::ERROR
+            ExitStatus::Error
         ));
         Ok(())
     }
