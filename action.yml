@@ -29,10 +29,15 @@ runs:
     - name: Build with Archival
       run: bin/archival build
       shell: bash
-    - name: Deploy
+    - name: Push to Deploy Branch
       uses: s0/git-publish-subdir-action@v2.6.0
       env:
         REPO: self
         BRANCH: ${{ inputs.branch }}
         FOLDER: ${{ steps.dist.outputs.dist }}
         GITHUB_TOKEN: ${{ inputs.token }}
+    - name: Deploy
+      uses: fjogeleit/http-request-action@v1
+      with:
+        url: "https://api.archival.dev/sync/${{ github.repository }}/heads/${{ inputs.branch }}"
+        method: "PUT"
