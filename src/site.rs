@@ -10,7 +10,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     check_compatibility,
-    constants::MANIFEST_FILE_NAME,
+    constants::{MANIFEST_FILE_NAME, RESERVED_PATHS},
     liquid_parser::{self, partial_matcher},
     manifest::Manifest,
     object::Object,
@@ -182,6 +182,26 @@ impl Site {
         }
         if !fs.exists(build_dir)? {
             fs.create_dir_all(build_dir)?;
+        }
+        // Make sure we don't use any reserved paths
+        for path in RESERVED_PATHS {
+            let reserved_paths = [
+                static_dir.join(path),
+                pages_dir.join(path),
+                pages_dir.join(&format!("{}.liquid", path)),
+                // This will only trigger on incremental builds but still is a
+                // decent failsafe, as this is already an edge case.
+                build_dir.join(path),
+            ];
+            for path in reserved_paths {
+                if fs.exists(&path)? {
+                    return Err(ArchivalError::new(&format!(
+                        "path {} is reserved",
+                        path.to_string_lossy()
+                    ))
+                    .into());
+                };
+            }
         }
 
         // Copy static files

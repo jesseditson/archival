@@ -5,6 +5,7 @@ pub const OBJECTS_DIR_NAME: &str = "objects";
 pub const BUILD_DIR_NAME: &str = "dist";
 pub const STATIC_DIR_NAME: &str = "public";
 pub const LAYOUT_DIR_NAME: &str = "layout";
+pub const RESERVED_PATHS: [&str; 1] = ["editor"];
 pub const CDN_URL: &str = "https://cdn.archival.dev";
 #[cfg(debug_assertions)]
 #[cfg(feature = "binary")]
