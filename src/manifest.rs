@@ -115,9 +115,11 @@ impl Manifest {
                 }
                 "site_url" => manifest.site_url = value.as_str().map(|s| s.to_string()),
                 "prebuild" => {
-                    manifest.prebuild = value
-                        .as_array()
-                        .map_or(vec![], |v| v.iter().map(|s| s.to_string()).collect())
+                    manifest.prebuild = value.as_array().map_or(vec![], |v| {
+                        v.iter()
+                            .map(|s| s.as_str().map_or("".to_string(), |s| s.to_string()))
+                            .collect()
+                    })
                 }
                 "pages" => manifest.pages_dir = path_or_err(value)?,
                 "objects" => manifest.objects_dir = path_or_err(value)?,

@@ -21,11 +21,16 @@ impl BinaryCommand for Command {
         for s in site.manifest.prebuild {
             let cmd_parts: Vec<&str> = s.split_whitespace().collect();
             if !cmd_parts.is_empty() {
-                println!("runnning {}", s);
-                std::process::Command::new(cmd_parts[0])
+                println!("runnning {} {}", cmd_parts[0], cmd_parts[1..].join(" "));
+                let status = std::process::Command::new(cmd_parts[0])
                     .args(&cmd_parts[1..])
+                    .current_dir(build_dir)
                     .spawn()
-                    .unwrap_or_else(|_| panic!("command failed: {}", s));
+                    .unwrap_or_else(|_| panic!("spawn failed: {}", s))
+                    .wait()?;
+                if !status.success() {
+                    return Ok(ExitStatus::Error);
+                }
             }
         }
         Ok(ExitStatus::Ok)
