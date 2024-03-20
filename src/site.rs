@@ -15,7 +15,7 @@ use crate::{
     manifest::Manifest,
     object::Object,
     object_definition::{ObjectDefinition, ObjectDefinitions},
-    page::Page,
+    page::{Page, TemplateType},
     read_toml::read_toml,
     tags::layout,
     ArchivalError, FileSystemAPI,
@@ -233,13 +233,14 @@ impl Site {
                                 object_def,
                                 object,
                                 template_str.to_owned(),
+                                TemplateType::Default,
                             );
                             let render_o = page.render(&liquid_parser, &all_objects);
                             if render_o.is_err() {
                                 warn!("failed rendering {}", object.filename);
                             }
                             let rendered = layout::post_process(render_o?);
-                            let render_name = format!("{}.html", object.filename);
+                            let render_name = format!("{}.{}", object.filename, page.extension());
                             let t_dir = build_dir.join(&object_def.name);
                             fs.create_dir_all(&t_dir)?;
                             let build_path = t_dir.join(render_name);
@@ -253,26 +254,29 @@ impl Site {
 
         // Render regular pages
         info!("building pages in {}", pages_dir.display());
-        let template_pages: HashSet<&String> = self
+        let template_pages: HashSet<&str> = self
             .object_definitions
             .values()
-            .flat_map(|object| &object.template)
+            .flat_map(|object| object.template.as_deref())
             .collect();
         let partial_re = partial_matcher();
         for rel_path in fs.walk_dir(pages_dir, false)? {
             let file_path = pages_dir.join(&rel_path);
             if let Some(name) = rel_path.file_name() {
                 let file_name = name.to_string_lossy();
-                if file_name.ends_with(".liquid") {
-                    let page_name = file_name.replace(".liquid", "");
-                    let t_path = rel_path.to_string_lossy().replace(".liquid", "");
-                    if template_pages.contains(&t_path) || partial_re.is_match(&file_name) {
+                if let Some((page_name, page_type)) = TemplateType::parse_name(&file_name) {
+                    if template_pages.contains(&page_name) || partial_re.is_match(&file_name) {
                         // template pages are not rendered as pages
                         continue;
                     }
-                    info!("rendering {}", file_path.display());
+                    info!(
+                        "rendering {} ({})",
+                        file_path.display(),
+                        page_type.extension()
+                    );
                     if let Some(template_str) = fs.read_to_string(&file_path)? {
-                        let page = Page::new(page_name, template_str);
+                        let page =
+                            Page::new(page_name.to_string(), template_str, TemplateType::Default);
                         let render_o = page.render(&liquid_parser, &all_objects);
                         if render_o.is_err() {
                             warn!("failed rendering {}", file_path.display());
@@ -283,8 +287,8 @@ impl Site {
                             render_dir = render_dir.join(parent_dir);
                             fs.create_dir_all(&render_dir)?;
                         }
-                        let render_name = file_name.replace(".liquid", ".html");
-                        let render_path = render_dir.join(render_name);
+                        let render_path =
+                            render_dir.join(format!("{}.{}", page_name, page_type.extension()));
                         debug!("write {}", render_path.display());
                         fs.write_str(&render_path, rendered)?;
                     } else {
