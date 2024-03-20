@@ -22,6 +22,8 @@ use events::{
 mod fields;
 pub use fields::FieldValue;
 use manifest::Manifest;
+mod object_entry;
+pub use object_entry::ObjectEntry;
 use site::Site;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -202,13 +204,13 @@ impl<F: FileSystemAPI> Archival<F> {
         Ok(())
     }
 
-    pub fn get_objects(&self) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
+    pub fn get_objects(&self) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
         self.fs_mutex.with_fs(|fs| self.site.get_objects(fs))
     }
     pub fn get_objects_sorted(
         &self,
         sort: impl Fn(&Object, &Object) -> Ordering,
-    ) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
+    ) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
         self.fs_mutex
             .with_fs(|fs| self.site.get_objects_sorted(fs, sort))
     }
@@ -315,9 +317,10 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        assert_eq!(archival.site.object_definitions.len(), 2);
+        assert_eq!(archival.site.object_definitions.len(), 3);
         assert!(archival.site.object_definitions.contains_key("section"));
         assert!(archival.site.object_definitions.contains_key("post"));
+        assert!(archival.site.object_definitions.contains_key("site"));
         archival.build()?;
         let dist_files = archival.dist_files();
         println!("dist_files: \n{}", dist_files.join("\n"));

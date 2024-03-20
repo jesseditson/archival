@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
+    cell::{RefCell, RefMut},
     cmp::Ordering,
     collections::{HashMap, HashSet},
     error::Error,
@@ -18,7 +18,7 @@ use crate::{
     page::{Page, TemplateType},
     read_toml::read_toml,
     tags::layout,
-    ArchivalError, FileSystemAPI,
+    ArchivalError, FileSystemAPI, ObjectEntry,
 };
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -96,7 +96,7 @@ impl Site {
     pub fn get_objects<T: FileSystemAPI>(
         &self,
         fs: &T,
-    ) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
+    ) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
         self.get_objects_sorted(fs, |a, b| get_order(a).partial_cmp(&get_order(b)).unwrap())
     }
 
@@ -118,44 +118,71 @@ impl Site {
         &self,
         fs: &T,
         sort: impl Fn(&Object, &Object) -> Ordering,
-    ) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
-        let mut all_objects: HashMap<String, Vec<Object>> = HashMap::new();
+    ) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
+        let mut all_objects: HashMap<String, ObjectEntry> = HashMap::new();
         let objects_dir = &self.manifest.objects_dir;
         for (object_name, object_def) in self.object_definitions.iter() {
-            let mut objects: Vec<Object> = Vec::new();
-            let object_files_dir = objects_dir.join(object_name);
-            if fs.is_dir(objects_dir)? {
-                for file in fs.walk_dir(&object_files_dir, false)? {
-                    if let Some(ext) = file.extension() {
-                        let path = object_files_dir.join(&file);
-                        let to_cache = if let Some(o) = self.obj_cache.borrow().get(&path) {
-                            objects.push(o.clone());
-                            None
-                        } else if ext == "toml" {
-                            info!("parsing {}", path.display());
-                            let obj_table = read_toml(&object_files_dir.join(&file), fs)?;
-                            let o = Object::from_table(
-                                object_def,
-                                file.with_extension("").as_path(),
-                                &obj_table,
-                            )?;
-                            objects.push(o.clone());
-                            Some(o)
-                        } else {
-                            None
-                        };
-                        if let Some(o) = to_cache {
-                            info!("cache {}", path.display());
-                            self.obj_cache.borrow_mut().insert(path, o);
-                        }
-                    }
+            let object_files_path = objects_dir.join(object_name);
+            let object_file_path = objects_dir.join(&format!("{}.toml", object_name));
+            let mut cache = self.obj_cache.borrow_mut();
+            if fs.is_dir(&object_files_path)? {
+                if fs.exists(&object_file_path)? {
+                    panic!(
+                        "Cannot define both {} and {}",
+                        object_files_path.to_string_lossy(),
+                        object_file_path.to_string_lossy()
+                    );
                 }
+                let mut objects: Vec<Object> = Vec::new();
+                for file in fs.walk_dir(&object_files_path, false)? {
+                    let path = object_files_path.join(&file);
+                    objects.push(self.object_for_path(&path, object_def, &mut cache, fs)?);
+                }
+                // Sort objects by order key
+                objects.sort_by(&sort);
+                all_objects.insert(object_name.clone(), ObjectEntry::from_vec(objects));
+            } else {
+                all_objects.insert(
+                    object_name.clone(),
+                    ObjectEntry::from_object(self.object_for_path(
+                        &object_file_path,
+                        object_def,
+                        &mut cache,
+                        fs,
+                    )?),
+                );
             }
-            // Sort objects by order key
-            objects.sort_by(&sort);
-            all_objects.insert(object_name.clone(), objects);
         }
         Ok(all_objects)
+    }
+
+    fn object_for_path<T: FileSystemAPI>(
+        &self,
+        path: &Path,
+        object_def: &ObjectDefinition,
+        cache: &mut RefMut<HashMap<PathBuf, Object>>,
+        fs: &T,
+    ) -> Result<Object, Box<dyn Error>> {
+        if path
+            .extension()
+            .map_or("", |e| e.to_str().map_or("", |o| o))
+            != "toml"
+        {
+            todo!()
+        }
+        if let Some(o) = cache.get(path) {
+            Ok(o.clone())
+        } else {
+            info!("parsing {}", path.display());
+            let obj_table = read_toml(path, fs)?;
+            let o = Object::from_table(
+                object_def,
+                Path::new(path.with_extension("").file_name().unwrap()),
+                &obj_table,
+            )?;
+            cache.insert(path.to_path_buf(), o.clone());
+            Ok(o)
+        }
     }
 
     pub fn build<T: FileSystemAPI>(&self, fs: &mut T) -> Result<(), Box<dyn Error>> {
@@ -226,7 +253,7 @@ impl Site {
                 let template_str = template_r?;
                 if let Some(template_str) = template_str {
                     if let Some(t_objects) = all_objects.get(name) {
-                        for object in t_objects {
+                        for object in t_objects.into_iter() {
                             info!("rendering {}", object.filename);
                             let page = Page::new_with_template(
                                 object.filename.clone(),

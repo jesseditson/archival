@@ -1,5 +1,6 @@
-use crate::{object::Object, object_definition::ObjectDefinition};
+use crate::{object::Object, object_definition::ObjectDefinition, ObjectEntry};
 use liquid::ValueView;
+use liquid_core::Value;
 use regex::Regex;
 use std::{collections::HashMap, error::Error, fmt};
 
@@ -113,12 +114,15 @@ impl<'a> Page<'a> {
     pub fn render(
         &self,
         parser: &liquid::Parser,
-        objects_map: &HashMap<String, Vec<Object>>,
+        objects_map: &HashMap<String, ObjectEntry>,
     ) -> Result<String, Box<dyn Error>> {
         tracing::debug!("rendering {}", self.name);
-        let mut objects: HashMap<String, Vec<liquid::model::Value>> = HashMap::new();
-        for (name, objs) in objects_map {
-            let values = objs.iter().map(|o| o.liquid_object()).collect();
+        let mut objects: HashMap<String, liquid::model::Value> = HashMap::new();
+        for (name, obj_entry) in objects_map {
+            let values = match obj_entry {
+                ObjectEntry::List(l) => Value::array(l.iter().map(|o| o.liquid_object())),
+                ObjectEntry::Object(o) => o.liquid_object(),
+            };
             objects.insert(name.to_string(), values);
         }
         let globals = liquid::object!({ "objects": objects, "page": self.name });
@@ -162,7 +166,7 @@ mod tests {
 
     use super::*;
 
-    fn get_objects_map() -> HashMap<String, Vec<Object>> {
+    fn get_objects_map() -> HashMap<String, ObjectEntry> {
         let tour_dates_objects = vec![HashMap::from([
             (
                 "date".to_string(),
@@ -217,8 +221,8 @@ mod tests {
         };
 
         HashMap::from([
-            ("artist".to_string(), vec![artist]),
-            ("c".to_string(), vec![c]),
+            ("artist".to_string(), ObjectEntry::from_vec(vec![artist])),
+            ("c".to_string(), ObjectEntry::from_vec(vec![c])),
         ])
     }
 
@@ -321,7 +325,7 @@ mod tests {
     fn template_page() -> Result<(), Box<dyn Error>> {
         let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
-        let object = objects_map["artist"].first().unwrap();
+        let object = objects_map["artist"].into_iter().next().unwrap();
         let artist_def = artist_definition();
         let page = Page::new_with_template(
             "tormenta-rey".to_string(),
