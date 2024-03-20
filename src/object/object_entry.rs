@@ -1,7 +1,7 @@
 use crate::object::Object;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ObjectEntry {
     List(Vec<Object>),
