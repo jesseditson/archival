@@ -1,13 +1,3 @@
-use serde::{Deserialize, Serialize};
-use std::{
-    cell::{RefCell, RefMut},
-    cmp::Ordering,
-    collections::{HashMap, HashSet},
-    error::Error,
-    path::{Path, PathBuf},
-};
-use tracing::{debug, info, warn};
-
 use crate::{
     check_compatibility,
     constants::MANIFEST_FILE_NAME,
@@ -20,6 +10,22 @@ use crate::{
     tags::layout,
     ArchivalError, FileSystemAPI,
 };
+use serde::{Deserialize, Serialize};
+use std::{
+    cell::{RefCell, RefMut},
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    error::Error,
+    path::{Path, PathBuf},
+};
+use thiserror::Error;
+use tracing::{debug, info, warn};
+
+#[derive(Error, Debug, Clone)]
+pub enum InvalidFileError {
+    #[error("unrecognized file type ({0})")]
+    UnrecognizedType(String),
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Site {
@@ -136,21 +142,21 @@ impl Site {
                 let mut objects: Vec<Object> = Vec::new();
                 for file in fs.walk_dir(&object_files_path, false)? {
                     let path = object_files_path.join(&file);
-                    objects.push(self.object_for_path(&path, object_def, &mut cache, fs)?);
+                    if let Ok(obj) = self.object_for_path(&path, object_def, &mut cache, fs) {
+                        objects.push(obj);
+                    } else {
+                        debug!("Invalid file {:?}", path);
+                    }
                 }
                 // Sort objects by order key
                 objects.sort_by(&sort);
                 all_objects.insert(object_name.clone(), ObjectEntry::from_vec(objects));
+            } else if let Ok(obj) =
+                self.object_for_path(&object_file_path, object_def, &mut cache, fs)
+            {
+                all_objects.insert(object_name.clone(), ObjectEntry::from_object(obj));
             } else {
-                all_objects.insert(
-                    object_name.clone(),
-                    ObjectEntry::from_object(self.object_for_path(
-                        &object_file_path,
-                        object_def,
-                        &mut cache,
-                        fs,
-                    )?),
-                );
+                warn!("failed parsing {:?}", object_file_path);
             }
         }
         Ok(all_objects)
@@ -168,7 +174,7 @@ impl Site {
             .map_or("", |e| e.to_str().map_or("", |o| o))
             != "toml"
         {
-            todo!()
+            return Err(InvalidFileError::UnrecognizedType(format!("{:?}", path)).into());
         }
         if let Some(o) = cache.get(path) {
             Ok(o.clone())
@@ -261,6 +267,7 @@ impl Site {
                                 object,
                                 template_str.to_owned(),
                                 TemplateType::Default,
+                                &template_path,
                             );
                             let render_o = page.render(&liquid_parser, &all_objects);
                             if render_o.is_err() {
@@ -302,8 +309,12 @@ impl Site {
                         page_type.extension()
                     );
                     if let Some(template_str) = fs.read_to_string(&file_path)? {
-                        let page =
-                            Page::new(page_name.to_string(), template_str, TemplateType::Default);
+                        let page = Page::new(
+                            page_name.to_string(),
+                            template_str,
+                            TemplateType::Default,
+                            &file_path,
+                        );
                         let render_o = page.render(&liquid_parser, &all_objects);
                         if render_o.is_err() {
                             warn!("failed rendering {}", file_path.display());
