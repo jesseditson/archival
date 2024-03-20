@@ -1,4 +1,3 @@
-use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
@@ -39,7 +38,8 @@ pub struct Manifest {
     pub cdn_url: String,
 }
 
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "binary", derive(clap::ValueEnum))]
 pub enum ManifestField {
     ArchivalVersion,
     SiteUrl,
