@@ -299,7 +299,11 @@ impl Site {
             if let Some(name) = rel_path.file_name() {
                 let file_name = name.to_string_lossy();
                 if let Some((page_name, page_type)) = TemplateType::parse_name(&file_name) {
-                    if template_pages.contains(&page_name) || partial_re.is_match(&file_name) {
+                    let template_path_str =
+                        rel_path.with_extension("").to_string_lossy().to_string();
+                    if template_pages.contains(&template_path_str[..])
+                        || partial_re.is_match(&file_name)
+                    {
                         // template pages are not rendered as pages
                         continue;
                     }
