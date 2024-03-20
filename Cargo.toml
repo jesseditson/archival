@@ -13,6 +13,7 @@ path = "src/lib.rs"
 
 [features]
 default = ["binary"]
+dhat-heap = ["dhat"]
 typescript = ["dep:typescript-type-def"]
 binary = [
     "stdlib-fs",
@@ -37,7 +38,15 @@ stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
 name = "archival"
 path = "src/main.rs"
 
+[profile.release]
+debug = true
+codegen-units = 1
+lto = false
+opt-level = "s"
+
 [dependencies]
+# profiling
+dhat = { version = "0.3.3", optional = true }
 # binary
 ctrlc = { version = "3.4.2", optional = true }
 tracing-subscriber = { version = "0.3.18", features = [
