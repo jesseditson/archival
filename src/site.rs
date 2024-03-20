@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use thiserror::Error;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, instrument, warn};
 
 #[derive(Error, Debug, Clone)]
 pub enum InvalidFileError {
@@ -64,6 +64,7 @@ fn get_order(obj: &Object) -> String {
 }
 
 impl Site {
+    #[instrument(skip(fs))]
     pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
         // Load our manifest (should it exist)
         let manifest = match Manifest::from_file(Path::new(MANIFEST_FILE_NAME), fs) {
@@ -99,6 +100,7 @@ impl Site {
         })
     }
 
+    #[instrument(skip(fs))]
     pub fn get_objects<T: FileSystemAPI>(
         &self,
         fs: &T,
@@ -106,11 +108,13 @@ impl Site {
         self.get_objects_sorted(fs, |a, b| get_order(a).partial_cmp(&get_order(b)).unwrap())
     }
 
+    #[instrument]
     pub fn invalidate_file(&self, file: &Path) {
         info!("invalidate {}", file.display());
         self.obj_cache.borrow_mut().remove(file);
     }
 
+    #[instrument(skip(fs, modify))]
     pub fn modify_manifest<T: FileSystemAPI>(
         &mut self,
         fs: &mut T,
@@ -120,6 +124,7 @@ impl Site {
         fs.write_str(Path::new(MANIFEST_FILE_NAME), self.manifest.to_toml()?)
     }
 
+    #[instrument(skip(fs, sort))]
     pub fn get_objects_sorted<T: FileSystemAPI>(
         &self,
         fs: &T,
@@ -162,6 +167,7 @@ impl Site {
         Ok(all_objects)
     }
 
+    #[instrument(skip(object_def, cache, fs))]
     fn object_for_path<T: FileSystemAPI>(
         &self,
         path: &Path,
@@ -191,6 +197,7 @@ impl Site {
         }
     }
 
+    #[instrument(skip(fs))]
     pub fn build<T: FileSystemAPI>(&self, fs: &mut T) -> Result<(), Box<dyn Error>> {
         let objects_dir = &self.manifest.objects_dir;
         let layout_dir = &self.manifest.layout_dir;

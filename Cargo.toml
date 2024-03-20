@@ -13,7 +13,8 @@ path = "src/lib.rs"
 
 [features]
 default = ["binary"]
-dhat-heap = ["dhat"]
+dhat-heap = ["dep:dhat"]
+gen-traces = ["binary", "dep:tracing-chrome"]
 typescript = ["dep:typescript-type-def"]
 binary = [
     "stdlib-fs",
@@ -47,6 +48,7 @@ opt-level = "s"
 [dependencies]
 # profiling
 dhat = { version = "0.3.3", optional = true }
+tracing-chrome = { version = "0.7.2", optional = true }
 # binary
 ctrlc = { version = "3.4.2", optional = true }
 tracing-subscriber = { version = "0.3.18", features = [
