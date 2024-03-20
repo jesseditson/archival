@@ -36,7 +36,7 @@ mod file_system_stdlib;
 #[cfg(feature = "binary")]
 mod server;
 use file_system_mutex::FileSystemMutex;
-use object::Object;
+use object::{Object, ObjectEntry};
 use semver::{Version, VersionReq};
 
 // Re-exports
@@ -202,13 +202,13 @@ impl<F: FileSystemAPI> Archival<F> {
         Ok(())
     }
 
-    pub fn get_objects(&self) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
+    pub fn get_objects(&self) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
         self.fs_mutex.with_fs(|fs| self.site.get_objects(fs))
     }
     pub fn get_objects_sorted(
         &self,
         sort: impl Fn(&Object, &Object) -> Ordering,
-    ) -> Result<HashMap<String, Vec<Object>>, Box<dyn Error>> {
+    ) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
         self.fs_mutex
             .with_fs(|fs| self.site.get_objects_sorted(fs, sort))
     }
@@ -315,9 +315,15 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        assert_eq!(archival.site.object_definitions.len(), 2);
+        assert_eq!(archival.site.object_definitions.len(), 3);
         assert!(archival.site.object_definitions.contains_key("section"));
         assert!(archival.site.object_definitions.contains_key("post"));
+        assert!(archival.site.object_definitions.contains_key("site"));
+        let objects = archival.get_objects()?;
+        let section_objs = objects.get("section").unwrap();
+        assert!(matches!(section_objs, ObjectEntry::List(_)));
+        let site_obj = objects.get("site").unwrap();
+        assert!(matches!(site_obj, ObjectEntry::Object(_)));
         archival.build()?;
         let dist_files = archival.dist_files();
         println!("dist_files: \n{}", dist_files.join("\n"));

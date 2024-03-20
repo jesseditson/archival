@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt::Debug, path::Path};
 use toml::Table;
 use tracing::warn;
+mod object_entry;
+pub use object_entry::ObjectEntry;
 
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
