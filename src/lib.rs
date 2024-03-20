@@ -321,6 +321,11 @@ mod lib {
         assert!(archival.site.object_definitions.contains_key("section"));
         assert!(archival.site.object_definitions.contains_key("post"));
         assert!(archival.site.object_definitions.contains_key("site"));
+        let objects = archival.get_objects()?;
+        let section_objs = objects.get("section").unwrap();
+        assert!(matches!(section_objs, ObjectEntry::List(_)));
+        let site_obj = objects.get("site").unwrap();
+        assert!(matches!(site_obj, ObjectEntry::Object(_)));
         archival.build()?;
         let dist_files = archival.dist_files();
         println!("dist_files: \n{}", dist_files.join("\n"));
