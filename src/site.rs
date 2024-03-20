@@ -1,7 +1,7 @@
 use crate::{
     check_compatibility,
     constants::MANIFEST_FILE_NAME,
-    liquid_parser::{self, partial_matcher},
+    liquid_parser::{self, PARTIAL_FILE_NAME_RE},
     manifest::Manifest,
     object::{Object, ObjectEntry},
     object_definition::{ObjectDefinition, ObjectDefinitions},
@@ -293,7 +293,6 @@ impl Site {
             .values()
             .flat_map(|object| object.template.as_deref())
             .collect();
-        let partial_re = partial_matcher();
         for rel_path in fs.walk_dir(pages_dir, false)? {
             let file_path = pages_dir.join(&rel_path);
             if let Some(name) = rel_path.file_name() {
@@ -302,7 +301,7 @@ impl Site {
                     let template_path_str =
                         rel_path.with_extension("").to_string_lossy().to_string();
                     if template_pages.contains(&template_path_str[..])
-                        || partial_re.is_match(&file_name)
+                        || PARTIAL_FILE_NAME_RE.is_match(&file_name)
                     {
                         // template pages are not rendered as pages
                         continue;

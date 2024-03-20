@@ -4,6 +4,7 @@ use crate::{
 };
 use liquid::{model::ScalarCow, ValueView};
 use liquid_core::Value;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::{
     collections::HashMap,
@@ -21,9 +22,8 @@ impl fmt::Display for InvalidPageError {
     }
 }
 
-fn template_file_name_re() -> Regex {
-    Regex::new(r"^(.+?)(\.\w+)?\.liquid").unwrap()
-}
+static TEMPLATE_FILE_NAME_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^(.+?)(\.\w+)?\.liquid").unwrap());
 
 #[derive(Default, Debug, Clone)]
 pub enum TemplateType {
@@ -50,8 +50,7 @@ impl TemplateType {
         }
     }
     pub fn parse_name(name: &str) -> Option<(&str, Self)> {
-        let re = template_file_name_re();
-        if let Some(m) = re.captures(name) {
+        if let Some(m) = TEMPLATE_FILE_NAME_RE.captures(name) {
             let name = m.get(1);
             let type_extension = m.get(2);
             let name = name?.as_str();
