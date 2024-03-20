@@ -31,9 +31,11 @@ mod binary {
             .with(fmt::layer())
             .with(EnvFilter::from_default_env());
         #[cfg(feature = "gen-traces")]
+        let console_layer = console_subscriber::spawn();
+        #[cfg(feature = "gen-traces")]
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();
         #[cfg(feature = "gen-traces")]
-        let ts = ts.with(chrome_layer);
+        let ts = ts.with(chrome_layer).with(console_layer);
         ts.init();
         let span = span!(Level::TRACE, "binary");
         let span_guard = span.enter();

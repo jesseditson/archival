@@ -14,7 +14,7 @@ path = "src/lib.rs"
 [features]
 default = ["binary"]
 dhat-heap = ["dep:dhat"]
-gen-traces = ["binary", "dep:tracing-chrome"]
+gen-traces = ["binary", "dep:tracing-chrome", "dep:console-subscriber"]
 typescript = ["dep:typescript-type-def"]
 binary = [
     "stdlib-fs",
@@ -45,10 +45,13 @@ codegen-units = 1
 lto = false
 opt-level = "s"
 
+build.rustflags = ["--cfg console_without_tokio_unstable"]
+
 [dependencies]
 # profiling
 dhat = { version = "0.3.3", optional = true }
 tracing-chrome = { version = "0.7.2", optional = true }
+console-subscriber = { version = "0.2.0", optional = true }
 # binary
 ctrlc = { version = "3.4.2", optional = true }
 tracing-subscriber = { version = "0.3.18", features = [
