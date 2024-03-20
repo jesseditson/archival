@@ -1,4 +1,7 @@
-use crate::{object::Object, object_definition::ObjectDefinition, ObjectEntry};
+use crate::{
+    object::{Object, ObjectEntry},
+    object_definition::ObjectDefinition,
+};
 use liquid::ValueView;
 use liquid_core::Value;
 use regex::Regex;

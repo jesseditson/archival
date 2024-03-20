@@ -22,8 +22,6 @@ use events::{
 mod fields;
 pub use fields::FieldValue;
 use manifest::Manifest;
-mod object_entry;
-pub use object_entry::ObjectEntry;
 use site::Site;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -38,7 +36,7 @@ mod file_system_stdlib;
 #[cfg(feature = "binary")]
 mod server;
 use file_system_mutex::FileSystemMutex;
-use object::Object;
+use object::{Object, ObjectEntry};
 use semver::{Version, VersionReq};
 
 // Re-exports

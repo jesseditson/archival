@@ -13,12 +13,12 @@ use crate::{
     constants::MANIFEST_FILE_NAME,
     liquid_parser::{self, partial_matcher},
     manifest::Manifest,
-    object::Object,
+    object::{Object, ObjectEntry},
     object_definition::{ObjectDefinition, ObjectDefinitions},
     page::{Page, TemplateType},
     read_toml::read_toml,
     tags::layout,
-    ArchivalError, FileSystemAPI, ObjectEntry,
+    ArchivalError, FileSystemAPI,
 };
 
 #[derive(Debug, Deserialize, Serialize)]
