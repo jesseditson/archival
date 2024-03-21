@@ -1,6 +1,7 @@
 use std::{error::Error, fmt::Display, path::Path};
 
 use toml::Table;
+use tracing::instrument;
 
 use crate::FileSystemAPI;
 
@@ -27,6 +28,7 @@ impl Display for TomlError {
 }
 impl Error for TomlError {}
 
+#[instrument(skip(fs))]
 pub fn read_toml(path: &Path, fs: &impl FileSystemAPI) -> Result<Table, Box<dyn Error>> {
     let toml = match fs.read_to_string(path) {
         Ok(c) => match c {

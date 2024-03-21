@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use thiserror::Error;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument, trace_span, warn};
 
 #[derive(Error, Debug, Clone)]
 pub enum InvalidFileError {
@@ -154,6 +154,7 @@ impl Site {
                     }
                 }
                 // Sort objects by order key
+                trace_span!("sort objects");
                 objects.sort_by(&sort);
                 all_objects.insert(object_name.clone(), ObjectEntry::from_vec(objects));
             } else if let Ok(obj) =

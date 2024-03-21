@@ -9,9 +9,9 @@ use liquid::{
     ObjectView, ValueView,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, error::Error, fmt::Debug, path::Path};
+use std::{error::Error, fmt::Debug, path::Path};
 use toml::Table;
-use tracing::warn;
+use tracing::{instrument, trace, warn};
 mod object_entry;
 pub use object_entry::ObjectEntry;
 
@@ -26,6 +26,7 @@ pub struct Object {
 }
 
 impl Object {
+    #[instrument(skip(definition, table))]
     pub fn values_from_table(
         file: &Path,
         table: &Table,
@@ -75,6 +76,7 @@ impl Object {
         Ok(values)
     }
 
+    #[instrument(skip(definition, table))]
     pub fn from_table(
         definition: &ObjectDefinition,
         file: &Path,

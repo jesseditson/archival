@@ -3,3 +3,8 @@
 
 # rust 
 target
+
+# profiling
+flamegraph.svg
+dhat-heap.json
+trace-*.json
