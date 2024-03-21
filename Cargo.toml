@@ -4,6 +4,7 @@ version = "0.4.10"
 edition = "2021"
 license = "Unlicense"
 description = "The simplest CMS in existence"
+repository = "https://github.com/jesseditson/archival"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
