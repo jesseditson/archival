@@ -40,7 +40,7 @@ name = "archival"
 path = "src/main.rs"
 
 [profile.release]
-debug = true
+# debug = true
 codegen-units = 1
 lto = false
 opt-level = "s"
