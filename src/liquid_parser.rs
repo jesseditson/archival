@@ -4,13 +4,12 @@ use liquid_core::{
     partials::{EagerCompiler, PartialSource},
     runtime, Language, Template,
 };
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::{borrow::Cow, collections::HashMap, error::Error, path::Path};
 use tracing::{debug, error};
 
-pub fn partial_matcher() -> Regex {
-    Regex::new(r"^_(.+)\.liquid").unwrap()
-}
+pub static PARTIAL_FILE_NAME_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^_(.+)\.liquid").unwrap());
 
 #[derive(Default, Debug, Clone)]
 struct ArchivalPartialSource {
@@ -40,10 +39,9 @@ impl ArchivalPartialSource {
             }
         }
         if let Some(path) = pages_path {
-            let partial_re = partial_matcher();
             for file in fs.walk_dir(path, false)? {
                 if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
-                    if partial_re.is_match(name) {
+                    if PARTIAL_FILE_NAME_RE.is_match(name) {
                         let (template_name, t) = TemplateType::parse_name(name).unwrap();
                         let template_name = &template_name[1..];
                         debug!("adding template {} ({})", template_name, t.extension());

@@ -1,17 +1,7 @@
-use serde::{Deserialize, Serialize};
-use std::{
-    cell::{RefCell, RefMut},
-    cmp::Ordering,
-    collections::{HashMap, HashSet},
-    error::Error,
-    path::{Path, PathBuf},
-};
-use tracing::{debug, info, warn};
-
 use crate::{
     check_compatibility,
     constants::MANIFEST_FILE_NAME,
-    liquid_parser::{self, partial_matcher},
+    liquid_parser::{self, PARTIAL_FILE_NAME_RE},
     manifest::Manifest,
     object::{Object, ObjectEntry},
     object_definition::{ObjectDefinition, ObjectDefinitions},
@@ -20,6 +10,22 @@ use crate::{
     tags::layout,
     ArchivalError, FileSystemAPI,
 };
+use serde::{Deserialize, Serialize};
+use std::{
+    cell::{RefCell, RefMut},
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    error::Error,
+    path::{Path, PathBuf},
+};
+use thiserror::Error;
+use tracing::{debug, info, instrument, trace_span, warn};
+
+#[derive(Error, Debug, Clone)]
+pub enum InvalidFileError {
+    #[error("unrecognized file type ({0})")]
+    UnrecognizedType(String),
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Site {
@@ -58,6 +64,7 @@ fn get_order(obj: &Object) -> String {
 }
 
 impl Site {
+    #[instrument(skip(fs))]
     pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
         // Load our manifest (should it exist)
         let manifest = match Manifest::from_file(Path::new(MANIFEST_FILE_NAME), fs) {
@@ -93,6 +100,7 @@ impl Site {
         })
     }
 
+    #[instrument(skip(fs))]
     pub fn get_objects<T: FileSystemAPI>(
         &self,
         fs: &T,
@@ -100,11 +108,13 @@ impl Site {
         self.get_objects_sorted(fs, |a, b| get_order(a).partial_cmp(&get_order(b)).unwrap())
     }
 
+    #[instrument]
     pub fn invalidate_file(&self, file: &Path) {
         info!("invalidate {}", file.display());
         self.obj_cache.borrow_mut().remove(file);
     }
 
+    #[instrument(skip(fs, modify))]
     pub fn modify_manifest<T: FileSystemAPI>(
         &mut self,
         fs: &mut T,
@@ -114,6 +124,7 @@ impl Site {
         fs.write_str(Path::new(MANIFEST_FILE_NAME), self.manifest.to_toml()?)
     }
 
+    #[instrument(skip(fs, sort))]
     pub fn get_objects_sorted<T: FileSystemAPI>(
         &self,
         fs: &T,
@@ -136,26 +147,28 @@ impl Site {
                 let mut objects: Vec<Object> = Vec::new();
                 for file in fs.walk_dir(&object_files_path, false)? {
                     let path = object_files_path.join(&file);
-                    objects.push(self.object_for_path(&path, object_def, &mut cache, fs)?);
+                    if let Ok(obj) = self.object_for_path(&path, object_def, &mut cache, fs) {
+                        objects.push(obj);
+                    } else {
+                        debug!("Invalid file {:?}", path);
+                    }
                 }
                 // Sort objects by order key
+                trace_span!("sort objects");
                 objects.sort_by(&sort);
                 all_objects.insert(object_name.clone(), ObjectEntry::from_vec(objects));
+            } else if let Ok(obj) =
+                self.object_for_path(&object_file_path, object_def, &mut cache, fs)
+            {
+                all_objects.insert(object_name.clone(), ObjectEntry::from_object(obj));
             } else {
-                all_objects.insert(
-                    object_name.clone(),
-                    ObjectEntry::from_object(self.object_for_path(
-                        &object_file_path,
-                        object_def,
-                        &mut cache,
-                        fs,
-                    )?),
-                );
+                warn!("failed parsing {:?}", object_file_path);
             }
         }
         Ok(all_objects)
     }
 
+    #[instrument(skip(object_def, cache, fs))]
     fn object_for_path<T: FileSystemAPI>(
         &self,
         path: &Path,
@@ -168,7 +181,7 @@ impl Site {
             .map_or("", |e| e.to_str().map_or("", |o| o))
             != "toml"
         {
-            todo!()
+            return Err(InvalidFileError::UnrecognizedType(format!("{:?}", path)).into());
         }
         if let Some(o) = cache.get(path) {
             Ok(o.clone())
@@ -185,6 +198,7 @@ impl Site {
         }
     }
 
+    #[instrument(skip(fs))]
     pub fn build<T: FileSystemAPI>(&self, fs: &mut T) -> Result<(), Box<dyn Error>> {
         let objects_dir = &self.manifest.objects_dir;
         let layout_dir = &self.manifest.layout_dir;
@@ -261,6 +275,7 @@ impl Site {
                                 object,
                                 template_str.to_owned(),
                                 TemplateType::Default,
+                                &template_path,
                             );
                             let render_o = page.render(&liquid_parser, &all_objects);
                             if render_o.is_err() {
@@ -286,13 +301,16 @@ impl Site {
             .values()
             .flat_map(|object| object.template.as_deref())
             .collect();
-        let partial_re = partial_matcher();
         for rel_path in fs.walk_dir(pages_dir, false)? {
             let file_path = pages_dir.join(&rel_path);
             if let Some(name) = rel_path.file_name() {
                 let file_name = name.to_string_lossy();
                 if let Some((page_name, page_type)) = TemplateType::parse_name(&file_name) {
-                    if template_pages.contains(&page_name) || partial_re.is_match(&file_name) {
+                    let template_path_str =
+                        rel_path.with_extension("").to_string_lossy().to_string();
+                    if template_pages.contains(&template_path_str[..])
+                        || PARTIAL_FILE_NAME_RE.is_match(&file_name)
+                    {
                         // template pages are not rendered as pages
                         continue;
                     }
@@ -302,8 +320,12 @@ impl Site {
                         page_type.extension()
                     );
                     if let Some(template_str) = fs.read_to_string(&file_path)? {
-                        let page =
-                            Page::new(page_name.to_string(), template_str, TemplateType::Default);
+                        let page = Page::new(
+                            page_name.to_string(),
+                            template_str,
+                            TemplateType::Default,
+                            &file_path,
+                        );
                         let render_o = page.render(&liquid_parser, &all_objects);
                         if render_o.is_err() {
                             warn!("failed rendering {}", file_path.display());

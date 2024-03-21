@@ -7,6 +7,7 @@ use liquid_core::ValueView;
 use liquid_core::{runtime::StackFrame, Runtime};
 use liquid_core::{Error, Result};
 use liquid_core::{ParseTag, TagReflection, TagTokenIter};
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::io::Write;
 
@@ -128,12 +129,13 @@ impl Renderable for Layout {
     }
 }
 
+static SNIP_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(&format!("{}(?<content>[\\s\\S]*)", SNIP_SENTINEL)).unwrap());
 pub fn post_process(mut rendered: String) -> String {
-    let snip_re = Regex::new(&format!("{}(?<content>[\\s\\S]*)", SNIP_SENTINEL)).unwrap();
-    if let Some(captured) = snip_re.captures(&rendered) {
+    if let Some(captured) = SNIP_RE.captures(&rendered) {
         rendered = rendered.replace(CONTENT_SENTINEL, &captured["content"]);
     }
-    snip_re.replace(&rendered, "").into()
+    SNIP_RE.replace(&rendered, "").into()
 }
 
 #[cfg(test)]

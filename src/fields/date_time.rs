@@ -1,5 +1,6 @@
 use super::InvalidFieldError;
 use liquid::model;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -15,6 +16,9 @@ pub struct DateTime {
     inner: Option<model::DateTime>,
     raw: String,
 }
+
+static YEAR_FIRST_FMT_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?<year>\d{4})[\/-](?<month>\d{2})[\/-](?<day>\d{2})").unwrap());
 
 impl DateTime {
     pub fn from(str: &str) -> Result<Self, InvalidFieldError> {
@@ -80,9 +84,7 @@ impl DateTime {
     // * `-HHMM`
     pub fn parse_date_string(mut date_str: String) -> Result<String, Box<dyn Error>> {
         // Legacy: support year-first formats:
-        let year_first_fmt =
-            Regex::new(r"(?<year>\d{4})[\/-](?<month>\d{2})[\/-](?<day>\d{2})").unwrap();
-        date_str = year_first_fmt
+        date_str = YEAR_FIRST_FMT_RE
             .replace(&date_str, "$month/$day/$year")
             .to_string();
         // Also pretty lazy: check if we're missing time and add it

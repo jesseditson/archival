@@ -9,6 +9,7 @@ use std::{
 };
 use thiserror::Error;
 use toml::Value;
+use tracing::instrument;
 
 use super::DateTime;
 
@@ -199,6 +200,7 @@ impl ValueView for FieldValue {
 }
 
 impl FieldValue {
+    #[instrument(skip(value))]
     pub fn from_toml(
         key: &String,
         field_type: &FieldType,

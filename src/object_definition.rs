@@ -1,10 +1,12 @@
 use crate::{
-    fields::{field_type::InvalidFieldError, FieldType},
+    fields::{field_type::InvalidFieldError, FieldType, ObjectValues},
     reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
+    FieldValue,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt::Debug};
 use toml::Table;
+use tracing::instrument;
 
 pub type ObjectDefinitions = HashMap<String, ObjectDefinition>;
 
@@ -63,6 +65,18 @@ impl ObjectDefinition {
             }
         }
         Ok(objects)
+    }
+
+    #[instrument(skip(self))]
+    pub fn empty_object(&self) -> ObjectValues {
+        let mut values: ObjectValues = HashMap::new();
+        for (field, def) in &self.fields {
+            values.insert(field.to_owned(), def.default_value());
+        }
+        for def in self.children.values() {
+            values.insert(def.name.to_owned(), FieldValue::Objects(vec![]));
+        }
+        values
     }
 }
 

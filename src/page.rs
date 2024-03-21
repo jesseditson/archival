@@ -2,10 +2,16 @@ use crate::{
     object::{Object, ObjectEntry},
     object_definition::ObjectDefinition,
 };
-use liquid::ValueView;
+use liquid::{model::ScalarCow, ValueView};
 use liquid_core::Value;
+use once_cell::sync::Lazy;
 use regex::Regex;
-use std::{collections::HashMap, error::Error, fmt};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone)]
 struct InvalidPageError;
@@ -16,9 +22,8 @@ impl fmt::Display for InvalidPageError {
     }
 }
 
-fn template_file_name_re() -> Regex {
-    Regex::new(r"^(.+?)(\.\w+)?\.liquid").unwrap()
-}
+static TEMPLATE_FILE_NAME_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^(.+?)(\.\w+)?\.liquid").unwrap());
 
 #[derive(Default, Debug, Clone)]
 pub enum TemplateType {
@@ -45,8 +50,7 @@ impl TemplateType {
         }
     }
     pub fn parse_name(name: &str) -> Option<(&str, Self)> {
-        let re = template_file_name_re();
-        if let Some(m) = re.captures(name) {
+        if let Some(m) = TEMPLATE_FILE_NAME_RE.captures(name) {
             let name = m.get(1);
             let type_extension = m.get(2);
             let name = name?.as_str();
@@ -77,6 +81,7 @@ pub struct PageTemplate<'a> {
     pub object: &'a Object,
     pub content: String,
     pub file_type: TemplateType,
+    pub debug_path: PathBuf,
 }
 
 pub struct Page<'a> {
@@ -84,6 +89,39 @@ pub struct Page<'a> {
     content: Option<String>,
     template: Option<PageTemplate<'a>>,
     file_type: TemplateType,
+    pub debug_path: Option<PathBuf>,
+}
+
+fn debug_context(object: &liquid::Object, lp: usize) -> String {
+    let mut debug_str = String::default();
+    fn to_str(val: &Value, lp: usize) -> String {
+        match val {
+            Value::Object(o) => debug_context(o, lp + 1),
+            Value::Array(a) => {
+                format!(
+                    "\n{}↘︎[{} items]{}\n{}⎼⎼⎼",
+                    "  ".repeat(lp),
+                    a.len(),
+                    if let Some(v) = a.first() {
+                        to_str(v, lp + 1)
+                    } else {
+                        "".to_string()
+                    },
+                    "  ".repeat(lp),
+                )
+            }
+            // Value::Nil => "nil".to_string(),
+            // Value::Scalar(s) => format!("{:?}", s.as_debug()),
+            _ => format!(": ({})", val.type_name()),
+        }
+    }
+    for k in object.keys() {
+        debug_str += &format!("\n{}⌗{}", "  ".repeat(lp), k);
+        let ev = liquid_core::Value::Scalar(ScalarCow::new("empty"));
+        let val = object.get(k).unwrap_or(&ev);
+        debug_str += &to_str(val, lp + 1);
+    }
+    debug_str
 }
 
 impl<'a> Page<'a> {
@@ -93,6 +131,7 @@ impl<'a> Page<'a> {
         object: &'a Object,
         content: String,
         file_type: TemplateType,
+        template_debug_path: &Path,
     ) -> Page<'a> {
         Page {
             name,
@@ -102,16 +141,24 @@ impl<'a> Page<'a> {
                 object,
                 content,
                 file_type: file_type.clone(),
+                debug_path: template_debug_path.to_path_buf(),
             }),
             file_type,
+            debug_path: None,
         }
     }
-    pub fn new(name: String, content: String, file_type: TemplateType) -> Page<'a> {
+    pub fn new(
+        name: String,
+        content: String,
+        file_type: TemplateType,
+        debug_path: &Path,
+    ) -> Page<'a> {
         Page {
             name,
             content: Some(content),
             template: None,
             file_type,
+            debug_path: Some(debug_path.to_path_buf()),
         }
     }
     pub fn render(
@@ -143,13 +190,26 @@ impl<'a> Page<'a> {
             let mut context = liquid::object!({
               template_info.definition.name.to_owned(): object_vals
             });
-            tracing::debug!("=== context (template): \n{}", toml::to_string(&context)?);
             context.extend(globals);
-            return Ok(template.render(&context)?);
+            return match template.render(&context) {
+                Ok(v) => Ok(v),
+                Err(error) => Err(error
+                    .trace(format!("{}", template_info.debug_path.to_string_lossy()))
+                    .trace(format!("context (template):{}", debug_context(&context, 0)))
+                    .into()),
+            };
         } else if let Some(content) = &self.content {
-            tracing::debug!("=== context (page): \n{:?}", toml::to_string(&globals)?);
             let template = parser.parse(content)?;
-            return Ok(template.render(&globals)?);
+            return match template.render(&globals) {
+                Ok(v) => Ok(v),
+                Err(error) => Err(error
+                    .trace(format!(
+                        "{}",
+                        self.debug_path.as_ref().unwrap().to_string_lossy()
+                    ))
+                    .trace(format!("context (page):{}", debug_context(&globals, 0)))
+                    .into()),
+            };
         }
         panic!("Pages must have either a template or a path");
     }
@@ -304,6 +364,7 @@ mod tests {
             "home".to_string(),
             page_content().to_string(),
             TemplateType::Default,
+            Path::new("objects/home.toml"),
         );
         let rendered = page.render(&liquid_parser, &objects_map)?;
         println!("rendered: {}", rendered);
@@ -336,6 +397,7 @@ mod tests {
             object,
             artist_template_content().to_string(),
             TemplateType::Default,
+            Path::new("objects/template.toml"),
         );
         let rendered = page.render(&liquid_parser, &objects_map)?;
         println!("rendered: {}", rendered);
