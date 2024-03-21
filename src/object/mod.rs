@@ -11,7 +11,7 @@ use liquid::{
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Debug, path::Path};
 use toml::Table;
-use tracing::{instrument, trace, warn};
+use tracing::{instrument, warn};
 mod object_entry;
 pub use object_entry::ObjectEntry;
 
@@ -32,7 +32,10 @@ impl Object {
         table: &Table,
         definition: &ObjectDefinition,
     ) -> Result<ObjectValues, Box<dyn Error>> {
-        let mut values: ObjectValues = HashMap::new();
+        // liquid-rust only supports strict parsing. This is reasonable but we
+        // also want to allow empty root keys, so we fill in defaults for any
+        // missing definition keys
+        let mut values = definition.empty_object();
         for (key, value) in table {
             if let Some(field_type) = definition.fields.get(&key.to_string()) {
                 // Primitive values
@@ -40,17 +43,22 @@ impl Object {
                 values.insert(key.to_string(), field_value);
             } else if let Some(child_def) = definition.children.get(&key.to_string()) {
                 // Children
-                let m_objects = value.as_array().ok_or(InvalidFieldError::NotAnArray {
-                    key: key.to_string(),
-                    value: value.to_string(),
-                })?;
+                let m_objects = value
+                    .as_array()
+                    .ok_or_else(|| InvalidFieldError::NotAnArray {
+                        key: key.to_string(),
+                        value: value.to_string(),
+                    })?;
                 let mut objects: Vec<ObjectValues> = Vec::new();
                 for (index, object) in m_objects.iter().enumerate() {
-                    let table = object.as_table().ok_or(InvalidFieldError::InvalidChild {
-                        key: key.to_owned(),
-                        index,
-                        child: value.to_string(),
-                    })?;
+                    let table =
+                        object
+                            .as_table()
+                            .ok_or_else(|| InvalidFieldError::InvalidChild {
+                                key: key.to_owned(),
+                                index,
+                                child: value.to_string(),
+                            })?;
                     let object = Object::values_from_table(file, table, child_def)?;
                     objects.push(object);
                 }
@@ -58,19 +66,6 @@ impl Object {
                 values.insert(key.to_string(), field_value);
             } else if !is_reserved_field(key) {
                 warn!("{}: unknown field {}", file.display(), key);
-            }
-        }
-        // liquid-rust only supports strict parsing. This is reasonable but we
-        // also want to allow empty root keys, so we fill in defaults for any
-        // missing definition keys
-        for (field, def) in &definition.fields {
-            if !values.contains_key(field) {
-                values.insert(field.to_owned(), def.default_value());
-            }
-        }
-        for (cd, def) in &definition.children {
-            if !values.contains_key(cd) {
-                values.insert(def.name.to_owned(), FieldValue::Objects(vec![]));
             }
         }
         Ok(values)
