@@ -300,6 +300,7 @@ mod lib {
     use std::error::Error;
 
     use crate::{
+        constants::CDN_URL,
         file_system::unpack_zip,
         test_utils::as_path_str,
         value_path::{ValuePath, ValuePathComponent},
@@ -337,6 +338,15 @@ mod lib {
         assert_eq!(dist_files.len(), 19);
         let guy = archival.dist_file(Path::new("img/guy.webp"));
         assert!(guy.is_some());
+        let post_html = archival
+            .fs_mutex
+            .with_fs(|fs| {
+                fs.read_to_string(&archival.site.manifest.build_dir.join("post/a-post.html"))
+            })?
+            .unwrap();
+        println!("{}", post_html);
+        assert!(post_html.contains(&format!("{}/{}", CDN_URL, "test-sha")));
+        assert!(post_html.contains("title=\"Test\""));
         Ok(())
     }
 

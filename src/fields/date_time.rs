@@ -22,8 +22,8 @@ static YEAR_FIRST_FMT_RE: Lazy<Regex> =
 
 impl DateTime {
     pub fn from(str: &str) -> Result<Self, InvalidFieldError> {
-        let liquid_date =
-            model::DateTime::from_str(str).ok_or(InvalidFieldError::InvalidDate(str.to_owned()))?;
+        let liquid_date = model::DateTime::from_str(str)
+            .ok_or_else(|| InvalidFieldError::InvalidDate(str.to_owned()))?;
         Ok(Self {
             inner: Some(liquid_date),
             raw: str.to_owned(),

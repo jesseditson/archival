@@ -1,3 +1,5 @@
+use super::file::File;
+use super::DateTime;
 use super::{FieldType, InvalidFieldError};
 use comrak::{markdown_to_html, ComrakOptions};
 use liquid::{model, ValueView};
@@ -10,8 +12,6 @@ use std::{
 use thiserror::Error;
 use toml::Value;
 use tracing::instrument;
-
-use super::DateTime;
 
 #[derive(Debug, Error)]
 pub enum FieldValueError {
@@ -31,6 +31,7 @@ pub enum FieldValue {
     #[cfg_attr(feature = "typescript", serde(skip))]
     Objects(Vec<ObjectValues>),
     Boolean(bool),
+    File(File),
 }
 fn err(f_type: &FieldType, value: String) -> FieldValueError {
     FieldValueError::InvalidValue(f_type.to_string(), value.to_owned())
@@ -40,24 +41,46 @@ impl FieldValue {
     pub fn val_with_type(f_type: &FieldType, value: String) -> Result<Self, Box<dyn Error>> {
         let t_val = toml::Value::try_from(&value)?;
         Ok(match f_type {
-            FieldType::Boolean => Self::Boolean(t_val.as_bool().ok_or(err(f_type, value))?),
-            FieldType::Markdown => {
-                Self::Markdown(t_val.as_str().ok_or(err(f_type, value))?.to_string())
-            }
+            FieldType::Boolean => Self::Boolean(t_val.as_bool().ok_or_else(|| err(f_type, value))?),
+            FieldType::Markdown => Self::Markdown(
+                t_val
+                    .as_str()
+                    .ok_or_else(|| err(f_type, value))?
+                    .to_string(),
+            ),
             FieldType::Number => Self::Number(
                 t_val.as_float().unwrap_or(
                     t_val
                         .as_integer()
-                        .ok_or(err(f_type, value))
+                        .ok_or_else(|| err(f_type, value))
                         .map(|v| v as f64)?,
                 ),
             ),
-            FieldType::String => {
-                Self::String(t_val.as_str().ok_or(err(f_type, value))?.to_string())
-            }
+            FieldType::String => Self::String(
+                t_val
+                    .as_str()
+                    .ok_or_else(|| err(f_type, value))?
+                    .to_string(),
+            ),
             FieldType::Date => Self::Date(DateTime::from_toml(
-                t_val.as_datetime().ok_or(err(f_type, value))?,
+                t_val.as_datetime().ok_or_else(|| err(f_type, value))?,
             )?),
+            FieldType::Image => {
+                let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
+                Self::File(File::image().fill_from_map(f_info))
+            }
+            FieldType::Video => {
+                let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
+                Self::File(File::video().fill_from_map(f_info))
+            }
+            FieldType::Audio => {
+                let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
+                Self::File(File::audio().fill_from_map(f_info))
+            }
+            FieldType::Upload => {
+                let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
+                Self::File(File::download().fill_from_map(f_info))
+            }
         })
     }
 
@@ -78,13 +101,7 @@ impl fmt::Display for FieldValue {
 
 impl From<&FieldType> for FieldValue {
     fn from(f_type: &FieldType) -> Self {
-        match f_type {
-            FieldType::Boolean => Self::Boolean(false),
-            FieldType::Markdown => Self::Markdown("".to_owned()),
-            FieldType::Number => Self::Number(0.0),
-            FieldType::String => Self::String("".to_owned()),
-            FieldType::Date => Self::Date(DateTime::now()),
-        }
+        f_type.default_value()
     }
 }
 
@@ -123,6 +140,7 @@ impl From<&FieldValue> for toml::Value {
                     })
                     .collect(),
             ),
+            FieldValue::File(f) => Self::Table(f.to_toml()),
         }
     }
 }
@@ -150,6 +168,7 @@ impl ValueView for FieldValue {
             FieldValue::Date(_) => "date",
             FieldValue::Objects(_) => "objects",
             FieldValue::Boolean(_) => "boolean",
+            FieldValue::File(_) => "file",
         }
     }
     /// Interpret as a string.
@@ -178,11 +197,18 @@ impl ValueView for FieldValue {
             ))),
             FieldValue::Boolean(b) => Some(model::ScalarCow::new(*b)),
             FieldValue::Objects(_) => None,
+            FieldValue::File(_f) => None,
         }
     }
     fn as_array(&self) -> Option<&dyn model::ArrayView> {
         match self {
             FieldValue::Objects(a) => Some(a),
+            _ => None,
+        }
+    }
+    fn as_object(&self) -> Option<&dyn model::ObjectView> {
+        match self {
+            FieldValue::File(f) => Some(f),
             _ => None,
         }
     }
@@ -195,6 +221,7 @@ impl ValueView for FieldValue {
             FieldValue::Date(_) => self.as_scalar().to_value(),
             FieldValue::Boolean(_) => self.as_scalar().to_value(),
             FieldValue::Objects(_) => self.as_array().to_value(),
+            FieldValue::File(_) => self.as_object().to_value(),
         }
     }
 }
@@ -210,7 +237,7 @@ impl FieldValue {
             FieldType::String => Ok(FieldValue::String(
                 value
                     .as_str()
-                    .ok_or(InvalidFieldError::TypeMismatch {
+                    .ok_or_else(|| InvalidFieldError::TypeMismatch {
                         field: key.to_owned(),
                         field_type: field_type.to_string(),
                         value: value.to_string(),
@@ -220,7 +247,7 @@ impl FieldValue {
             FieldType::Markdown => Ok(FieldValue::Markdown(
                 value
                     .as_str()
-                    .ok_or(InvalidFieldError::TypeMismatch {
+                    .ok_or_else(|| InvalidFieldError::TypeMismatch {
                         field: key.to_owned(),
                         field_type: field_type.to_string(),
                         value: value.to_string(),
@@ -241,26 +268,65 @@ impl FieldValue {
                 }?;
                 Ok(FieldValue::Number(number))
             }
-            FieldType::Boolean => Ok(FieldValue::Boolean(value.as_bool().ok_or(
+            FieldType::Boolean => Ok(FieldValue::Boolean(value.as_bool().ok_or_else(|| {
                 InvalidFieldError::TypeMismatch {
                     field: key.to_owned(),
                     field_type: field_type.to_string(),
                     value: value.to_string(),
-                },
-            )?)),
+                }
+            })?)),
             FieldType::Date => {
                 if let Value::Datetime(val) = value {
                     return Ok(FieldValue::Date(DateTime::from_toml(val)?));
                 }
-                let mut date_str = (value.as_str().ok_or(InvalidFieldError::TypeMismatch {
-                    field: key.to_owned(),
-                    field_type: field_type.to_string(),
-                    value: value.to_string(),
-                })?)
-                .to_string();
+                let mut date_str =
+                    (value
+                        .as_str()
+                        .ok_or_else(|| InvalidFieldError::TypeMismatch {
+                            field: key.to_owned(),
+                            field_type: field_type.to_string(),
+                            value: value.to_string(),
+                        })?)
+                    .to_string();
                 date_str = DateTime::parse_date_string(date_str)?;
                 Ok(FieldValue::Date(DateTime::from(&date_str)?))
             }
+            FieldType::Audio => Ok(FieldValue::File(
+                File::audio().fill_from_map(value.as_table().ok_or_else(|| {
+                    InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value: value.to_string(),
+                    }
+                })?),
+            )),
+            FieldType::Video => Ok(FieldValue::File(
+                File::video().fill_from_map(value.as_table().ok_or_else(|| {
+                    InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value: value.to_string(),
+                    }
+                })?),
+            )),
+            FieldType::Upload => Ok(FieldValue::File(
+                File::download().fill_from_map(value.as_table().ok_or_else(|| {
+                    InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value: value.to_string(),
+                    }
+                })?),
+            )),
+            FieldType::Image => Ok(FieldValue::File(
+                File::image().fill_from_map(value.as_table().ok_or_else(|| {
+                    InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value: value.to_string(),
+                    }
+                })?),
+            )),
         }
     }
 
@@ -272,6 +338,7 @@ impl FieldValue {
             FieldValue::Date(d) => d.as_datetime().to_rfc2822(),
             FieldValue::Boolean(b) => b.to_string(),
             FieldValue::Objects(o) => format!("{:?}", o),
+            FieldValue::File(f) => format!("{:?}", f.to_map(true)),
         }
     }
 }

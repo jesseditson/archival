@@ -93,6 +93,7 @@ dependencies = [
  "futures",
  "home",
  "indicatif",
+ "kstring",
  "liquid",
  "liquid-core",
  "liquid-lib",

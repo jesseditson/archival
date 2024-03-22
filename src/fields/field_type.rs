@@ -1,4 +1,4 @@
-use super::{DateTime, FieldValue};
+use super::{file::File, DateTime, FieldValue};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display};
 use thiserror::Error;
@@ -37,6 +37,10 @@ pub enum FieldType {
     Date,
     Markdown,
     Boolean,
+    Image,
+    Video,
+    Upload,
+    Audio,
 }
 
 impl FieldType {
@@ -47,6 +51,10 @@ impl FieldType {
             "date" => Ok(FieldType::Date),
             "markdown" => Ok(FieldType::Markdown),
             "boolean" => Ok(FieldType::Boolean),
+            "image" => Ok(FieldType::Image),
+            "video" => Ok(FieldType::Video),
+            "audio" => Ok(FieldType::Audio),
+            "upload" => Ok(FieldType::Upload),
             _ => Err(InvalidFieldError::UnrecognizedType(string.to_string())),
         }
     }
@@ -58,6 +66,10 @@ impl FieldType {
             Self::Date => "date",
             Self::Markdown => "markdown",
             Self::Boolean => "boolean",
+            Self::Image => "image",
+            Self::Video => "video",
+            Self::Audio => "audio",
+            Self::Upload => "upload",
         }
     }
 
@@ -68,6 +80,10 @@ impl FieldType {
             Self::Date => FieldValue::Date(DateTime::now()),
             Self::Markdown => FieldValue::Markdown("".to_string()),
             Self::Boolean => FieldValue::Boolean(false),
+            Self::Image => FieldValue::File(File::image()),
+            Self::Video => FieldValue::File(File::video()),
+            Self::Audio => FieldValue::File(File::audio()),
+            Self::Upload => FieldValue::File(File::download()),
         }
     }
 }

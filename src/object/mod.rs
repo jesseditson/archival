@@ -158,7 +158,10 @@ mod tests {
       [[tour_dates]]
       date = \"12/22/2022\"
       ticket_link = \"foo.com\"
-      
+    
+      [[videos]]
+      video = {sha = \"fake-sha\", name = \"Video Name\", filename = \"video.mp4\", mime = \"video/mpeg4\"}
+
       [[numbers]]
       number = 2.57"
     }
@@ -176,10 +179,11 @@ mod tests {
         assert_eq!(obj.order, 1);
         assert_eq!(obj.object_name, "artist");
         assert_eq!(obj.filename, "tormenta-rey");
-        assert_eq!(obj.values.len(), 3);
+        assert_eq!(obj.values.len(), 4);
         assert!(obj.values.get("name").is_some());
         assert!(obj.values.get("tour_dates").is_some());
         assert!(obj.values.get("numbers").is_some());
+        assert!(obj.values.get("videos").is_some());
         assert_eq!(
             obj.values.get("name"),
             Some(&FieldValue::String("Tormenta Rey".to_string()))
@@ -207,6 +211,23 @@ mod tests {
             let num = numbers.first().unwrap();
             assert!(num.contains_key("number"));
             assert_eq!(num.get("number").unwrap(), &FieldValue::Number(2.57));
+        }
+        let videos = obj.values.get("videos").unwrap();
+        assert!(matches!(videos, FieldValue::Objects { .. }));
+        if let FieldValue::Objects(videos) = videos {
+            assert_eq!(videos.len(), 1);
+            let video = videos.first().unwrap();
+            assert!(video.contains_key("video"));
+            let vf = video.get("video").unwrap();
+            assert!(matches!(vf, FieldValue::File(_)));
+            println!("{:?}", vf);
+            if let FieldValue::File(vf) = vf {
+                assert_eq!(vf.sha, "fake-sha");
+                assert_eq!(vf.name, Some("Video Name".to_string()));
+                assert_eq!(vf.filename, "video.mp4");
+                assert_eq!(vf.mime, "video/mpeg4");
+                assert_eq!(vf.url, "https://cdn.archival.dev/fake-sha");
+            }
         }
 
         Ok(())
