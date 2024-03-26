@@ -1,5 +1,6 @@
 use crate::constants::CDN_URL;
 use liquid::{ObjectView, ValueView};
+use mime_guess::MimeGuess;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display};
 use tracing::warn;
@@ -75,6 +76,17 @@ impl File {
             mime: mime.to_string(),
             display_type: display_type.to_string(),
         }
+    }
+    pub fn from_mime(mime: MimeGuess) -> Self {
+        let m_type = mime.first_or_octet_stream();
+        let mut f = match m_type.type_() {
+            mime_guess::mime::VIDEO => Self::video(),
+            mime_guess::mime::AUDIO => Self::audio(),
+            mime_guess::mime::IMAGE => Self::image(),
+            _ => Self::download(),
+        };
+        f.mime = m_type.to_string();
+        f
     }
     pub fn fill_from_map(mut self, map: &toml::map::Map<String, toml::Value>) -> Self {
         for (k, v) in map {

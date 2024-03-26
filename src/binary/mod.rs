@@ -1,6 +1,8 @@
 pub mod command;
+mod config;
 use self::command::{ExitStatus, COMMANDS};
 use clap::{arg, command, value_parser, Command};
+pub use config::ArchivalConfig;
 use std::{env, error::Error, fs, path::PathBuf};
 
 pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn Error>> {
@@ -10,7 +12,7 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn 
         let mut subcommand = command.cli(Command::new(command.name()));
         if command.has_path() {
             subcommand = subcommand.arg(
-                arg!([path] "an optional path to build")
+                arg!([site_path] "an optional path to the archival site, if not local")
                     .required(false)
                     .value_parser(value_parser!(PathBuf)),
             );
@@ -23,7 +25,7 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn 
         .find_map(|c| {
             if let Some(args) = matches.subcommand_matches(c.name()) {
                 let build_dir = if c.has_path() {
-                    if let Some(path) = args.get_one::<PathBuf>("path") {
+                    if let Some(path) = args.get_one::<PathBuf>("site_path") {
                         fs::canonicalize(build_dir.join(path)).unwrap()
                     } else {
                         build_dir.to_path_buf()

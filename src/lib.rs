@@ -22,6 +22,7 @@ use events::{
 mod fields;
 pub use fields::FieldValue;
 use manifest::Manifest;
+use ring::digest::{Context, SHA256};
 use site::Site;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -96,6 +97,10 @@ impl<F: FileSystemAPI> Archival<F> {
         let path = self.site.manifest.build_dir.join(path);
         self.fs_mutex.with_fs(|fs| fs.read(&path)).unwrap_or(None)
     }
+    pub fn object_exists(&self, obj_type: &str, filename: &str) -> Result<bool, Box<dyn Error>> {
+        self.fs_mutex
+            .with_fs(|fs| fs.exists(&self.object_path(obj_type, filename)))
+    }
     pub fn object_path(&self, obj_type: &str, filename: &str) -> PathBuf {
         self.site
             .manifest
@@ -105,6 +110,16 @@ impl<F: FileSystemAPI> Archival<F> {
     }
     pub fn object_file(&self, obj_type: &str, filename: &str) -> Result<String, Box<dyn Error>> {
         self.modify_object_file(obj_type, filename, |o| Ok(o))
+    }
+    pub fn sha_for_file(&self, file: &Path) -> Result<String, Box<dyn Error>> {
+        let file_data = self
+            .fs_mutex
+            .with_fs(|fs| fs.read(file))?
+            .ok_or_else(|| ArchivalError::new("failed generating sha"))?;
+        let mut context = Context::new(&SHA256);
+        context.update(&file_data[..]);
+        let digest = context.finish();
+        Ok(data_encoding::HEXLOWER.encode(digest.as_ref()))
     }
 
     pub fn write_file(
@@ -168,12 +183,7 @@ impl<F: FileSystemAPI> Archival<F> {
                 "object not found: {}",
                 event.object
             )))?;
-        let path = self
-            .site
-            .manifest
-            .objects_dir
-            .join(Path::new(&obj_def.name))
-            .join(Path::new(&format!("{}.toml", event.filename)));
+        let path = self.object_path(&obj_def.name, &event.filename);
         self.fs_mutex.with_fs(|fs| {
             let object = Object::from_def(obj_def, &event.filename, event.order)?;
             fs.write_str(&path, object.to_toml()?)
@@ -191,12 +201,7 @@ impl<F: FileSystemAPI> Archival<F> {
                 "object not found: {}",
                 event.object
             )))?;
-        let path = self
-            .site
-            .manifest
-            .objects_dir
-            .join(Path::new(&obj_def.name))
-            .join(Path::new(&format!("{}.toml", event.filename)));
+        let path = self.object_path(&obj_def.name, &event.filename);
         self.fs_mutex.with_fs(|fs| fs.delete(&path))?;
         self.site.invalidate_file(&path);
         Ok(())
