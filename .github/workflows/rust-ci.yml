@@ -32,7 +32,7 @@ jobs:
         run: cargo clippy --all-features --all-targets -- -D warnings
 
   test:
-    name: Binary Tests
+    name: Tests
     strategy:
       matrix:
         os: [
@@ -48,8 +48,8 @@ jobs:
       - run: cargo fetch
       - name: cargo test build
         run: cargo build --tests --release
-      - name: cargo test binary
-        run: ./test-bin.sh
+      - name: run tests
+        run: ./test.sh
 
   # msrv-check:
   #   name: Minimum Stable Rust Version Check
