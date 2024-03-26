@@ -6,10 +6,7 @@ use std::{
 };
 use toml::{Table, Value};
 
-use crate::{
-    constants::{CDN_URL, LAYOUT_DIR_NAME},
-    file_system::FileSystemAPI,
-};
+use crate::{constants::LAYOUT_DIR_NAME, file_system::FileSystemAPI};
 
 use super::constants::{
     BUILD_DIR_NAME, OBJECTS_DIR_NAME, OBJECT_DEFINITION_FILE_NAME, PAGES_DIR_NAME, STATIC_DIR_NAME,
@@ -29,13 +26,13 @@ pub struct Manifest {
     pub archival_version: Option<String>,
     pub prebuild: Vec<String>,
     pub site_url: Option<String>,
+    pub archival_site: Option<String>,
     pub object_definition_file: PathBuf,
     pub pages_dir: PathBuf,
     pub objects_dir: PathBuf,
     pub build_dir: PathBuf,
     pub static_dir: PathBuf,
     pub layout_dir: PathBuf,
-    pub cdn_url: String,
 }
 
 #[derive(Clone, Debug)]
@@ -43,12 +40,12 @@ pub struct Manifest {
 pub enum ManifestField {
     ArchivalVersion,
     SiteUrl,
+    ArchivalSite,
     ObjectsDir,
     PagesDir,
     BuildDir,
     StaticDir,
     LayoutDir,
-    CDNUrl,
 }
 
 impl fmt::Display for Manifest {
@@ -57,6 +54,7 @@ impl fmt::Display for Manifest {
             f,
             r#"
         archival_version: {}
+        archival_site: {}
         site_url: {}
         object file: {}
         objects: {}
@@ -68,6 +66,7 @@ impl fmt::Display for Manifest {
             self.archival_version
                 .as_ref()
                 .unwrap_or(&"unknown".to_owned()),
+            self.archival_site.as_ref().unwrap_or(&"none".to_owned()),
             self.site_url.as_ref().unwrap_or(&"none".to_owned()),
             self.object_definition_file.display(),
             self.objects_dir.display(),
@@ -85,13 +84,13 @@ impl Manifest {
             archival_version: None,
             prebuild: vec![],
             site_url: None,
+            archival_site: None,
             object_definition_file: root.join(OBJECT_DEFINITION_FILE_NAME),
             pages_dir: root.join(PAGES_DIR_NAME),
             objects_dir: root.join(OBJECTS_DIR_NAME),
             build_dir: root.join(BUILD_DIR_NAME),
             static_dir: root.join(STATIC_DIR_NAME),
             layout_dir: root.join(LAYOUT_DIR_NAME),
-            cdn_url: CDN_URL.to_string(),
         }
     }
     pub fn from_file(
@@ -113,6 +112,7 @@ impl Manifest {
                 "archival_version" => {
                     manifest.archival_version = value.as_str().map(|s| s.to_string())
                 }
+                "archival_site" => manifest.archival_site = value.as_str().map(|s| s.to_string()),
                 "site_url" => manifest.site_url = value.as_str().map(|s| s.to_string()),
                 "prebuild" => {
                     manifest.prebuild = value.as_array().map_or(vec![], |v| {
@@ -135,13 +135,13 @@ impl Manifest {
     pub fn field(&self, field: &ManifestField) -> Option<String> {
         match field {
             ManifestField::ArchivalVersion => self.archival_version.to_owned(),
+            ManifestField::ArchivalSite => self.archival_site.to_owned(),
             ManifestField::SiteUrl => self.site_url.to_owned(),
             ManifestField::ObjectsDir => Some(self.pages_dir.to_string_lossy().to_string()),
             ManifestField::PagesDir => Some(self.pages_dir.to_string_lossy().to_string()),
             ManifestField::BuildDir => Some(self.build_dir.to_string_lossy().to_string()),
             ManifestField::StaticDir => Some(self.static_dir.to_string_lossy().to_string()),
             ManifestField::LayoutDir => Some(self.layout_dir.to_string_lossy().to_string()),
-            ManifestField::CDNUrl => Some(self.cdn_url.to_owned()),
         }
     }
 

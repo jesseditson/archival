@@ -62,6 +62,17 @@ impl Display for ValuePath {
 }
 
 impl ValuePath {
+    pub fn from_string(string: &str) -> Self {
+        let mut vpv: Vec<ValuePathComponent> = vec![];
+        for part in string.split('.') {
+            match part.parse::<usize>() {
+                Ok(index) => vpv.push(ValuePathComponent::Index(index)),
+                Err(_) => vpv.push(ValuePathComponent::Key(part.to_string())),
+            }
+        }
+        Self { path: vpv }
+    }
+
     pub fn join(mut self, component: ValuePathComponent) -> Self {
         self.path.push(component);
         self

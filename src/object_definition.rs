@@ -92,6 +92,8 @@ pub mod tests {
         [artist.tour_dates]
         date = \"date\"
         ticket_link = \"string\"
+        [artist.videos]
+        video = \"video\"
         [artist.numbers]
         number = \"number\"
         
@@ -112,10 +114,11 @@ pub mod tests {
         assert!(defs.get("artist").is_some());
         assert!(defs.get("example").is_some());
         let artist = defs.get("artist").unwrap();
-        assert_eq!(artist.field_order.len(), 3);
+        assert_eq!(artist.field_order.len(), 4);
         assert_eq!(artist.field_order[0], "name".to_string());
         assert_eq!(artist.field_order[1], "tour_dates".to_string());
-        assert_eq!(artist.field_order[2], "numbers".to_string());
+        assert_eq!(artist.field_order[2], "videos".to_string());
+        assert_eq!(artist.field_order[3], "numbers".to_string());
         assert!(!artist.field_order.contains(&"template".to_string()));
         assert!(artist.fields.get("name").is_some());
         assert_eq!(artist.fields.get("name").unwrap(), &FieldType::String);
@@ -125,7 +128,7 @@ pub mod tests {
         );
         assert!(artist.template.is_some());
         assert_eq!(artist.template, Some("artist".to_string()));
-        assert_eq!(artist.children.len(), 2);
+        assert_eq!(artist.children.len(), 3);
         assert!(artist.children.get("tour_dates").is_some());
         assert!(artist.children.get("numbers").is_some());
         let tour_dates = artist.children.get("tour_dates").unwrap();
@@ -139,6 +142,9 @@ pub mod tests {
         let numbers = artist.children.get("numbers").unwrap();
         assert!(numbers.fields.get("number").is_some());
         assert_eq!(numbers.fields.get("number").unwrap(), &FieldType::Number);
+        let numbers = artist.children.get("videos").unwrap();
+        assert!(numbers.fields.get("video").is_some());
+        assert_eq!(numbers.fields.get("video").unwrap(), &FieldType::Video);
 
         let example = defs.get("example").unwrap();
         assert!(example.fields.get("content").is_some());

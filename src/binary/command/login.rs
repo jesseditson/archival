@@ -1,6 +1,6 @@
 use super::BinaryCommand;
 use crate::{
-    binary::ExitStatus,
+    binary::{ArchivalConfig, ExitStatus},
     constants::{AUTH_URL, CLI_TOKEN_PUBLIC_KEY},
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -27,10 +27,7 @@ impl BinaryCommand for Command {
         _build_dir: &Path,
         _args: &ArgMatches,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
-        let config_file = Path::join(
-            &home::home_dir().expect("unable to determine $HOME"),
-            ".archivalrc",
-        );
+        let config_file_path = ArchivalConfig::location();
         let secret_client_id = nanoid!(21);
         let public_key = RsaPublicKey::from_public_key_pem(CLI_TOKEN_PUBLIC_KEY)?;
         let mut rng = rand::thread_rng();
@@ -67,9 +64,14 @@ impl BinaryCommand for Command {
                 }
                 thread::sleep(Duration::from_millis(1000));
             }
-            let access_token = access_token.unwrap();
-            fs::write(config_file, format!("access_token={}", access_token))
-                .expect("failed writing config");
+            let config = if let Ok(Some(mut existing)) = ArchivalConfig::from_fs() {
+                existing.access_token = access_token;
+                existing
+            } else {
+                ArchivalConfig { access_token }
+            };
+            let config_str = toml::to_string(&config).unwrap();
+            fs::write(config_file_path, config_str.as_bytes()).expect("failed writing config");
             bar.finish();
         });
         handle.join().unwrap();

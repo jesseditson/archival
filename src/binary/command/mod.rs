@@ -6,6 +6,7 @@ mod login;
 mod manifest;
 mod prebuild;
 mod run;
+mod upload;
 
 pub enum ExitStatus {
     Error,
@@ -29,11 +30,12 @@ pub trait BinaryCommand {
     fn handler(&self, build_dir: &Path, args: &ArgMatches) -> Result<ExitStatus, Box<dyn Error>>;
 }
 
-pub const COMMANDS: [&dyn BinaryCommand; 6] = [
+pub const COMMANDS: [&dyn BinaryCommand; 7] = [
     &build::Command {},
     &run::Command {},
     &manifest::Command {},
     &prebuild::Command {},
     &login::Command {},
     &compat::Command {},
+    &upload::Command {},
 ];
