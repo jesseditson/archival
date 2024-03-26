@@ -11,7 +11,10 @@ use crate::{
 };
 use clap::{arg, value_parser, ArgMatches};
 use indicatif::{ProgressBar, ProgressStyle};
-use reqwest::header::{HeaderMap, AUTHORIZATION};
+use reqwest::{
+    header::{HeaderMap, AUTHORIZATION},
+    StatusCode,
+};
 use serde_json::json;
 use std::{
     fs,
@@ -155,32 +158,34 @@ impl BinaryCommand for Command {
         if !r.status().is_success() {
             return Err(UploadError::UploadFailed(r.text()?).into());
         }
-        let upload_r = r.json::<api_response::CreateUpload>()?;
-        // TODO: set a max chunk size and parallelize chunked uploads
-        let put_r = client
-            .put(&upload_url)
-            .query(&[
-                ("uploadId", &upload_r.upload_id),
-                ("partNumber", &"1".to_string()),
-            ])
-            .send()?;
-        if !put_r.status().is_success() {
-            return Err(UploadError::UploadFailed(put_r.text()?).into());
+        if !matches!(r.status(), StatusCode::CREATED) {
+            let upload_r = r.json::<api_response::CreateUpload>()?;
+            // TODO: set a max chunk size and parallelize chunked uploads
+            let put_r = client
+                .put(&upload_url)
+                .query(&[
+                    ("uploadId", &upload_r.upload_id),
+                    ("partNumber", &"1".to_string()),
+                ])
+                .send()?;
+            if !put_r.status().is_success() {
+                return Err(UploadError::UploadFailed(put_r.text()?).into());
+            }
+            let part = put_r.json::<api_response::UploadedPart>()?;
+            let r = client
+                .post(&upload_url)
+                .query(&[
+                    ("action", "mpu-complete"),
+                    ("uploadId", &upload_r.upload_id),
+                ])
+                .body(json!({ "parts": vec![part] }).to_string())
+                .send()?;
+            println!("status: {}", r.status());
+            if !r.status().is_success() {
+                return Err(UploadError::UploadFailed(r.text()?).into());
+            }
+            bar.finish();
         }
-        let part = put_r.json::<api_response::UploadedPart>()?;
-        let r = client
-            .post(&upload_url)
-            .query(&[
-                ("action", "mpu-complete"),
-                ("uploadId", &upload_r.upload_id),
-            ])
-            .body(json!({ "parts": vec![part] }).to_string())
-            .send()?;
-        println!("status: {}", r.status());
-        if !r.status().is_success() {
-            return Err(UploadError::UploadFailed(r.text()?).into());
-        }
-        bar.finish();
         // Now write our file
         archival.send_event(ArchivalEvent::EditField(EditFieldEvent {
             object: object_type,
