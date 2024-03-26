@@ -6,6 +6,10 @@ export type AddObjectEvent = {
     "filename": string;
     "order": I32;
 };
+export type DeleteObjectEvent = {
+    "object": string;
+    "filename": string;
+};
 export type Usize = number;
 export type ValuePathComponent = ({
     "Key": string;
@@ -16,32 +20,56 @@ export type ValuePath = {
     "path": (ValuePathComponent)[];
 };
 export type F64 = number;
-export type EditFieldValue = ({
+export type DateTime = {
+    "raw": string;
+};
+export type File = {
+    "sha": string;
+    "name": (string | null);
+    "filename": string;
+    "mime": string;
+    "display_type": string;
+    "url": string;
+};
+export type FieldValue = ({
     "String": string;
 } | {
     "Markdown": string;
 } | {
     "Number": F64;
 } | {
-    "Date": string;
+    "Date": DateTime;
 } | {
     "Boolean": boolean;
+} | {
+    "File": File;
 });
 export type EditFieldEvent = {
     "object": string;
     "filename": string;
     "path": ValuePath;
-    "value": EditFieldValue;
+    "value": FieldValue;
 };
 export type EditOrderEvent = {
     "object": string;
     "filename": string;
     "order": I32;
 };
+export type ChildEvent = {
+    "object": string;
+    "filename": string;
+    "path": ValuePath;
+};
 export type ArchivalEvent = ({
     "AddObject": AddObjectEvent;
+} | {
+    "DeleteObject": DeleteObjectEvent;
 } | {
     "EditField": EditFieldEvent;
 } | {
     "EditOrder": EditOrderEvent;
+} | {
+    "AddChild": ChildEvent;
+} | {
+    "RemoveChild": ChildEvent;
 });
