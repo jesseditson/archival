@@ -23,6 +23,7 @@ impl fmt::Display for InvalidManifestError {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Manifest {
+    root: PathBuf,
     pub archival_version: Option<String>,
     pub prebuild: Vec<String>,
     pub site_url: Option<String>,
@@ -42,10 +43,27 @@ pub enum ManifestField {
     SiteUrl,
     ArchivalSite,
     ObjectsDir,
+    Prebuild,
     PagesDir,
     BuildDir,
     StaticDir,
     LayoutDir,
+}
+
+impl ManifestField {
+    fn field_name(&self) -> &str {
+        match self {
+            ManifestField::ArchivalVersion => "archival_version",
+            ManifestField::ArchivalSite => "archival_site",
+            ManifestField::SiteUrl => "site_url",
+            ManifestField::ObjectsDir => "objects",
+            ManifestField::Prebuild => "prebuild",
+            ManifestField::PagesDir => "pages",
+            ManifestField::BuildDir => "build_dir",
+            ManifestField::StaticDir => "static_dir",
+            ManifestField::LayoutDir => "layout_dir",
+        }
+    }
 }
 
 impl fmt::Display for Manifest {
@@ -81,6 +99,7 @@ impl fmt::Display for Manifest {
 impl Manifest {
     pub fn default(root: &Path) -> Manifest {
         Manifest {
+            root: root.to_owned(),
             archival_version: None,
             prebuild: vec![],
             site_url: None,
@@ -91,6 +110,28 @@ impl Manifest {
             build_dir: root.join(BUILD_DIR_NAME),
             static_dir: root.join(STATIC_DIR_NAME),
             layout_dir: root.join(LAYOUT_DIR_NAME),
+        }
+    }
+    fn is_default(&self, field: &ManifestField) -> bool {
+        let str_value = self.field_as_string(field);
+        match field {
+            ManifestField::Prebuild => str_value == "[]",
+            ManifestField::ObjectsDir => {
+                str_value == self.root.join(OBJECTS_DIR_NAME).to_string_lossy()
+            }
+            ManifestField::PagesDir => {
+                str_value == self.root.join(PAGES_DIR_NAME).to_string_lossy()
+            }
+            ManifestField::BuildDir => {
+                str_value == self.root.join(BUILD_DIR_NAME).to_string_lossy()
+            }
+            ManifestField::StaticDir => {
+                str_value == self.root.join(STATIC_DIR_NAME).to_string_lossy()
+            }
+            ManifestField::LayoutDir => {
+                str_value == self.root.join(LAYOUT_DIR_NAME).to_string_lossy()
+            }
+            _ => str_value.is_empty(),
         }
     }
     pub fn from_file(
@@ -132,54 +173,76 @@ impl Manifest {
         Ok(manifest)
     }
 
-    pub fn field(&self, field: &ManifestField) -> Option<String> {
+    fn toml_field(&self, field: &ManifestField) -> Option<Value> {
         match field {
-            ManifestField::ArchivalVersion => self.archival_version.to_owned(),
-            ManifestField::ArchivalSite => self.archival_site.to_owned(),
-            ManifestField::SiteUrl => self.site_url.to_owned(),
-            ManifestField::ObjectsDir => Some(self.pages_dir.to_string_lossy().to_string()),
-            ManifestField::PagesDir => Some(self.pages_dir.to_string_lossy().to_string()),
-            ManifestField::BuildDir => Some(self.build_dir.to_string_lossy().to_string()),
-            ManifestField::StaticDir => Some(self.static_dir.to_string_lossy().to_string()),
-            ManifestField::LayoutDir => Some(self.layout_dir.to_string_lossy().to_string()),
+            ManifestField::ArchivalVersion => self.archival_version.to_owned().map(Value::String),
+            ManifestField::ArchivalSite => self.archival_site.to_owned().map(Value::String),
+            ManifestField::SiteUrl => self.site_url.to_owned().map(Value::String),
+            ManifestField::Prebuild => {
+                if self.prebuild.is_empty() {
+                    None
+                } else {
+                    Some(Value::Array(
+                        self.prebuild
+                            .iter()
+                            .map(|v| Value::String(v.to_string()))
+                            .collect(),
+                    ))
+                }
+            }
+            ManifestField::ObjectsDir => Some(Value::String(
+                self.objects_dir.to_string_lossy().to_string(),
+            )),
+            ManifestField::PagesDir => {
+                Some(Value::String(self.pages_dir.to_string_lossy().to_string()))
+            }
+            ManifestField::BuildDir => {
+                Some(Value::String(self.build_dir.to_string_lossy().to_string()))
+            }
+            ManifestField::StaticDir => {
+                Some(Value::String(self.static_dir.to_string_lossy().to_string()))
+            }
+            ManifestField::LayoutDir => {
+                Some(Value::String(self.layout_dir.to_string_lossy().to_string()))
+            }
         }
+    }
+
+    pub fn field_as_string(&self, field: &ManifestField) -> String {
+        match self.toml_field(field) {
+            Some(fv) => match fv {
+                Value::Array(a) => toml::to_string(&a).unwrap_or_default(),
+                Value::String(s) => s,
+                _ => panic!("unsupported manifest field type"),
+            },
+            None => String::default(),
+        }
+    }
+
+    fn durable_fields() -> Vec<ManifestField> {
+        vec![
+            ManifestField::ArchivalSite,
+            ManifestField::SiteUrl,
+            ManifestField::Prebuild,
+            ManifestField::ArchivalSite,
+            ManifestField::PagesDir,
+            ManifestField::ObjectsDir,
+            ManifestField::BuildDir,
+            ManifestField::StaticDir,
+            ManifestField::ObjectsDir,
+        ]
     }
 
     pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
         let mut write_obj = Table::new();
-        for key in [
-            "archival_version",
-            "site_url",
-            "object file",
-            "objects",
-            "pages",
-            "static_dir",
-            "layout_dir",
-            "build_dir",
-        ] {
-            let value = match key {
-                "archival_version" => self.field(&ManifestField::ArchivalVersion),
-                "site_url" => self.field(&ManifestField::SiteUrl),
-                "pages" => self.field(&ManifestField::PagesDir),
-                "objects" => self.field(&ManifestField::ObjectsDir),
-                "build_dir" => self.field(&ManifestField::BuildDir),
-                "static_dir" => self.field(&ManifestField::StaticDir),
-                "layout_dir" => self.field(&ManifestField::ObjectsDir),
-                _ => None,
-            };
-            if let Some(value) = value {
-                write_obj.insert(key.to_string(), Value::String(value));
+        for field in Self::durable_fields() {
+            let key = field.field_name();
+            if !self.is_default(&field) {
+                if let Some(value) = self.toml_field(&field) {
+                    write_obj.insert(key.to_string(), value);
+                }
             }
         }
-        write_obj.insert(
-            "prebuild".to_string(),
-            Value::Array(
-                self.prebuild
-                    .iter()
-                    .map(|v| Value::String(v.to_string()))
-                    .collect(),
-            ),
-        );
         toml::to_string_pretty(&write_obj)
     }
 

@@ -23,7 +23,7 @@ impl BinaryCommand for Command {
         let field = args.get_one::<ManifestField>("field").unwrap();
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let site = Site::load(&fs)?;
-        print!("{}", site.manifest.field(field).unwrap_or("".to_string()));
+        print!("{}", site.manifest.field_as_string(field));
         Ok(ExitStatus::Ok)
     }
 }

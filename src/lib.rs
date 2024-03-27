@@ -51,7 +51,7 @@ pub use object_definition::ObjectDefinition;
 
 pub static ARCHIVAL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const MIN_COMPAT_VERSION: &str = ">=0.4.1";
+const MIN_COMPAT_VERSION: &str = ">=0.5.0";
 pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
     let req = VersionReq::parse(MIN_COMPAT_VERSION).unwrap();
     match Version::parse(version_string) {
@@ -59,7 +59,7 @@ pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
             if req.matches(&version) {
                 (true, "passed compatibility check.".to_owned())
             } else {
-                (false, format!("version {} is incompatible with this version of archival (minimum required version {}).", version, MIN_COMPAT_VERSION))
+                (false, format!("site archival version {} is incompatible with this version of archival (minimum required version {}).", version, MIN_COMPAT_VERSION))
             }
         }
         Err(e) => (false, format!("invalid version {}: {}", version_string, e)),
@@ -553,6 +553,28 @@ mod lib {
         let rendered_links: Vec<_> = post_html.match_indices("<a href=").collect();
         println!("LINKS: {:?}", rendered_links);
         assert_eq!(rendered_links.len(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn modify_manifest() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let mut archival = Archival::new(fs)?;
+        archival.modify_manifest(|m| {
+            m.site_url = Some("test.com".to_string());
+            m.archival_site = Some("test".to_string());
+            m.prebuild = vec!["test".to_string()];
+        })?;
+        let output = archival.site.manifest.to_toml()?;
+        println!("{}", output);
+        assert!(output.contains("archival_site = \"test\""));
+        assert!(output.contains("site_url = \"test.com\""));
+        // Doesn't fill defaults
+        assert!(!output.contains("objects"));
+        // Does show non-defaults
+        assert!(output.contains("prebuild = [\"test\"]"));
         Ok(())
     }
 }
