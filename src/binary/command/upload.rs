@@ -161,12 +161,14 @@ impl BinaryCommand for Command {
         if !matches!(r.status(), StatusCode::CREATED) {
             let upload_r = r.json::<api_response::CreateUpload>()?;
             // TODO: set a max chunk size and parallelize chunked uploads
+            let data = fs::read(file_path)?;
             let put_r = client
                 .put(&upload_url)
                 .query(&[
                     ("uploadId", &upload_r.upload_id),
                     ("partNumber", &"1".to_string()),
                 ])
+                .body(data)
                 .send()?;
             if !put_r.status().is_success() {
                 return Err(UploadError::UploadFailed(put_r.text()?).into());
