@@ -5,5 +5,4 @@ mod file;
 pub use date_time::DateTime;
 pub use field_type::{FieldType, InvalidFieldError};
 pub use field_value::{FieldValue, ObjectValues};
-#[cfg(feature = "binary")]
 pub use file::File;

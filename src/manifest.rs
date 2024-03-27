@@ -22,7 +22,9 @@ impl fmt::Display for InvalidManifestError {
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Manifest {
+    #[serde(skip)]
     root: PathBuf,
     pub archival_version: Option<String>,
     pub prebuild: Vec<String>,

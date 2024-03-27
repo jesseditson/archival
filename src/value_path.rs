@@ -19,7 +19,7 @@ pub enum ValuePathError {
     InvalidRemovePath(String),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ValuePathComponent {
     Key(String),
@@ -41,7 +41,7 @@ impl Display for ValuePathComponent {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ValuePath {
     path: Vec<ValuePathComponent>,

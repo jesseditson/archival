@@ -19,7 +19,7 @@ mod value_path;
 use events::{
     AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
 };
-mod fields;
+pub mod fields;
 pub use fields::FieldValue;
 use manifest::Manifest;
 use sha2::{Digest, Sha256};
