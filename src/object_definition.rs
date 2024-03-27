@@ -4,6 +4,7 @@ use crate::{
     FieldValue,
 };
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use std::{collections::HashMap, error::Error, fmt::Debug};
 use toml::Table;
 use tracing::instrument;

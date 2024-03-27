@@ -1,6 +1,7 @@
 use super::{file::File, DateTime, FieldValue};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display};
+use std::str::FromStr;
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone)]
@@ -43,8 +44,9 @@ pub enum FieldType {
     Audio,
 }
 
-impl FieldType {
-    pub fn from_str(string: &str) -> Result<FieldType, InvalidFieldError> {
+impl FromStr for FieldType {
+    type Err = InvalidFieldError;
+    fn from_str(string: &str) -> Result<FieldType, InvalidFieldError> {
         match string {
             "string" => Ok(FieldType::String),
             "number" => Ok(FieldType::Number),
@@ -58,7 +60,9 @@ impl FieldType {
             _ => Err(InvalidFieldError::UnrecognizedType(string.to_string())),
         }
     }
+}
 
+impl FieldType {
     pub fn to_str(&self) -> &str {
         match self {
             Self::String => "string",
