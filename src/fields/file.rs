@@ -129,7 +129,7 @@ impl File {
             sha: "".to_string(),
             name: None,
             filename: "".to_string(),
-            mime: "image/*".to_string(),
+            mime: "video/*".to_string(),
             display_type: DisplayType::Video.to_string(),
         }
     }
@@ -139,7 +139,7 @@ impl File {
             sha: "".to_string(),
             name: None,
             filename: "".to_string(),
-            mime: "image/*".to_string(),
+            mime: "audio/*".to_string(),
             display_type: DisplayType::Audio.to_string(),
         }
     }
