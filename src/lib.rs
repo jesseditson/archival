@@ -351,7 +351,7 @@ mod lib {
             })?
             .unwrap();
         println!("{}", post_html);
-        assert!(post_html.contains("test://cdn-url/test-sha"));
+        assert!(post_html.contains("test://uploads-url/test-sha"));
         assert!(post_html.contains("title=\"Test\""));
         Ok(())
     }
