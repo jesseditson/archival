@@ -147,7 +147,9 @@ impl Object {
 
 #[cfg(test)]
 mod tests {
-    use crate::{fields::DateTime, object_definition::tests::artist_and_example_definition_str};
+    use crate::{
+        fields::DateTime, object_definition::tests::artist_and_example_definition_str, FieldConfig,
+    };
 
     use super::*;
 
@@ -226,7 +228,7 @@ mod tests {
                 assert_eq!(vf.name, Some("Video Name".to_string()));
                 assert_eq!(vf.filename, "video.mp4");
                 assert_eq!(vf.mime, "video/mpeg4");
-                assert_eq!(vf.url, "https://cdn.archival.dev/fake-sha");
+                assert_eq!(vf.url, format!("{}/fake-sha", FieldConfig::get().cdn_url));
             }
         }
 

@@ -1,4 +1,4 @@
-use crate::constants::CDN_URL;
+use crate::fields::FieldConfig;
 use liquid::{ObjectView, ValueView};
 use mime_guess::MimeGuess;
 use serde::{Deserialize, Serialize};
@@ -154,7 +154,8 @@ impl File {
         }
     }
     fn url(sha: &str) -> String {
-        format!("{}/{}", CDN_URL, sha)
+        let config = FieldConfig::get();
+        format!("{}/{}", config.cdn_url, sha)
     }
     pub fn to_map(&self, include_url: bool) -> HashMap<&str, &String> {
         let mut m = HashMap::new();
