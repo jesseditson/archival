@@ -8,7 +8,7 @@ use crate::{
     page::{Page, TemplateType},
     read_toml::read_toml,
     tags::layout,
-    ArchivalError, FileSystemAPI,
+    ArchivalError, FieldConfig, FileSystemAPI,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -98,6 +98,10 @@ impl Site {
             object_definitions: objects,
             obj_cache: RefCell::new(HashMap::new()),
         })
+    }
+
+    pub fn get_field_config(&self) -> FieldConfig {
+        FieldConfig::new(self.manifest.cdn_url.as_ref().map(|u| u.to_owned()))
     }
 
     #[instrument(skip(fs))]

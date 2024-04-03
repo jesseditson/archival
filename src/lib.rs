@@ -85,9 +85,9 @@ impl<F: FileSystemAPI> Archival<F> {
             Ok(true)
         }
     }
-    pub fn new(fs: F, field_config: FieldConfig) -> Result<Self, Box<dyn Error>> {
-        FieldConfig::set(field_config);
+    pub fn new(fs: F) -> Result<Self, Box<dyn Error>> {
         let site = Site::load(&fs)?;
+        FieldConfig::set(site.get_field_config());
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self { fs_mutex, site })
     }
@@ -307,7 +307,6 @@ mod lib {
     use std::error::Error;
 
     use crate::{
-        fields::FieldConfig,
         file_system::unpack_zip,
         test_utils::as_path_str,
         value_path::{ValuePath, ValuePathComponent},
@@ -316,19 +315,13 @@ mod lib {
 
     use super::*;
 
-    fn test_fc() -> FieldConfig {
-        FieldConfig {
-            cdn_url: "test://cdn",
-        }
-    }
-
     #[test]
     #[traced_test]
     fn load_and_build_site_from_zip() -> Result<(), Box<dyn Error>> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs, test_fc())?;
+        let archival = Archival::new(fs)?;
         assert_eq!(archival.site.object_definitions.len(), 3);
         assert!(archival.site.object_definitions.contains_key("section"));
         assert!(archival.site.object_definitions.contains_key("post"));
@@ -358,8 +351,7 @@ mod lib {
             })?
             .unwrap();
         println!("{}", post_html);
-        let cdn_url = test_fc().cdn_url;
-        assert!(post_html.contains(&format!("{}/{}", cdn_url, "test-sha")));
+        assert!(post_html.contains("test://cdn-url/test-sha"));
         assert!(post_html.contains("title=\"Test\""));
         Ok(())
     }
@@ -369,7 +361,7 @@ mod lib {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs, test_fc())?;
+        let archival = Archival::new(fs)?;
         archival.send_event(ArchivalEvent::AddObject(AddObjectEvent {
             object: "section".to_string(),
             filename: "my-section".to_string(),
@@ -402,7 +394,7 @@ mod lib {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs, test_fc())?;
+        let archival = Archival::new(fs)?;
         archival.send_event(ArchivalEvent::EditField(EditFieldEvent {
             object: "section".to_string(),
             filename: "first".to_string(),
@@ -424,7 +416,7 @@ mod lib {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs, test_fc())?;
+        let archival = Archival::new(fs)?;
         archival.send_event(ArchivalEvent::DeleteObject(DeleteObjectEvent {
             object: "section".to_string(),
             filename: "first".to_string(),
@@ -452,7 +444,7 @@ mod lib {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs, test_fc())?;
+        let archival = Archival::new(fs)?;
         archival.build()?;
         let index_html = archival
             .fs_mutex
@@ -484,7 +476,7 @@ mod lib {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs, test_fc())?;
+        let archival = Archival::new(fs)?;
         archival.build()?;
         let post_html = archival
             .fs_mutex
@@ -534,7 +526,7 @@ mod lib {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs, test_fc())?;
+        let archival = Archival::new(fs)?;
         archival.build()?;
         archival
             .send_event(ArchivalEvent::RemoveChild(ChildEvent {
@@ -570,7 +562,7 @@ mod lib {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let mut archival = Archival::new(fs, test_fc())?;
+        let mut archival = Archival::new(fs)?;
         archival.modify_manifest(|m| {
             m.site_url = Some("test.com".to_string());
             m.archival_site = Some("test".to_string());

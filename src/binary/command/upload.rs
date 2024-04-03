@@ -6,7 +6,7 @@ use crate::{
     fields::{FieldType, File},
     file_system_stdlib,
     object::ValuePath,
-    Archival, FieldConfig, FieldValue,
+    Archival, FieldValue,
 };
 use clap::{arg, value_parser, ArgMatches};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -103,7 +103,7 @@ impl BinaryCommand for Command {
         let field_path = ValuePath::from_string(field);
         // Set up an archival site to make sure we're able to modify fields
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
-        let archival = Archival::new(fs, FieldConfig::default())?;
+        let archival = Archival::new(fs)?;
         // Make sure we have a site
         let archival_site = archival
             .site
