@@ -101,7 +101,7 @@ impl Site {
     }
 
     pub fn get_field_config(&self) -> FieldConfig {
-        FieldConfig::new(self.manifest.cdn_url.as_ref().map(|u| u.to_owned()))
+        FieldConfig::new(self.manifest.uploads_url.as_ref().map(|u| u.to_owned()))
     }
 
     #[instrument(skip(fs))]

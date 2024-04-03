@@ -5,7 +5,7 @@ pub const OBJECTS_DIR_NAME: &str = "objects";
 pub const BUILD_DIR_NAME: &str = "dist";
 pub const STATIC_DIR_NAME: &str = "public";
 pub const LAYOUT_DIR_NAME: &str = "layout";
-pub const CDN_URL: &str = "https://cdn.archival.dev";
+pub const UPLOADS_URL: &str = "https://uploads.archival.dev";
 #[cfg(debug_assertions)]
 #[cfg(feature = "binary")]
 pub const API_URL: &str = "http://localhost:8777";

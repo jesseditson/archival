@@ -155,7 +155,7 @@ impl File {
     }
     fn url(sha: &str) -> String {
         let config = FieldConfig::get();
-        format!("{}/{}", config.cdn_url, sha)
+        format!("{}/{}", config.uploads_url, sha)
     }
     pub fn to_map(&self, include_url: bool) -> HashMap<&str, &String> {
         let mut m = HashMap::new();

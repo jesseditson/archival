@@ -9,27 +9,25 @@ pub use file::File;
 use once_cell::sync::Lazy;
 use std::sync::{Mutex, MutexGuard};
 
-use crate::constants::CDN_URL;
+use crate::constants::UPLOADS_URL;
 
 static CONFIG: Lazy<Mutex<FieldConfig>> = Lazy::new(|| Mutex::new(FieldConfig::default()));
 
 #[derive(Debug, Clone)]
 pub struct FieldConfig {
-    pub cdn_url: String,
+    pub uploads_url: String,
 }
 
 impl Default for FieldConfig {
     fn default() -> Self {
-        Self {
-            cdn_url: CDN_URL.to_string(),
-        }
+        Self::new(None)
     }
 }
 
 impl FieldConfig {
-    pub fn new(cdn_url: Option<String>) -> Self {
+    pub fn new(uploads_url: Option<String>) -> Self {
         Self {
-            cdn_url: cdn_url.unwrap_or_else(|| CDN_URL.to_owned()),
+            uploads_url: uploads_url.unwrap_or_else(|| UPLOADS_URL.to_owned()),
         }
     }
     pub fn get<'a>() -> MutexGuard<'a, FieldConfig> {

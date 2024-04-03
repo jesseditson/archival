@@ -228,7 +228,10 @@ mod tests {
                 assert_eq!(vf.name, Some("Video Name".to_string()));
                 assert_eq!(vf.filename, "video.mp4");
                 assert_eq!(vf.mime, "video/mpeg4");
-                assert_eq!(vf.url, format!("{}/fake-sha", FieldConfig::get().cdn_url));
+                assert_eq!(
+                    vf.url,
+                    format!("{}/fake-sha", FieldConfig::get().uploads_url)
+                );
             }
         }
 

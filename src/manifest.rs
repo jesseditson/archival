@@ -36,7 +36,7 @@ pub struct Manifest {
     pub build_dir: PathBuf,
     pub static_dir: PathBuf,
     pub layout_dir: PathBuf,
-    pub cdn_url: Option<String>,
+    pub uploads_url: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -66,7 +66,7 @@ impl ManifestField {
             ManifestField::BuildDir => "build_dir",
             ManifestField::StaticDir => "static_dir",
             ManifestField::LayoutDir => "layout_dir",
-            ManifestField::CdnUrl => "cdn_url",
+            ManifestField::CdnUrl => "uploads_url",
         }
     }
 }
@@ -79,7 +79,7 @@ impl fmt::Display for Manifest {
         archival_version: {}
         archival_site: {}
         site_url: {}
-        cdn_url: {}
+        uploads_url: {}
         object file: {}
         objects: {}
         pages: {}
@@ -92,9 +92,9 @@ impl fmt::Display for Manifest {
                 .unwrap_or(&"unknown".to_owned()),
             self.archival_site.as_ref().unwrap_or(&"none".to_owned()),
             self.site_url.as_ref().unwrap_or(&"none".to_owned()),
-            self.cdn_url
+            self.uploads_url
                 .as_ref()
-                .unwrap_or(&FieldConfig::get().cdn_url.to_string()),
+                .unwrap_or(&FieldConfig::get().uploads_url.to_string()),
             self.object_definition_file.display(),
             self.objects_dir.display(),
             self.pages_dir.display(),
@@ -112,7 +112,7 @@ impl Manifest {
             archival_version: None,
             prebuild: vec![],
             site_url: None,
-            cdn_url: None,
+            uploads_url: None,
             archival_site: None,
             object_definition_file: root.join(OBJECT_DEFINITION_FILE_NAME),
             pages_dir: root.join(PAGES_DIR_NAME),
@@ -164,7 +164,7 @@ impl Manifest {
                     manifest.archival_version = value.as_str().map(|s| s.to_string())
                 }
                 "archival_site" => manifest.archival_site = value.as_str().map(|s| s.to_string()),
-                "cdn_url" => manifest.cdn_url = value.as_str().map(|s| s.to_string()),
+                "uploads_url" => manifest.uploads_url = value.as_str().map(|s| s.to_string()),
                 "site_url" => manifest.site_url = value.as_str().map(|s| s.to_string()),
                 "prebuild" => {
                     manifest.prebuild = value.as_array().map_or(vec![], |v| {
@@ -189,7 +189,7 @@ impl Manifest {
             ManifestField::ArchivalVersion => self.archival_version.to_owned().map(Value::String),
             ManifestField::ArchivalSite => self.archival_site.to_owned().map(Value::String),
             ManifestField::SiteUrl => self.site_url.to_owned().map(Value::String),
-            ManifestField::CdnUrl => self.cdn_url.to_owned().map(Value::String),
+            ManifestField::CdnUrl => self.uploads_url.to_owned().map(Value::String),
             ManifestField::Prebuild => {
                 if self.prebuild.is_empty() {
                     None
