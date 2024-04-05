@@ -331,6 +331,20 @@ mod lib {
         assert!(matches!(section_objs, ObjectEntry::List(_)));
         let site_obj = objects.get("site").unwrap();
         assert!(matches!(site_obj, ObjectEntry::Object(_)));
+        let post_obj = objects.get("post").unwrap();
+        assert!(matches!(post_obj, ObjectEntry::List(_)));
+        let fp = post_obj.into_iter().next().unwrap();
+        let m = ValuePath::from_string("media.0.image")
+            .get_in_object(fp)
+            .unwrap();
+        assert!(matches!(m, FieldValue::File(_)));
+        if let FieldValue::File(img) = m {
+            assert_eq!(img.filename, "test.jpg");
+            assert_eq!(img.mime, "image/jpg");
+            assert_eq!(img.name, Some("Test".to_string()));
+            assert_eq!(img.sha, "test-sha");
+            assert_eq!(img.url, "test://uploads-url/test-sha");
+        }
         archival.build()?;
         let dist_files = archival.dist_files();
         println!("dist_files: \n{}", dist_files.join("\n"));
