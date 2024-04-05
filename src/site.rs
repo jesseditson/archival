@@ -263,7 +263,7 @@ impl Site {
         for (name, object_def) in self.object_definitions.iter() {
             if let Some(template) = &object_def.template {
                 let template_path = pages_dir.join(format!("{}.liquid", template));
-                info!("rendering template objects for {}", template_path.display());
+                debug!("rendering template objects for {}", template_path.display());
                 let template_r = fs.read_to_string(&template_path);
                 if template_r.is_err() {
                     warn!("failed rendering {}", template_path.display());
@@ -272,7 +272,7 @@ impl Site {
                 if let Some(template_str) = template_str {
                     if let Some(t_objects) = all_objects.get(name) {
                         for object in t_objects.into_iter() {
-                            info!("rendering {}", object.filename);
+                            debug!("rendering {}", object.filename);
                             let page = Page::new_with_template(
                                 object.filename.clone(),
                                 object_def,
