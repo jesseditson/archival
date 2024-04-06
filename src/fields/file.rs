@@ -1,8 +1,8 @@
 use crate::fields::FieldConfig;
 use liquid::{ObjectView, ValueView};
-use mime_guess::MimeGuess;
+use mime_guess::{get_mime_extensions, Mime, MimeGuess};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, str::FromStr};
 use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -69,7 +69,7 @@ impl File {
         display_type: DisplayType,
     ) -> Self {
         Self {
-            url: Self::url(sha),
+            url: Self::_url(sha, mime),
             sha: sha.to_string(),
             name: name.map(|n| n.to_string()),
             filename: filename.to_string(),
@@ -93,7 +93,7 @@ impl File {
             match &k[..] {
                 "sha" => {
                     self.sha = v.as_str().unwrap().into();
-                    self.url = Self::url(&self.sha);
+                    self.url = Self::_url(&self.sha, &self.mime);
                 }
                 "name" => self.name = Some(v.as_str().unwrap().into()),
                 "filename" => self.filename = v.as_str().unwrap().into(),
@@ -114,48 +114,68 @@ impl File {
         m
     }
     pub fn image() -> Self {
+        let mime = "image/*";
         Self {
-            url: Self::url(""),
+            url: Self::_url("", mime),
             sha: "".to_string(),
             name: None,
             filename: "".to_string(),
-            mime: "image/*".to_string(),
+            mime: mime.to_string(),
             display_type: DisplayType::Image.to_string(),
         }
     }
     pub fn video() -> Self {
+        let mime = "video/*";
         Self {
-            url: Self::url(""),
+            url: Self::_url("", mime),
             sha: "".to_string(),
             name: None,
             filename: "".to_string(),
-            mime: "video/*".to_string(),
+            mime: mime.to_string(),
             display_type: DisplayType::Video.to_string(),
         }
     }
     pub fn audio() -> Self {
+        let mime = "audio/*";
         Self {
-            url: Self::url(""),
+            url: Self::_url("", mime),
             sha: "".to_string(),
             name: None,
             filename: "".to_string(),
-            mime: "audio/*".to_string(),
+            mime: mime.to_string(),
             display_type: DisplayType::Audio.to_string(),
         }
     }
     pub fn download() -> Self {
+        let mime = "*/*";
         Self {
-            url: Self::url(""),
+            url: Self::_url("", mime),
             sha: "".to_string(),
             name: None,
             filename: "".to_string(),
-            mime: "*/*".to_string(),
+            mime: mime.to_string(),
             display_type: DisplayType::Download.to_string(),
         }
     }
-    fn url(sha: &str) -> String {
+    fn _url(sha: &str, mime: &str) -> String {
+        if sha.is_empty() {
+            return "".to_string();
+        }
         let config = FieldConfig::get();
-        format!("{}/{}", config.uploads_url, sha)
+        let mut ext = Cow::from("");
+        if let Ok(m) = Mime::from_str(mime) {
+            if m.subtype() != mime_guess::mime::STAR {
+                if let Some(exts) = get_mime_extensions(&m) {
+                    if !exts.is_empty() {
+                        ext = Cow::from(format!(".{}", exts.first().unwrap()))
+                    }
+                }
+            }
+        }
+        format!("{}/{}{}", config.uploads_url, sha, ext)
+    }
+    pub fn url(&self) -> String {
+        Self::_url(&self.sha, &self.mime)
     }
     pub fn to_map(&self, include_url: bool) -> HashMap<&str, &String> {
         let mut m = HashMap::new();
@@ -170,5 +190,45 @@ impl File {
             m.insert("url", &self.url);
         }
         m
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+
+    use super::*;
+
+    #[test]
+    fn files_have_urls_when_specific() {
+        let mut i = File::image();
+        i.mime = "image/jpeg".to_string();
+        let mut a = File::audio();
+        a.mime = "audio/ogg".to_string();
+        let mut d = File::download();
+        d.mime = "application/pdf".to_string();
+        let mut v = File::video();
+        v.mime = "video/mp4".to_string();
+        let one_of_each = [i, a, d, v];
+        for mut file in one_of_each {
+            file.sha = "fake-sha".to_string();
+            println!("{}", file.url());
+            assert!(!file.url().is_empty());
+            assert!(file.url().contains('.'));
+        }
+    }
+    #[test]
+    fn files_dont_have_urls_until_specific() {
+        let one_of_each = [
+            File::image(),
+            File::audio(),
+            File::download(),
+            File::video(),
+        ];
+        for mut file in one_of_each {
+            file.sha = "fake-sha".to_string();
+            println!("URL: {}", file.url());
+            assert!(!file.url().is_empty());
+            assert!(!file.url().contains('.'));
+        }
     }
 }
