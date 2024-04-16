@@ -309,7 +309,7 @@ impl Site {
             let file_path = pages_dir.join(&rel_path);
             if let Some(name) = rel_path.file_name() {
                 let file_name = name.to_string_lossy();
-                if let Some((page_name, page_type)) = TemplateType::parse_name(&file_name) {
+                if let Some((page_name, page_type)) = TemplateType::parse_path(&file_name) {
                     let template_path_str =
                         rel_path.with_extension("").to_string_lossy().to_string();
                     if template_pages.contains(&template_path_str[..])

@@ -27,7 +27,7 @@ impl ArchivalPartialSource {
         if let Some(path) = layout_path {
             for file in fs.walk_dir(path, false)? {
                 if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
-                    if let Some((template_name, t)) = TemplateType::parse_name(name) {
+                    if let Some((template_name, t)) = TemplateType::parse_path(name) {
                         debug!("adding layout {} ({})", template_name, t.extension());
                         if let Some(contents) = fs.read_to_string(&path.join(&file))? {
                             partials.insert(template_name.to_string(), contents);
@@ -42,11 +42,19 @@ impl ArchivalPartialSource {
             for file in fs.walk_dir(path, false)? {
                 if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
                     if PARTIAL_FILE_NAME_RE.is_match(name) {
-                        let (template_name, t) = TemplateType::parse_name(name).unwrap();
-                        let template_name = &template_name[1..];
-                        debug!("adding template {} ({})", template_name, t.extension());
+                        debug!("partial at path {:?}", file);
+                        let (partial_name, t) = TemplateType::parse_path(name).unwrap();
+                        // Remove underscore from beginning of name
+                        let partial_name = &partial_name[1..];
+                        // Prepend path to this file if needed
+                        let partial_name = if let Some(parent_dir) = file.parent() {
+                            parent_dir.join(partial_name).to_string_lossy().to_string()
+                        } else {
+                            partial_name.to_string()
+                        };
+                        debug!("adding partial {} ({})", partial_name, t.extension());
                         if let Some(contents) = fs.read_to_string(&path.join(&file))? {
-                            partials.insert(template_name.to_string(), contents);
+                            partials.insert(partial_name.to_string(), contents);
                         } else {
                             error!("Failed reading partial {}", file.display());
                         }

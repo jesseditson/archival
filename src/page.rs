@@ -49,7 +49,7 @@ impl TemplateType {
             r => Self::Unknown(r.to_string()),
         }
     }
-    pub fn parse_name(name: &str) -> Option<(&str, Self)> {
+    pub fn parse_path(name: &str) -> Option<(&str, Self)> {
         if let Some(m) = TEMPLATE_FILE_NAME_RE.captures(name) {
             let name = m.get(1);
             let type_extension = m.get(2);
