@@ -4,7 +4,7 @@ use crate::{
     ObjectDefinition,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -19,7 +19,7 @@ pub enum ValuePathError {
     InvalidRemovePath(String),
 }
 
-#[derive(Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ValuePathComponent {
     Key(String),
@@ -41,7 +41,7 @@ impl Display for ValuePathComponent {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ValuePath {
     path: Vec<ValuePathComponent>,
@@ -151,7 +151,7 @@ impl ValuePath {
     pub fn get_child_definition<'a>(
         &self,
         def: &'a ObjectDefinition,
-    ) -> Result<&'a HashMap<String, FieldType>, ValuePathError> {
+    ) -> Result<&'a ObjectDefinition, ValuePathError> {
         let mut last_val = def;
         for cmp in self.path.iter() {
             if let ValuePathComponent::Key(k) = cmp {
@@ -165,18 +165,19 @@ impl ValuePath {
                 format!("{:?}", def),
             ));
         }
-        Ok(&last_val.fields)
+        Ok(last_val)
     }
 
     pub fn add_child(
         &self,
         object: &mut Object,
         obj_def: &ObjectDefinition,
-    ) -> Result<(), ValuePathError> {
+    ) -> Result<usize, ValuePathError> {
         let child_def = self.get_child_definition(obj_def)?;
-        let new_child = field_value::def_to_values(child_def);
+        let new_child = field_value::def_to_values(&child_def.fields);
         self.modify_children(object, |children| {
             children.push(new_child);
+            children.len() - 1
         })
     }
 
@@ -189,11 +190,11 @@ impl ValuePath {
             Err(ValuePathError::InvalidRemovePath(self.to_string()))
         }
     }
-    fn modify_children(
+    fn modify_children<R>(
         &self,
         object: &mut Object,
-        modify: impl FnOnce(&mut Vec<ObjectValues>),
-    ) -> Result<(), ValuePathError> {
+        modify: impl FnOnce(&mut Vec<ObjectValues>) -> R,
+    ) -> Result<R, ValuePathError> {
         let mut i_path = self.path.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
@@ -228,14 +229,13 @@ impl ValuePath {
             ));
         }
         if let Some(FieldValue::Objects(children)) = last_val {
-            modify(children);
+            Ok(modify(children))
         } else {
-            return Err(ValuePathError::NotChildren(
+            Err(ValuePathError::NotChildren(
                 self.to_string(),
                 format!("{:?}", object),
-            ));
+            ))
         }
-        Ok(())
     }
 
     pub fn set_in_object(&self, object: &mut Object, value: FieldValue) {
@@ -277,5 +277,11 @@ impl ValuePath {
             }
             break;
         }
+    }
+}
+
+impl From<&str> for ValuePath {
+    fn from(value: &str) -> Self {
+        Self::from_string(value)
     }
 }

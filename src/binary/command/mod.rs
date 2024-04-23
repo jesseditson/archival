@@ -2,6 +2,7 @@ use clap::{ArgMatches, Command};
 use std::{error::Error, path::Path};
 mod build;
 mod compat;
+mod import;
 mod login;
 mod manifest;
 mod prebuild;
@@ -30,7 +31,7 @@ pub trait BinaryCommand {
     fn handler(&self, build_dir: &Path, args: &ArgMatches) -> Result<ExitStatus, Box<dyn Error>>;
 }
 
-pub const COMMANDS: [&dyn BinaryCommand; 7] = [
+pub const COMMANDS: [&dyn BinaryCommand; 8] = [
     &build::Command {},
     &run::Command {},
     &manifest::Command {},
@@ -38,4 +39,5 @@ pub const COMMANDS: [&dyn BinaryCommand; 7] = [
     &login::Command {},
     &compat::Command {},
     &upload::Command {},
+    &import::Command {},
 ];

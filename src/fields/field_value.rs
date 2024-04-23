@@ -227,6 +227,43 @@ impl ValueView for FieldValue {
 }
 
 impl FieldValue {
+    pub fn from_string(
+        key: &String,
+        field_type: &FieldType,
+        value: String,
+    ) -> Result<FieldValue, InvalidFieldError> {
+        match field_type {
+            FieldType::String => Ok(FieldValue::String(value)),
+            FieldType::Markdown => Ok(FieldValue::Markdown(value)),
+            FieldType::Number => Ok(FieldValue::Number(value.parse::<f64>().map_err(|_| {
+                InvalidFieldError::TypeMismatch {
+                    field: key.to_owned(),
+                    field_type: field_type.to_string(),
+                    value,
+                }
+            })?)),
+            FieldType::Boolean => Ok(FieldValue::Boolean(value.parse::<bool>().map_err(
+                |_| InvalidFieldError::TypeMismatch {
+                    field: key.to_owned(),
+                    field_type: field_type.to_string(),
+                    value,
+                },
+            )?)),
+            FieldType::Date => {
+                let date_str = DateTime::parse_date_string(value.to_string()).map_err(|_| {
+                    InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value,
+                    }
+                })?;
+                Ok(FieldValue::Date(DateTime::from(&date_str)?))
+            }
+            _ => Err(InvalidFieldError::UnsupportedStringValue(
+                field_type.to_string(),
+            )),
+        }
+    }
     #[instrument(skip(value))]
     pub fn from_toml(
         key: &String,

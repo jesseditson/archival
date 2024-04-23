@@ -109,7 +109,10 @@ impl Site {
         &self,
         fs: &T,
     ) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
-        self.get_objects_sorted(fs, |a, b| get_order(a).partial_cmp(&get_order(b)).unwrap())
+        self.get_objects_sorted(
+            fs,
+            Some(|a: &_, b: &_| get_order(a).partial_cmp(&get_order(b)).unwrap()),
+        )
     }
 
     #[instrument]
@@ -132,7 +135,7 @@ impl Site {
     pub fn get_objects_sorted<T: FileSystemAPI>(
         &self,
         fs: &T,
-        sort: impl Fn(&Object, &Object) -> Ordering,
+        sort: Option<impl Fn(&Object, &Object) -> Ordering>,
     ) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
         let mut all_objects: HashMap<String, ObjectEntry> = HashMap::new();
         let objects_dir = &self.manifest.objects_dir;
@@ -158,8 +161,10 @@ impl Site {
                     }
                 }
                 // Sort objects by order key
-                trace_span!("sort objects");
-                objects.sort_by(&sort);
+                if let Some(sort) = &sort {
+                    trace_span!("sort objects");
+                    objects.sort_by(sort);
+                }
                 all_objects.insert(object_name.clone(), ObjectEntry::from_vec(objects));
             } else if let Ok(obj) =
                 self.object_for_path(&object_file_path, object_def, &mut cache, fs)

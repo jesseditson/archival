@@ -16,6 +16,7 @@ mod tags;
 #[cfg(test)]
 mod test_utils;
 mod value_path;
+use events::ArchivalEventResponse;
 use events::{
     AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
 };
@@ -163,20 +164,24 @@ impl<F: FileSystemAPI> Archival<F> {
             Err(ArchivalError::new(&format!("no objects of type: {}", obj_type)).into())
         }
     }
-    pub fn send_event(&self, event: ArchivalEvent) -> Result<(), Box<dyn Error>> {
-        match event {
+    pub fn send_event(
+        &self,
+        event: ArchivalEvent,
+    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+        let r = match event {
             ArchivalEvent::AddObject(event) => self.add_object(event)?,
             ArchivalEvent::DeleteObject(event) => self.delete_object(event)?,
             ArchivalEvent::EditField(event) => self.edit_field(event)?,
             ArchivalEvent::EditOrder(event) => self.edit_order(event)?,
             ArchivalEvent::AddChild(event) => self.add_child(event)?,
             ArchivalEvent::RemoveChild(event) => self.remove_child(event)?,
-        }
+        };
         // After any event, rebuild
-        self.build()
+        self.build()?;
+        Ok(r)
     }
     // Internal
-    fn add_object(&self, event: AddObjectEvent) -> Result<(), Box<dyn Error>> {
+    fn add_object(&self, event: AddObjectEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let obj_def = self
             .site
             .object_definitions
@@ -191,10 +196,13 @@ impl<F: FileSystemAPI> Archival<F> {
             fs.write_str(&path, object.to_toml()?)
         })?;
         self.site.invalidate_file(&path);
-        Ok(())
+        Ok(ArchivalEventResponse::None)
     }
 
-    fn delete_object(&self, event: DeleteObjectEvent) -> Result<(), Box<dyn Error>> {
+    fn delete_object(
+        &self,
+        event: DeleteObjectEvent,
+    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let obj_def = self
             .site
             .object_definitions
@@ -206,7 +214,7 @@ impl<F: FileSystemAPI> Archival<F> {
         let path = self.object_path(&obj_def.name, &event.filename);
         self.fs_mutex.with_fs(|fs| fs.delete(&path))?;
         self.site.invalidate_file(&path);
-        Ok(())
+        Ok(ArchivalEventResponse::None)
     }
 
     pub fn get_objects(&self) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
@@ -217,25 +225,25 @@ impl<F: FileSystemAPI> Archival<F> {
         sort: impl Fn(&Object, &Object) -> Ordering,
     ) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
         self.fs_mutex
-            .with_fs(|fs| self.site.get_objects_sorted(fs, sort))
+            .with_fs(|fs| self.site.get_objects_sorted(fs, Some(sort)))
     }
 
-    fn edit_field(&self, event: EditFieldEvent) -> Result<(), Box<dyn Error>> {
+    fn edit_field(&self, event: EditFieldEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         self.write_object(&event.object, &event.filename, |existing| {
             event.path.set_in_object(existing, event.value);
             Ok(existing)
         })?;
-        Ok(())
+        Ok(ArchivalEventResponse::None)
     }
-    fn edit_order(&self, event: EditOrderEvent) -> Result<(), Box<dyn Error>> {
+    fn edit_order(&self, event: EditOrderEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         self.write_object(&event.object, &event.filename, |existing| {
             existing.order = event.order;
             Ok(existing)
         })?;
-        Ok(())
+        Ok(ArchivalEventResponse::None)
     }
 
-    fn add_child(&self, event: ChildEvent) -> Result<(), Box<dyn Error>> {
+    fn add_child(&self, event: ChildEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let obj_def = self
             .site
             .object_definitions
@@ -244,19 +252,20 @@ impl<F: FileSystemAPI> Archival<F> {
                 "object not found: {}",
                 event.object
             )))?;
-        self.write_object(&event.object, &event.filename, move |existing| {
-            event.path.add_child(existing, obj_def)?;
+        let mut added_idx = usize::MAX;
+        self.write_object(&event.object, &event.filename, |existing| {
+            added_idx = event.path.add_child(existing, obj_def)?;
             Ok(existing)
         })?;
-        Ok(())
+        Ok(ArchivalEventResponse::Index(added_idx))
     }
-    fn remove_child(&self, event: ChildEvent) -> Result<(), Box<dyn Error>> {
+    fn remove_child(&self, event: ChildEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         self.write_object(&event.object, &event.filename, move |existing| {
             let mut path = event.path;
             path.remove_child(existing)?;
             Ok(existing)
         })?;
-        Ok(())
+        Ok(ArchivalEventResponse::None)
     }
 
     fn write_object(
@@ -322,7 +331,7 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        assert_eq!(archival.site.object_definitions.len(), 3);
+        assert_eq!(archival.site.object_definitions.len(), 4);
         assert!(archival.site.object_definitions.contains_key("section"));
         assert!(archival.site.object_definitions.contains_key("post"));
         assert!(archival.site.object_definitions.contains_key("site"));
@@ -515,6 +524,20 @@ mod lib {
                 path: ValuePath::default().join(ValuePathComponent::key("links")),
             }))
             .unwrap();
+        let objects = archival.get_objects()?;
+        let posts = objects.get("post").unwrap();
+        let mut found = false;
+        for post in posts {
+            if post.filename == "a-post" {
+                found = true;
+                let links = ValuePath::from_string("links").get_in_object(post).unwrap();
+                assert!(matches!(links, FieldValue::Objects(_)));
+                if let FieldValue::Objects(links) = links {
+                    assert_eq!(links.len(), 2);
+                }
+            }
+        }
+        assert!(found);
         // Sending an event should result in an updated fs
         let post_html = archival
             .fs_mutex

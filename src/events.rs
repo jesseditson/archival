@@ -14,6 +14,12 @@ pub enum ArchivalEvent {
     AddChild(ChildEvent),
     RemoveChild(ChildEvent),
 }
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(TypeDef))]
+pub enum ArchivalEventResponse {
+    None,
+    Index(usize),
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]

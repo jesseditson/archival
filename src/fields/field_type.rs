@@ -28,6 +28,8 @@ pub enum InvalidFieldError {
     NotAnArray { key: String, value: String },
     #[error("cannot define an object with reserved name {0}")]
     ReservedObjectNameError(String),
+    #[error("cannot create type {0} from a string value")]
+    UnsupportedStringValue(String),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
