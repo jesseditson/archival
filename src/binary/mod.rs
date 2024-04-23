@@ -12,7 +12,7 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn 
         let mut subcommand = command.cli(Command::new(command.name()));
         if command.has_path() {
             subcommand = subcommand.arg(
-                arg!([site_path] "an optional path to the archival site, if not local")
+                arg!([site_path] "an optional path to the archival site. Otherwise will be auto-detected from cwd.")
                     .required(false)
                     .value_parser(value_parser!(PathBuf)),
             );

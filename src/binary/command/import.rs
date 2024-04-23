@@ -3,11 +3,13 @@ use crate::{
     binary::ExitStatus,
     events::{AddObjectEvent, ArchivalEvent, ArchivalEventResponse, ChildEvent, EditFieldEvent},
     file_system_stdlib,
-    object::ValuePath,
+    object::{ObjectEntry, ValuePath},
     value_path::ValuePathComponent,
     Archival, FieldValue, FileSystemAPI, ObjectDefinition,
 };
 use clap::{arg, value_parser, ArgMatches};
+use indicatif::{ProgressBar, ProgressStyle};
+use liquid::model::ArrayView;
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -24,8 +26,10 @@ pub enum ImportError {
     FormatOrFileRequired,
     #[error("no file extension or format provided")]
     NoExtension,
-    #[error("current archival manifest does not define archival_site")]
-    NoArchivalSite,
+    #[error("invalid object filename {0}")]
+    InvalidObjectFilename(PathBuf),
+    #[error("object {0} of type {1} does not exist. found {2:?}")]
+    ObjectNotExists(String, String, Option<Vec<String>>),
     #[error("invalid object path {0}")]
     InvalidObjectPath(PathBuf),
     #[error("invalid object type {0}")]
@@ -36,7 +40,7 @@ pub enum ImportError {
     NoChild,
     #[error("child type {0} not found in specified object type")]
     InvalidChild(String),
-    #[error("--name-field is required when batch importing objects")]
+    #[error("--name is required when batch importing objects")]
     MissingNameField,
     #[error("failed parsing file {0}")]
     ParseError(String),
@@ -53,7 +57,7 @@ pub struct FieldMap {
 }
 impl From<&str> for FieldMap {
     fn from(value: &str) -> Self {
-        let parts = value.split(' ');
+        let parts = value.split(':');
         let mut fm = Self {
             from: "".to_string(),
             to: "".to_string(),
@@ -147,29 +151,29 @@ impl BinaryCommand for Command {
     fn cli(&self, cmd: clap::Command) -> clap::Command {
         cmd.about("import data into archival site objects")
             .arg(
-                arg!([object] "the object file to import to (e.g. post/one.toml), or the object name if importing many objects.")
+                arg!([object] "The object type if generating objects, or an object file to import to (e.g. post/one.toml) if importing to a child list.")
                     .required(true)
                     .value_parser(value_parser!(PathBuf)),
             )
             .arg(
-                arg!([child] "If importing a list of objects, optionaly specify this to create a list of children rather than importing each data row as its own object.")
+                arg!([child] "If importing to a child list, this is the name of the children to import to.")
                     .required(false)
                     .value_parser(value_parser!(ValuePath)),
             )
             .arg(
-                arg!(-f --format <format> "The format of the source data. Inferred from the file extension if provided.")
+                arg!(-n --name <field_name> "If generating objects, the data field to use to generate object file names.")
+                    .value_parser(value_parser!(String)),
+            )
+            .arg(
+                arg!(-f --format <"csv|json"> "The format of the source data. Inferred from the file extension if importing from a file.")
                     .value_parser(value_parser!(ImportFormat)),
             )
             .arg(
-                arg!(-n --name <name> "If generating objects, the data field to use to generate object file names.")
+                arg!(-m --map <"from:to"> ... "map a source field name to a destination field name.")
                     .value_parser(value_parser!(FieldMap)),
             )
-            // .arg(
-            //     arg!(-m --map <from> <to> ... "map a source field name to a destination field name.")
-            //         .value_parser(value_parser!(FieldMap)),
-            // )
             .arg(
-                arg!([file] "The file containing data to import.")
+                arg!([file] "The file containing data to import. If not provided, will read from stdout (and --format is required).")
                     .value_parser(value_parser!(PathBuf)),
             )
     }
@@ -204,7 +208,7 @@ impl BinaryCommand for Command {
             let object_name = object
                 .with_extension("")
                 .file_name()
-                .ok_or_else(|| ImportError::InvalidObjectPath(object.to_owned()))?
+                .ok_or_else(|| ImportError::InvalidObjectFilename(object.to_owned()))?
                 .to_string_lossy()
                 .to_string();
             let object_type = object
@@ -219,13 +223,6 @@ impl BinaryCommand for Command {
         // Set up an archival site to make sure we're able to modify fields
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let archival = Archival::new(fs)?;
-        // Make sure we have a site
-        let _archival_site = archival
-            .site
-            .manifest
-            .archival_site
-            .as_ref()
-            .ok_or(ImportError::NoArchivalSite)?;
         // Find the specified object definition
         let obj_def = archival
             .site
@@ -243,12 +240,20 @@ impl BinaryCommand for Command {
         } else {
             None
         };
-        let name_field = args.get_one::<String>("name-field");
+        let name_field = args.get_one::<String>("name");
         let import_name = if let Some(object_name) = object_name {
-            // If provided, make sure that the specified object does not already
-            // exist, and that we were also given a child name
-            if archival.object_exists(&object_type, &object_name)? {
-                return Err(ImportError::InvalidObjectPath(object.to_owned()).into());
+            // If provided, make sure that the specified object exists, and that
+            // we were also given a child name
+            if !archival.object_exists(&object_type, &object_name)? {
+                return Err(ImportError::ObjectNotExists(
+                    object_name.to_string(),
+                    object_type.to_string(),
+                    archival.get_objects()?.get(&object_type).map(|o| match o {
+                        ObjectEntry::List(l) => l.iter().map(|o| o.filename.to_owned()).collect(),
+                        ObjectEntry::Object(o) => vec![o.filename.to_owned()],
+                    }),
+                )
+                .into());
             }
             if child_name.is_none() {
                 return Err(ImportError::NoChild.into());
@@ -266,6 +271,13 @@ impl BinaryCommand for Command {
                 return Err(ImportError::MissingNameField.into());
             }
         };
+        let field_map_args = args.get_many::<FieldMap>("map");
+        let mut field_map = HashMap::new();
+        if let Some(fm) = field_map_args {
+            for fm in fm {
+                field_map.insert(fm.to.to_owned(), fm.from.to_owned());
+            }
+        }
         let mapped_type = if let Some(child_def) = child_def {
             child_def
         } else {
@@ -276,10 +288,13 @@ impl BinaryCommand for Command {
         } else {
             todo!("stdin reading not implemented yet")
         };
+        let bar = ProgressBar::new_spinner();
+        bar.set_style(ProgressStyle::with_template("{msg} {spinner}").unwrap());
         let mut reader = BufReader::new(f);
         Command::parse(
             &mut reader,
             &object_type,
+            field_map,
             import_name,
             if let Some(child_name) = child_name {
                 child_name.to_owned()
@@ -289,6 +304,11 @@ impl BinaryCommand for Command {
             mapped_type,
             &file_format,
             &archival,
+            |msg, p, t| {
+                bar.set_message(msg.to_string());
+                bar.set_length(t);
+                bar.set_position(p);
+            },
         )?;
         Ok(ExitStatus::Ok)
     }
@@ -301,32 +321,45 @@ enum ImportName {
 }
 
 impl Command {
+    #[allow(clippy::too_many_arguments)]
     fn parse<R: Read, F: FileSystemAPI>(
         reader: &mut BufReader<R>,
         object: &str,
+        field_map: HashMap<String, String>,
         import_name: ImportName,
         root_path: ValuePath,
         mapped_type: &ObjectDefinition,
         file_format: &ImportFormat,
         archival: &Archival<F>,
+        progress: impl Fn(&str, u64, u64),
     ) -> Result<(), ImportError> {
         // Generate a list of rows from our input data
+        progress("parsing file...", 0, 0);
         let parsed = file_format.parse(reader)?;
         if let ImportName::Field(f) = &import_name {
+            progress("creating object...", 0, 0);
             archival
-                .send_event(ArchivalEvent::AddObject(AddObjectEvent {
+                .send_event_no_rebuild(ArchivalEvent::AddObject(AddObjectEvent {
                     object: object.to_string(),
                     filename: f.to_string(),
                     order: 0,
                 }))
                 .map_err(|e| ImportError::WriteError(e.to_string()))?;
         }
+        let mut idx = 0;
+        let total = parsed.size();
         for row in parsed {
+            idx += 1;
+            progress(
+                &format!("importing {} of {} rows...", idx, total),
+                idx as u64,
+                total as u64,
+            );
             let mut current_path = root_path.clone();
             let filename = match &import_name {
                 ImportName::File(f) => {
                     let r = archival
-                        .send_event(ArchivalEvent::AddChild(ChildEvent {
+                        .send_event_no_rebuild(ArchivalEvent::AddChild(ChildEvent {
                             object: object.to_string(),
                             filename: f.to_string(),
                             path: current_path.to_owned(),
@@ -345,7 +378,7 @@ impl Command {
                         .ok_or(ImportError::MissingName(f.to_owned(), row.clone()))
                         .map(|s| s.split_whitespace().collect::<Vec<_>>().join("-"))?;
                     archival
-                        .send_event(ArchivalEvent::AddObject(AddObjectEvent {
+                        .send_event_no_rebuild(ArchivalEvent::AddObject(AddObjectEvent {
                             object: object.to_string(),
                             filename: file_name.to_string(),
                             order: 0,
@@ -355,7 +388,12 @@ impl Command {
                 }
             };
             for (name, field_type) in &mapped_type.fields {
-                if let Some(value) = row.get(name) {
+                let from_name = if let Some(mapped) = field_map.get(name) {
+                    mapped
+                } else {
+                    name
+                };
+                if let Some(value) = row.get(from_name) {
                     let field_path = current_path
                         .clone()
                         .join(ValuePathComponent::Key(name.to_string()));
@@ -363,7 +401,7 @@ impl Command {
                     let value = FieldValue::from_string(name, field_type, value.to_string())
                         .map_err(|e| ImportError::ParseError(e.to_string()))?;
                     archival
-                        .send_event(ArchivalEvent::EditField(EditFieldEvent {
+                        .send_event_no_rebuild(ArchivalEvent::EditField(EditFieldEvent {
                             object: object.to_string(),
                             filename: filename.to_string(),
                             path: field_path,
@@ -371,7 +409,7 @@ impl Command {
                         }))
                         .map_err(|e| ImportError::WriteError(e.to_string()))?;
                 } else {
-                    println!("field '{}' not found in row: {:?}", name, row);
+                    println!("field '{}' not found in row: {:?}", from_name, row);
                 }
             }
         }
@@ -386,6 +424,7 @@ mod tests {
     use crate::fields::DateTime;
     use crate::object::ValuePath;
     use crate::{unpack_zip, FieldValue, MemoryFileSystem};
+    use std::collections::HashMap;
     use std::error::Error;
     use std::io::BufReader;
 
@@ -401,11 +440,13 @@ mod tests {
         Command::parse(
             &mut reader,
             "post",
+            HashMap::new(),
             ImportName::Field("title".to_string()),
             ValuePath::default(),
             obj_def,
             &ImportFormat::Csv,
             &archival,
+            |m, p, t| println!("{} ({}/{})", m, p, t),
         )?;
         let objects = archival.get_objects()?;
         let posts = objects.get("post").unwrap();
@@ -437,7 +478,7 @@ mod tests {
     #[test]
     // #[traced_test]
     fn parse_csv_data_to_children() -> Result<(), Box<dyn Error>> {
-        let csv_data = "number,name,date\n128,hello,01/21/1987";
+        let csv_data = "number,name,renamed_date\n128,hello,01/21/1987";
         let mut reader = BufReader::new(csv_data.as_bytes());
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../../../tests/fixtures/archival-website.zip");
@@ -447,11 +488,13 @@ mod tests {
         Command::parse(
             &mut reader,
             "childlist",
+            HashMap::from([("date".to_string(), "renamed_date".to_string())]),
             ImportName::File("has-list".to_string()),
             ValuePath::from_string("list"),
             obj_def.children.get("list").unwrap(),
             &ImportFormat::Csv,
             &archival,
+            |m, p, t| println!("{} ({}/{})", m, p, t),
         )?;
         let objects = archival.get_objects()?;
         let children = objects.get("childlist").unwrap();

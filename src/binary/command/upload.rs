@@ -188,7 +188,7 @@ impl BinaryCommand for Command {
             bar.finish();
         }
         // Now write our file
-        archival.send_event(ArchivalEvent::EditField(EditFieldEvent {
+        archival.send_event_no_rebuild(ArchivalEvent::EditField(EditFieldEvent {
             object: object_type,
             filename: object_name,
             path: field_path,

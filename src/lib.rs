@@ -164,9 +164,10 @@ impl<F: FileSystemAPI> Archival<F> {
             Err(ArchivalError::new(&format!("no objects of type: {}", obj_type)).into())
         }
     }
-    pub fn send_event(
+    fn send_event_impl(
         &self,
         event: ArchivalEvent,
+        rebuild: bool,
     ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let r = match event {
             ArchivalEvent::AddObject(event) => self.add_object(event)?,
@@ -176,9 +177,22 @@ impl<F: FileSystemAPI> Archival<F> {
             ArchivalEvent::AddChild(event) => self.add_child(event)?,
             ArchivalEvent::RemoveChild(event) => self.remove_child(event)?,
         };
-        // After any event, rebuild
-        self.build()?;
+        if rebuild {
+            self.build()?;
+        }
         Ok(r)
+    }
+    pub fn send_event_no_rebuild(
+        &self,
+        event: ArchivalEvent,
+    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+        self.send_event_impl(event, false)
+    }
+    pub fn send_event(
+        &self,
+        event: ArchivalEvent,
+    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+        self.send_event_impl(event, true)
     }
     // Internal
     fn add_object(&self, event: AddObjectEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
@@ -564,7 +578,6 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        archival.build()?;
         archival
             .send_event(ArchivalEvent::RemoveChild(ChildEvent {
                 object: "post".to_string(),
