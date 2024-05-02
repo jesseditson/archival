@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use thiserror::Error;
-use tracing::{debug, info, instrument, trace_span, warn};
+use tracing::{debug, error, info, instrument, trace_span, warn};
 
 #[derive(Error, Debug, Clone)]
 pub enum InvalidFileError {
@@ -154,10 +154,13 @@ impl Site {
                 let mut objects: Vec<Object> = Vec::new();
                 for file in fs.walk_dir(&object_files_path, false)? {
                     let path = object_files_path.join(&file);
-                    if let Ok(obj) = self.object_for_path(&path, object_def, &mut cache, fs) {
-                        objects.push(obj);
-                    } else {
-                        debug!("Invalid file {:?}", path);
+                    match self.object_for_path(&path, object_def, &mut cache, fs) {
+                        Ok(obj) => {
+                            objects.push(obj);
+                        }
+                        Err(err) => {
+                            error!("Invalid file {:?}: {}", path, err);
+                        }
                     }
                 }
                 // Sort objects by order key

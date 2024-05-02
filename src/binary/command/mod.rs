@@ -5,6 +5,7 @@ mod compat;
 mod import;
 mod login;
 mod manifest;
+mod objects;
 mod prebuild;
 mod run;
 mod upload;
@@ -31,7 +32,7 @@ pub trait BinaryCommand {
     fn handler(&self, build_dir: &Path, args: &ArgMatches) -> Result<ExitStatus, Box<dyn Error>>;
 }
 
-pub const COMMANDS: [&dyn BinaryCommand; 8] = [
+pub const COMMANDS: [&dyn BinaryCommand; 9] = [
     &build::Command {},
     &run::Command {},
     &manifest::Command {},
@@ -40,4 +41,5 @@ pub const COMMANDS: [&dyn BinaryCommand; 8] = [
     &compat::Command {},
     &upload::Command {},
     &import::Command {},
+    &objects::Command {},
 ];

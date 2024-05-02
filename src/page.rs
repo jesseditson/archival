@@ -92,7 +92,7 @@ pub struct Page<'a> {
     pub debug_path: Option<PathBuf>,
 }
 
-fn debug_context(object: &liquid::Object, lp: usize) -> String {
+pub(crate) fn debug_context(object: &liquid::Object, lp: usize) -> String {
     let mut debug_str = String::default();
     fn to_str(val: &Value, lp: usize) -> String {
         match val {

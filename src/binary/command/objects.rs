@@ -1,0 +1,50 @@
+use super::BinaryCommand;
+use crate::{
+    binary::ExitStatus, file_system_stdlib, object::ObjectEntry, page::debug_context, site::Site,
+};
+use clap::ArgMatches;
+use liquid_core::Value;
+use std::{collections::HashMap, path::Path};
+
+pub struct Command {}
+impl BinaryCommand for Command {
+    fn name(&self) -> &str {
+        "objects"
+    }
+    fn cli(&self, cmd: clap::Command) -> clap::Command {
+        cmd.about("lists the objects in this site")
+    }
+    fn handler(
+        &self,
+        build_dir: &Path,
+        _args: &ArgMatches,
+    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+        let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
+        let site = Site::load(&fs)?;
+        let mut objects: HashMap<String, liquid::model::Value> = HashMap::new();
+        println!("{:?}", site.get_objects(&fs)?);
+        for (name, obj_entry) in site.get_objects(&fs)? {
+            let values = match obj_entry {
+                ObjectEntry::List(l) => Value::array(l.iter().map(|o| o.liquid_object())),
+                ObjectEntry::Object(o) => o.liquid_object(),
+            };
+            objects.insert(name.to_string(), values);
+        }
+        println!(
+            "{}",
+            debug_context(&liquid::object!({"objects": objects}), 0)
+        );
+        // let page = Page::new(
+        //     "objects-template",
+        //     "",
+        //     TemplateType::Default,
+        //     &"",
+        // );
+        // let render_o = page.render(&liquid_parser, &all_objects);
+        Ok(ExitStatus::Ok)
+        // match compat {
+        //     true => Ok(ExitStatus::Ok),
+        //     false => Ok(ExitStatus::Error),
+        // }
+    }
+}
