@@ -19,7 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use thiserror::Error;
-use tracing::{debug, error, info, instrument, trace_span, warn};
+use tracing::{debug, error, instrument, trace_span, warn};
 
 #[derive(Error, Debug, Clone)]
 pub enum InvalidFileError {
@@ -90,7 +90,7 @@ impl Site {
         }
 
         // Load our object definitions
-        info!("loading definition {}", odf.display());
+        debug!("loading definition {}", odf.display());
         let objects_table = read_toml(odf, fs)?;
         let objects = ObjectDefinition::from_table(&objects_table)?;
         Ok(Site {
@@ -117,7 +117,7 @@ impl Site {
 
     #[instrument]
     pub fn invalidate_file(&self, file: &Path) {
-        info!("invalidate {}", file.display());
+        debug!("invalidate {}", file.display());
         self.obj_cache.borrow_mut().remove(file);
     }
 
@@ -198,7 +198,7 @@ impl Site {
         if let Some(o) = cache.get(path) {
             Ok(o.clone())
         } else {
-            info!("parsing {}", path.display());
+            debug!("parsing {}", path.display());
             let obj_table = read_toml(path, fs)?;
             let o = Object::from_table(
                 object_def,
@@ -307,7 +307,7 @@ impl Site {
         }
 
         // Render regular pages
-        info!("building pages in {}", pages_dir.display());
+        debug!("building pages in {}", pages_dir.display());
         let template_pages: HashSet<&str> = self
             .object_definitions
             .values()
@@ -326,7 +326,7 @@ impl Site {
                         // template pages are not rendered as pages
                         continue;
                     }
-                    info!(
+                    debug!(
                         "rendering {} ({})",
                         file_path.display(),
                         page_type.extension()

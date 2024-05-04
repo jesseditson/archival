@@ -30,7 +30,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 #[cfg(feature = "binary")]
 pub mod binary;
 mod constants;
@@ -288,7 +288,7 @@ impl<F: FileSystemAPI> Archival<F> {
         filename: &str,
         obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
     ) -> Result<(), Box<dyn Error>> {
-        info!("write {}", filename);
+        debug!("write {}", filename);
         let path = self.object_path(obj_type, filename);
         let contents = self.modify_object_file(obj_type, filename, obj_cb)?;
         self.fs_mutex.with_fs(|fs| fs.write_str(&path, contents))?;
