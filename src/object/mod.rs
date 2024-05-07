@@ -182,10 +182,10 @@ mod tests {
         assert_eq!(obj.object_name, "artist");
         assert_eq!(obj.filename, "tormenta-rey");
         assert_eq!(obj.values.len(), 4);
-        assert!(obj.values.get("name").is_some());
-        assert!(obj.values.get("tour_dates").is_some());
-        assert!(obj.values.get("numbers").is_some());
-        assert!(obj.values.get("videos").is_some());
+        assert!(obj.values.contains_key("name"));
+        assert!(obj.values.contains_key("tour_dates"));
+        assert!(obj.values.contains_key("numbers"));
+        assert!(obj.values.contains_key("videos"));
         assert_eq!(
             obj.values.get("name"),
             Some(&FieldValue::String("Tormenta Rey".to_string()))

@@ -124,7 +124,7 @@ pub mod tests {
         assert!(artist.fields.contains_key("name"));
         assert_eq!(artist.fields.get("name").unwrap(), &FieldType::String);
         assert!(
-            artist.fields.get("template").is_none(),
+            !artist.fields.contains_key("template"),
             "did not copy the template reserved field"
         );
         assert!(artist.template.is_some());
