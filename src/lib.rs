@@ -231,6 +231,10 @@ impl<F: FileSystemAPI> Archival<F> {
         Ok(ArchivalEventResponse::None)
     }
 
+    pub fn manifest_content(&self) -> Result<String, Box<dyn Error>> {
+        self.fs_mutex.with_fs(|fs| self.site.manifest_content(fs))
+    }
+
     pub fn get_objects(&self) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
         self.fs_mutex.with_fs(|fs| self.site.get_objects(fs))
     }

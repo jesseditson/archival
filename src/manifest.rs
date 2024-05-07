@@ -39,8 +39,9 @@ pub struct Manifest {
     pub uploads_url: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "binary", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ManifestField {
     ArchivalVersion,
     SiteUrl,
@@ -220,6 +221,23 @@ impl Manifest {
         }
     }
 
+    pub fn set(&mut self, field: &ManifestField, value: String) {
+        match field {
+            ManifestField::ArchivalVersion => self.archival_version = Some(value),
+            ManifestField::ArchivalSite => self.archival_site = Some(value),
+            ManifestField::SiteUrl => self.site_url = Some(value),
+            ManifestField::CdnUrl => self.uploads_url = Some(value),
+            ManifestField::Prebuild => {
+                todo!("Prebuild is not modifiable via events")
+            }
+            ManifestField::ObjectsDir => self.objects_dir = PathBuf::from(value),
+            ManifestField::PagesDir => self.pages_dir = PathBuf::from(value),
+            ManifestField::BuildDir => self.build_dir = PathBuf::from(value),
+            ManifestField::StaticDir => self.static_dir = PathBuf::from(value),
+            ManifestField::LayoutDir => self.layout_dir = PathBuf::from(value),
+        }
+    }
+
     pub fn field_as_string(&self, field: &ManifestField) -> String {
         match self.toml_field(field) {
             Some(fv) => match fv {
@@ -233,6 +251,7 @@ impl Manifest {
 
     fn durable_fields() -> Vec<ManifestField> {
         vec![
+            ManifestField::ArchivalVersion,
             ManifestField::ArchivalSite,
             ManifestField::SiteUrl,
             ManifestField::CdnUrl,

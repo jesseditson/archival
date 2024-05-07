@@ -131,6 +131,11 @@ impl Site {
         fs.write_str(Path::new(MANIFEST_FILE_NAME), self.manifest.to_toml()?)
     }
 
+    pub fn manifest_content<T: FileSystemAPI>(&self, fs: &T) -> Result<String, Box<dyn Error>> {
+        fs.read_to_string(Path::new(MANIFEST_FILE_NAME))
+            .map(|m| m.unwrap_or_default())
+    }
+
     #[instrument(skip(fs, sort))]
     pub fn get_objects_sorted<T: FileSystemAPI>(
         &self,
