@@ -1,9 +1,5 @@
 use crate::{page::TemplateType, tags::layout::LayoutTag, FileSystemAPI};
-use liquid_core::{
-    parser,
-    partials::{EagerCompiler, PartialSource},
-    runtime, Language, Template,
-};
+use liquid_core::partials::{EagerCompiler, PartialSource};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::{borrow::Cow, collections::HashMap, error::Error, path::Path};
@@ -94,13 +90,4 @@ pub fn get(
         .tag(LayoutTag)
         .partials(partials);
     Ok(parser.build()?)
-}
-
-pub trait ToTemplate {
-    fn to_template(&self, options: &Language) -> Result<Template, Box<dyn Error>>;
-}
-impl ToTemplate for &str {
-    fn to_template(&self, options: &Language) -> Result<Template, Box<dyn Error>> {
-        Ok(parser::parse(self, options).map(runtime::Template::new)?)
-    }
 }

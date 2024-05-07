@@ -112,8 +112,8 @@ pub mod tests {
         println!("{:?}", defs);
 
         assert_eq!(defs.keys().len(), 2);
-        assert!(defs.get("artist").is_some());
-        assert!(defs.get("example").is_some());
+        assert!(defs.contains_key("artist"));
+        assert!(defs.contains_key("example"));
         let artist = defs.get("artist").unwrap();
         assert_eq!(artist.field_order.len(), 4);
         assert_eq!(artist.field_order[0], "name".to_string());
@@ -121,7 +121,7 @@ pub mod tests {
         assert_eq!(artist.field_order[2], "videos".to_string());
         assert_eq!(artist.field_order[3], "numbers".to_string());
         assert!(!artist.field_order.contains(&"template".to_string()));
-        assert!(artist.fields.get("name").is_some());
+        assert!(artist.fields.contains_key("name"));
         assert_eq!(artist.fields.get("name").unwrap(), &FieldType::String);
         assert!(
             artist.fields.get("template").is_none(),
@@ -130,30 +130,30 @@ pub mod tests {
         assert!(artist.template.is_some());
         assert_eq!(artist.template, Some("artist".to_string()));
         assert_eq!(artist.children.len(), 3);
-        assert!(artist.children.get("tour_dates").is_some());
-        assert!(artist.children.get("numbers").is_some());
+        assert!(artist.children.contains_key("tour_dates"));
+        assert!(artist.children.contains_key("numbers"));
         let tour_dates = artist.children.get("tour_dates").unwrap();
-        assert!(tour_dates.fields.get("date").is_some());
+        assert!(tour_dates.fields.contains_key("date"));
         assert_eq!(tour_dates.fields.get("date").unwrap(), &FieldType::Date);
-        assert!(tour_dates.fields.get("ticket_link").is_some());
+        assert!(tour_dates.fields.contains_key("ticket_link"));
         assert_eq!(
             tour_dates.fields.get("ticket_link").unwrap(),
             &FieldType::String
         );
         let numbers = artist.children.get("numbers").unwrap();
-        assert!(numbers.fields.get("number").is_some());
+        assert!(numbers.fields.contains_key("number"));
         assert_eq!(numbers.fields.get("number").unwrap(), &FieldType::Number);
         let numbers = artist.children.get("videos").unwrap();
-        assert!(numbers.fields.get("video").is_some());
+        assert!(numbers.fields.contains_key("video"));
         assert_eq!(numbers.fields.get("video").unwrap(), &FieldType::Video);
 
         let example = defs.get("example").unwrap();
-        assert!(example.fields.get("content").is_some());
+        assert!(example.fields.contains_key("content"));
         assert_eq!(example.fields.get("content").unwrap(), &FieldType::Markdown);
         assert_eq!(example.children.len(), 1);
-        assert!(example.children.get("links").is_some());
+        assert!(example.children.contains_key("links"));
         let links = example.children.get("links").unwrap();
-        assert!(links.fields.get("url").is_some());
+        assert!(links.fields.contains_key("url"));
         assert_eq!(links.fields.get("url").unwrap(), &FieldType::String);
 
         Ok(())

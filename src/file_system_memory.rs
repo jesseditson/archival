@@ -94,19 +94,14 @@ pub struct MemoryFileSystem {
 
 impl FileSystemAPI for MemoryFileSystem {
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
-        if self
-            .fs
-            .get(&path.to_string_lossy().to_lowercase())
-            .is_some()
-            || self.is_dir(path)?
-        {
+        if self.fs.contains_key(&path.to_string_lossy().to_lowercase()) || self.is_dir(path)? {
             Ok(true)
         } else {
             Ok(false)
         }
     }
     fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
-        Ok(self.tree.get(&FileGraphNode::key(path)).is_some())
+        Ok(self.tree.contains_key(&FileGraphNode::key(path)))
     }
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
         self.remove_from_graph(path);
@@ -211,7 +206,7 @@ impl MemoryFileSystem {
                 is_file = false;
                 self.tree.insert(FileGraphNode::key(&a_path), node);
             }
-            last_path = a_path.to_owned();
+            a_path.clone_into(&mut last_path);
         }
     }
 
@@ -262,7 +257,7 @@ impl MemoryFileSystem {
                 self.tree.insert(FileGraphNode::key(&a_path), node);
                 break;
             }
-            last_path = a_path.to_owned();
+            a_path.clone_into(&mut last_path);
         }
     }
 

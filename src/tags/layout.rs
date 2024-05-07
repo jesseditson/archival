@@ -143,15 +143,22 @@ mod test {
     use std::borrow;
     use std::error::Error;
 
-    use liquid_core::partials;
     use liquid_core::partials::PartialCompiler;
     use liquid_core::runtime::RuntimeBuilder;
     use liquid_core::Value;
+    use liquid_core::{parser, partials, runtime, Language, Template};
     use liquid_lib::stdlib;
 
-    use crate::liquid_parser::ToTemplate;
-
     use super::*;
+
+    pub trait ToTemplate {
+        fn to_template(&self, options: &Language) -> Result<Template, Box<dyn Error>>;
+    }
+    impl ToTemplate for &str {
+        fn to_template(&self, options: &Language) -> Result<Template, Box<dyn Error>> {
+            Ok(parser::parse(self, options).map(runtime::Template::new)?)
+        }
+    }
 
     fn options() -> Language {
         let mut options = Language::default();

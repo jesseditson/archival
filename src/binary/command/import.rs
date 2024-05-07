@@ -64,8 +64,8 @@ impl From<&str> for FieldMap {
         };
         for (i, v) in parts.into_iter().enumerate() {
             match i {
-                0 => fm.from = v.to_owned(),
-                1 => fm.to = v.to_owned(),
+                0 => v.clone_into(&mut fm.from),
+                1 => v.clone_into(&mut fm.to),
                 _ => panic!("Invalid map value - too many arguments"),
             }
         }
@@ -418,7 +418,8 @@ impl Command {
 }
 
 #[cfg(test)]
-mod tests {
+#[cfg(feature = "import-csv")]
+mod csv_tests {
 
     use super::{Command, ImportFormat, ImportName};
     use crate::fields::DateTime;
