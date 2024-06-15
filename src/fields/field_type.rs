@@ -30,6 +30,8 @@ pub enum InvalidFieldError {
     ReservedObjectNameError(String),
     #[error("cannot create type {0} from a string value")]
     UnsupportedStringValue(String),
+    #[error("type {0} was not provided a value and has no default")]
+    NoDefaultForType(String),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

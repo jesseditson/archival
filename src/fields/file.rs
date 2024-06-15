@@ -1,8 +1,8 @@
 use crate::fields::FieldConfig;
 use liquid::{ObjectView, ValueView};
-use mime_guess::{get_mime_extensions, Mime, MimeGuess};
+use mime_guess::MimeGuess;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, collections::HashMap, fmt::Display, str::FromStr};
+use std::{collections::HashMap, fmt::Display};
 use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -69,7 +69,7 @@ impl File {
         display_type: DisplayType,
     ) -> Self {
         Self {
-            url: Self::_url(sha, mime),
+            url: Self::_url(sha),
             sha: sha.to_string(),
             name: name.map(|n| n.to_string()),
             filename: filename.to_string(),
@@ -93,7 +93,7 @@ impl File {
             match &k[..] {
                 "sha" => {
                     self.sha = v.as_str().unwrap().into();
-                    self.url = Self::_url(&self.sha, &self.mime);
+                    self.url = Self::_url(&self.sha);
                 }
                 "name" => self.name = Some(v.as_str().unwrap().into()),
                 "filename" => self.filename = v.as_str().unwrap().into(),
@@ -116,7 +116,7 @@ impl File {
     pub fn image() -> Self {
         let mime = "image/*";
         Self {
-            url: Self::_url("", mime),
+            url: Self::_url(""),
             sha: "".to_string(),
             name: None,
             filename: "".to_string(),
@@ -127,7 +127,7 @@ impl File {
     pub fn video() -> Self {
         let mime = "video/*";
         Self {
-            url: Self::_url("", mime),
+            url: Self::_url(""),
             sha: "".to_string(),
             name: None,
             filename: "".to_string(),
@@ -138,7 +138,7 @@ impl File {
     pub fn audio() -> Self {
         let mime = "audio/*";
         Self {
-            url: Self::_url("", mime),
+            url: Self::_url(""),
             sha: "".to_string(),
             name: None,
             filename: "".to_string(),
@@ -149,7 +149,7 @@ impl File {
     pub fn download() -> Self {
         let mime = "*/*";
         Self {
-            url: Self::_url("", mime),
+            url: Self::_url(""),
             sha: "".to_string(),
             name: None,
             filename: "".to_string(),
@@ -157,25 +157,15 @@ impl File {
             display_type: DisplayType::Download.to_string(),
         }
     }
-    fn _url(sha: &str, mime: &str) -> String {
+    fn _url(sha: &str) -> String {
         if sha.is_empty() {
             return "".to_string();
         }
         let config = FieldConfig::get();
-        let mut ext = Cow::from("");
-        if let Ok(m) = Mime::from_str(mime) {
-            if m.subtype() != mime_guess::mime::STAR {
-                if let Some(exts) = get_mime_extensions(&m) {
-                    if !exts.is_empty() {
-                        ext = Cow::from(format!(".{}", exts.first().unwrap()))
-                    }
-                }
-            }
-        }
-        format!("{}/{}{}", config.uploads_url, sha, ext)
+        format!("{}/{}", config.uploads_url, sha)
     }
     pub fn url(&self) -> String {
-        Self::_url(&self.sha, &self.mime)
+        Self::_url(&self.sha)
     }
     pub fn to_map(&self, include_url: bool) -> HashMap<&str, &String> {
         let mut m = HashMap::new();
@@ -213,7 +203,6 @@ pub mod tests {
             file.sha = "fake-sha".to_string();
             println!("{}", file.url());
             assert!(!file.url().is_empty());
-            assert!(file.url().contains('.'));
         }
     }
     #[test]

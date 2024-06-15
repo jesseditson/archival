@@ -232,6 +232,19 @@ impl FieldValue {
         field_type: &FieldType,
         value: String,
     ) -> Result<FieldValue, InvalidFieldError> {
+        if value.is_empty() {
+            // Defaults
+            let default_val = match field_type {
+                FieldType::String => Ok(FieldValue::String(value.clone())),
+                FieldType::Markdown => Ok(FieldValue::Markdown(value.clone())),
+                FieldType::Number => Ok(FieldValue::Number(0.0)),
+                FieldType::Boolean => Ok(FieldValue::Boolean(false)),
+                _ => Err(InvalidFieldError::NoDefaultForType(field_type.to_string())),
+            };
+            if default_val.is_ok() {
+                return default_val;
+            }
+        }
         match field_type {
             FieldType::String => Ok(FieldValue::String(value)),
             FieldType::Markdown => Ok(FieldValue::Markdown(value)),
