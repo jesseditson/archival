@@ -25,6 +25,8 @@ use tracing::{debug, error, instrument, trace_span, warn};
 pub enum InvalidFileError {
     #[error("unrecognized file type ({0})")]
     UnrecognizedType(String),
+    #[error("Cannot define both {0} and {1}")]
+    DuplicateObjectDefinition(String, String),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -150,11 +152,11 @@ impl Site {
             let mut cache = self.obj_cache.borrow_mut();
             if fs.is_dir(&object_files_path)? {
                 if fs.exists(&object_file_path)? {
-                    panic!(
-                        "Cannot define both {} and {}",
-                        object_files_path.to_string_lossy(),
-                        object_file_path.to_string_lossy()
-                    );
+                    return Err(InvalidFileError::DuplicateObjectDefinition(
+                        object_files_path.display().to_string(),
+                        object_file_path.display().to_string(),
+                    )
+                    .into());
                 }
                 let mut objects: Vec<Object> = Vec::new();
                 for file in fs.walk_dir(&object_files_path, false)? {
