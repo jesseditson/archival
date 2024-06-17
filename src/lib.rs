@@ -30,7 +30,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 #[cfg(feature = "binary")]
 pub mod binary;
 mod constants;
@@ -105,11 +105,34 @@ impl<F: FileSystemAPI> Archival<F> {
             .with_fs(|fs| fs.exists(&self.object_path(obj_type, filename)))
     }
     pub fn object_path(&self, obj_type: &str, filename: &str) -> PathBuf {
-        self.site
-            .manifest
-            .objects_dir
-            .join(Path::new(&obj_type))
-            .join(Path::new(&format!("{}.toml", filename)))
+        let mut is_root = false;
+        match self.get_objects() {
+            Ok(objects) => match &objects.get(obj_type) {
+                Some(entry) => {
+                    if matches!(entry, ObjectEntry::Object(_)) {
+                        is_root = true;
+                    }
+                }
+                None => {
+                    warn!("object type not found: {}", obj_type.to_string());
+                }
+            },
+            Err(e) => {
+                warn!("Failed getting objects when generating object path: {}", e);
+            }
+        }
+        if is_root {
+            self.site
+                .manifest
+                .objects_dir
+                .join(Path::new(&format!("{}.toml", obj_type)))
+        } else {
+            self.site
+                .manifest
+                .objects_dir
+                .join(Path::new(&obj_type))
+                .join(Path::new(&format!("{}.toml", filename)))
+        }
     }
     pub fn object_file(&self, obj_type: &str, filename: &str) -> Result<String, Box<dyn Error>> {
         self.modify_object_file(obj_type, filename, |o| Ok(o))
