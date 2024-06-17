@@ -204,6 +204,7 @@ mod api_response {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct CreateUpload {
+        #[allow(dead_code)]
         pub key: String,
         pub upload_id: String,
     }

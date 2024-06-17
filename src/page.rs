@@ -80,6 +80,7 @@ pub struct PageTemplate<'a> {
     pub definition: &'a ObjectDefinition,
     pub object: &'a Object,
     pub content: String,
+    #[allow(dead_code)]
     pub file_type: TemplateType,
     pub debug_path: PathBuf,
 }
