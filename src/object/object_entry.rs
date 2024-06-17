@@ -84,12 +84,12 @@ impl<'a> Iterator for ObjectEntryMutIterator<'a> {
             ObjectEntry::List(l) => {
                 let o = l.get_mut(self.index);
                 self.index += 1;
-                unsafe { std::mem::transmute(o) }
+                unsafe { std::mem::transmute::<Option<&mut Object>, Option<&mut Object>>(o) }
             }
             ObjectEntry::Object(o) => {
                 if self.index == 0 {
                     self.index = usize::MAX;
-                    unsafe { std::mem::transmute(o) }
+                    unsafe { std::mem::transmute::<&mut Object, Option<&mut Object>>(o) }
                 } else {
                     None
                 }

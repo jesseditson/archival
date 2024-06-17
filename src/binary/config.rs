@@ -29,13 +29,7 @@ impl ArchivalConfig {
 
     pub fn get() -> Self {
         match Self::from_fs() {
-            Ok(config) => {
-                if let Some(config) = config {
-                    config
-                } else {
-                    ArchivalConfig::default()
-                }
-            }
+            Ok(config) => config.unwrap_or_default(),
             Err(e) => {
                 eprintln!("config parse failed, using default value. ({})", e);
                 ArchivalConfig::default()
