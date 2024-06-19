@@ -191,6 +191,7 @@ mod test {
                 "example.liquid" => Some(r#"{{'whooo'}}{%comment%}What happens{%endcomment%} {%if num < numTwo%}wat{%else%}wot{%endif%} {%if num > numTwo%}wat{%else%}wot{%endif%}{{ page_content }}"#.into()),
                 "example_var.liquid" => Some(r#"{{example_var}}{{ page_content }}"#.into()),
                 "example_multi_var.liquid" => Some(r#"{{example_var}} {{example}}{{ page_content }}"#.into()),
+                "example_json.json" => Some(r#"{"var": "{{example_var}}", "content": "{{example}}{{ page_content }}"}"#.into()),
                 _ => None
             }
         }
@@ -264,6 +265,26 @@ mod test {
             .build();
         let output = post_process(template.render(&runtime).unwrap());
         assert_eq!(output, "hello dogs");
+        Ok(())
+    }
+
+    #[test]
+    fn json() -> Result<(), Box<dyn Error>> {
+        let options = options();
+        let template = "{% layout 'example_json.json' example_var:\"hello\", example:\"dogs\", %}"
+            .to_template(&options)?;
+
+        let partials = partials::OnDemandCompiler::<TestSource>::empty()
+            .compile(::std::sync::Arc::new(options))
+            .unwrap();
+        let runtime = RuntimeBuilder::new()
+            .set_partials(partials.as_ref())
+            .build();
+        let output = post_process(template.render(&runtime).unwrap());
+        let value: serde_json::Value = serde_json::from_str(&output)?;
+        println!("rendered JSON: {:?}", value);
+        assert_eq!(value["var"], "hello");
+        assert_eq!(value["content"], "dogs");
         Ok(())
     }
 
