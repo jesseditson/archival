@@ -27,9 +27,17 @@ impl BinaryCommand for Command {
                     .current_dir(build_dir)
                     .spawn()
                     .unwrap_or_else(|_| panic!("spawn failed: {}", s))
-                    .wait()?;
-                if !status.success() {
-                    return Ok(ExitStatus::Error);
+                    .wait();
+                match status {
+                    Ok(status) => {
+                        if !status.success() {
+                            return Ok(ExitStatus::Error);
+                        }
+                    }
+                    Err(e) => {
+                        println!("error: {}", e);
+                        return Ok(ExitStatus::Error);
+                    }
                 }
             }
         }

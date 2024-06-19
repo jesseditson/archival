@@ -25,7 +25,7 @@ use tracing::{debug, error, instrument, trace_span, warn};
 pub enum InvalidFileError {
     #[error("unrecognized file type ({0})")]
     UnrecognizedType(String),
-    #[error("Cannot define both {0} and {1}")]
+    #[error("cannot define both {0} and {1}")]
     DuplicateObjectDefinition(String, String),
 }
 

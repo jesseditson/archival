@@ -22,7 +22,6 @@ impl BinaryCommand for Command {
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let site = Site::load(&fs)?;
         let mut objects: HashMap<String, liquid::model::Value> = HashMap::new();
-        println!("{:?}", site.get_objects(&fs)?);
         for (name, obj_entry) in site.get_objects(&fs)? {
             let values = match obj_entry {
                 ObjectEntry::List(l) => Value::array(l.iter().map(|o| o.liquid_object())),
