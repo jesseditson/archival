@@ -1,3 +1,4 @@
+use crate::page::TemplateType;
 use liquid_core::error::ResultLiquidExt;
 use liquid_core::model::KString;
 use liquid_core::Expression;
@@ -9,12 +10,19 @@ use liquid_core::{Error, Result};
 use liquid_core::{ParseTag, TagReflection, TagTokenIter};
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::collections::HashMap;
 use std::io::Write;
 
-#[derive(Copy, Clone, Debug, Default)]
-pub struct LayoutTag;
+#[derive(Clone, Debug, Default)]
+pub struct LayoutTag {
+    layout_types: HashMap<String, TemplateType>,
+}
 
-impl LayoutTag {}
+impl LayoutTag {
+    pub(crate) fn new(layout_types: HashMap<String, TemplateType>) -> Self {
+        return Self { layout_types };
+    }
+}
 
 impl TagReflection for LayoutTag {
     fn tag(&self) -> &'static str {
@@ -35,6 +43,12 @@ impl ParseTag for LayoutTag {
         let partial = arguments.expect_next("Identifier or literal expected.")?;
 
         let partial = partial.expect_value().into_result()?;
+
+        let template_type = self
+            .layout_types
+            .get(&partial.to_string())
+            .unwrap_or(&TemplateType::Default)
+            .clone();
 
         let mut vars: Vec<(KString, Expression)> = Vec::new();
         while let Ok(next) = arguments.expect_next("") {
@@ -64,7 +78,11 @@ impl ParseTag for LayoutTag {
 
         arguments.expect_nothing()?;
 
-        Ok(Box::new(Layout { partial, vars }))
+        Ok(Box::new(Layout {
+            partial,
+            vars,
+            template_type,
+        }))
     }
 
     fn reflection(&self) -> &dyn TagReflection {
@@ -72,10 +90,13 @@ impl ParseTag for LayoutTag {
     }
 }
 
+pub static LAYOUT_TYPE_SENTINEL: &str = &"__archival_layout_type";
+
 #[derive(Debug)]
 struct Layout {
     partial: Expression,
     vars: Vec<(KString, Expression)>,
+    template_type: TemplateType,
 }
 
 static CONTENT_SENTINEL: &str = "___LAYOUT_CONTENT___";
@@ -123,6 +144,16 @@ impl Renderable for Layout {
                 .value_with(|| name.to_string().into())?;
 
             writer.write_all(SNIP_SENTINEL.as_bytes()).unwrap();
+            writer
+                .write_all(
+                    format!(
+                        "{}:::{}:::",
+                        LAYOUT_TYPE_SENTINEL,
+                        self.template_type.extension()
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
         }
 
         Ok(())
@@ -131,11 +162,23 @@ impl Renderable for Layout {
 
 static SNIP_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(&format!("{}(?<content>[\\s\\S]*)", SNIP_SENTINEL)).unwrap());
-pub fn post_process(mut rendered: String) -> String {
+static LAYOUT_TYPE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(&format!("{}:::(?<ext>\\w+):::", LAYOUT_TYPE_SENTINEL)).unwrap());
+pub fn post_process(mut rendered: String, page_type: TemplateType) -> (String, TemplateType) {
+    println!("TYPE {:?}", &page_type);
+    let mut template_type = page_type;
+    if let Some(captured) = LAYOUT_TYPE_RE.captures(&rendered.to_owned()) {
+        rendered = LAYOUT_TYPE_RE.replace(&rendered, "").to_string();
+        if matches!(template_type, TemplateType::Default) {
+            println!("DO REPLACE {:?}", &template_type);
+            template_type = TemplateType::from_ext(&captured["ext"]);
+            println!("REPLACED {:?}", &template_type);
+        }
+    }
     if let Some(captured) = SNIP_RE.captures(&rendered) {
         rendered = rendered.replace(CONTENT_SENTINEL, &captured["content"]);
     }
-    SNIP_RE.replace(&rendered, "").into()
+    (SNIP_RE.replace(&rendered, "").into(), template_type)
 }
 
 #[cfg(test)]
@@ -164,7 +207,7 @@ mod test {
         let mut options = Language::default();
         options
             .tags
-            .register("layout".to_string(), LayoutTag.into());
+            .register("layout".to_string(), LayoutTag::new(HashMap::new()).into());
         options
             .blocks
             .register("comment".to_string(), stdlib::CommentBlock.into());
@@ -210,7 +253,9 @@ mod test {
             .build();
         runtime.set_global("num".into(), Value::scalar(5f64));
         runtime.set_global("numTwo".into(), Value::scalar(10f64));
-        let output = post_process(template.render(&runtime).unwrap());
+        let (output, tt) =
+            post_process(template.render(&runtime).unwrap(), TemplateType::default());
+        assert_eq!(tt, TemplateType::Html);
         assert_eq!(output, "whooo wat wot\ntest test");
         Ok(())
     }
@@ -227,7 +272,9 @@ mod test {
         let runtime = RuntimeBuilder::new()
             .set_partials(partials.as_ref())
             .build();
-        let output = post_process(template.render(&runtime).unwrap());
+        let (output, tt) =
+            post_process(template.render(&runtime).unwrap(), TemplateType::default());
+        assert_eq!(tt, TemplateType::Html);
         assert_eq!(output, "hello");
         Ok(())
     }
@@ -245,7 +292,9 @@ mod test {
         let runtime = RuntimeBuilder::new()
             .set_partials(partials.as_ref())
             .build();
-        let output = post_process(template.render(&runtime).unwrap());
+        let (output, tt) =
+            post_process(template.render(&runtime).unwrap(), TemplateType::default());
+        assert_eq!(tt, TemplateType::Html);
         assert_eq!(output, "hello world");
         Ok(())
     }
@@ -263,7 +312,9 @@ mod test {
         let runtime = RuntimeBuilder::new()
             .set_partials(partials.as_ref())
             .build();
-        let output = post_process(template.render(&runtime).unwrap());
+        let (output, tt) =
+            post_process(template.render(&runtime).unwrap(), TemplateType::default());
+        assert_eq!(tt, TemplateType::Html);
         assert_eq!(output, "hello dogs");
         Ok(())
     }
@@ -280,7 +331,9 @@ mod test {
         let runtime = RuntimeBuilder::new()
             .set_partials(partials.as_ref())
             .build();
-        let output = post_process(template.render(&runtime).unwrap());
+        let (output, tt) =
+            post_process(template.render(&runtime).unwrap(), TemplateType::default());
+        assert_eq!(tt, TemplateType::Html);
         let value: serde_json::Value = serde_json::from_str(&output)?;
         println!("rendered JSON: {:?}", value);
         assert_eq!(value["var"], "hello");

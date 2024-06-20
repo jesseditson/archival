@@ -300,8 +300,8 @@ impl Site {
                             if render_o.is_err() {
                                 warn!("failed rendering {}", object.filename);
                             }
-                            let rendered = layout::post_process(render_o?);
-                            let render_name = format!("{}.{}", object.filename, page.extension());
+                            let (rendered, tt) = layout::post_process(render_o?, page.file_type);
+                            let render_name = format!("{}.{}", object.filename, tt.extension());
                             let t_dir = build_dir.join(&object_def.name);
                             fs.create_dir_all(&t_dir)?;
                             let build_path = t_dir.join(render_name);
@@ -349,14 +349,14 @@ impl Site {
                         if render_o.is_err() {
                             warn!("failed rendering {}", file_path.display());
                         }
-                        let rendered = layout::post_process(render_o?);
+                        let (rendered, tt) = layout::post_process(render_o?, page.file_type);
                         let mut render_dir = build_dir.to_path_buf();
                         if let Some(parent_dir) = rel_path.parent() {
                             render_dir = render_dir.join(parent_dir);
                             fs.create_dir_all(&render_dir)?;
                         }
                         let render_path =
-                            render_dir.join(format!("{}.{}", page_name, page_type.extension()));
+                            render_dir.join(format!("{}.{}", page_name, tt.extension()));
                         debug!("write {}", render_path.display());
                         fs.write_str(&render_path, rendered)?;
                     } else {

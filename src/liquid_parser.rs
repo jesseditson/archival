@@ -2,14 +2,34 @@ use crate::{page::TemplateType, tags::layout::LayoutTag, FileSystemAPI};
 use liquid_core::partials::{EagerCompiler, PartialSource};
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::{borrow::Cow, collections::HashMap, error::Error, path::Path};
-use tracing::{debug, error};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    error::Error,
+    path::Path,
+};
+use tracing::{debug, error, warn};
 
 pub static PARTIAL_FILE_NAME_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^_(.+)\.liquid").unwrap());
 
 #[derive(Default, Debug, Clone)]
+struct ArchivalPartial {
+    template_type: TemplateType,
+    content: String,
+}
+impl ArchivalPartial {
+    fn new(content: String, template_type: TemplateType) -> Self {
+        Self {
+            template_type,
+            content,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone)]
 struct ArchivalPartialSource {
-    partials: HashMap<String, String>,
+    partials: HashMap<String, ArchivalPartial>,
+    layouts: HashSet<String>,
 }
 
 impl ArchivalPartialSource {
@@ -19,17 +39,27 @@ impl ArchivalPartialSource {
         fs: &impl FileSystemAPI,
     ) -> Result<Self, Box<dyn Error>> {
         let mut partials = HashMap::new();
+        let mut layouts = HashSet::new();
         // Add layouts
         if let Some(path) = layout_path {
             for file in fs.walk_dir(path, false)? {
                 if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
                     if let Some((template_name, t)) = TemplateType::parse_path(name) {
                         debug!("adding layout {} ({})", template_name, t.extension());
-                        if let Some(contents) = fs.read_to_string(&path.join(&file))? {
-                            partials.insert(template_name.to_string(), contents);
+                        if let Some(content) = fs.read_to_string(&path.join(&file))? {
+                            layouts.insert(template_name.to_string());
+                            partials.insert(
+                                template_name.to_string(),
+                                ArchivalPartial::new(content, t),
+                            );
                         } else {
                             error!("Failed reading layout {}", file.display());
                         }
+                    } else {
+                        warn!(
+                            "invalid layout file {}. Try adding .[ext].liquid to the filename.",
+                            name
+                        );
                     }
                 }
             }
@@ -49,8 +79,9 @@ impl ArchivalPartialSource {
                             partial_name.to_string()
                         };
                         debug!("adding partial {} ({})", partial_name, t.extension());
-                        if let Some(contents) = fs.read_to_string(&path.join(&file))? {
-                            partials.insert(partial_name.to_string(), contents);
+                        if let Some(content) = fs.read_to_string(&path.join(&file))? {
+                            partials
+                                .insert(partial_name.to_string(), ArchivalPartial::new(content, t));
                         } else {
                             error!("Failed reading partial {}", file.display());
                         }
@@ -58,7 +89,18 @@ impl ArchivalPartialSource {
                 }
             }
         }
-        Ok(Self { partials })
+        Ok(Self { partials, layouts })
+    }
+
+    fn layout_types(&self) -> HashMap<String, TemplateType> {
+        let mut types = HashMap::new();
+        for layout in &self.layouts {
+            types.insert(
+                layout.to_owned(),
+                self.partials.get(layout).unwrap().template_type.clone(),
+            );
+        }
+        types
     }
 }
 
@@ -76,7 +118,7 @@ impl PartialSource for ArchivalPartialSource {
     }
 
     fn try_get<'a>(&'a self, name: &str) -> Option<Cow<'a, str>> {
-        self.partials.get(name).map(|p| p.into())
+        self.partials.get(name).map(|p| p.content.to_owned().into())
     }
 }
 
@@ -85,9 +127,9 @@ pub fn get(
     layout_path: Option<&Path>,
     fs: &impl FileSystemAPI,
 ) -> Result<liquid::Parser, Box<dyn Error>> {
-    let partials = EagerCompiler::new(ArchivalPartialSource::new(pages_path, layout_path, fs)?);
-    let parser = liquid::ParserBuilder::with_stdlib()
-        .tag(LayoutTag)
-        .partials(partials);
-    Ok(parser.build()?)
+    let partial_source = ArchivalPartialSource::new(pages_path, layout_path, fs)?;
+    let parser =
+        liquid::ParserBuilder::with_stdlib().tag(LayoutTag::new(partial_source.layout_types()));
+    let partials = EagerCompiler::new(partial_source.clone());
+    Ok(parser.partials(partials).build()?)
 }

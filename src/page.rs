@@ -25,7 +25,7 @@ impl fmt::Display for InvalidPageError {
 static TEMPLATE_FILE_NAME_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^(.+?)(\.\w+)?\.liquid").unwrap());
 
-#[derive(Default, Debug, Clone)]
+#[derive(PartialEq, Default, Debug, Clone)]
 pub enum TemplateType {
     #[default]
     Default,
@@ -75,6 +75,17 @@ impl TemplateType {
     }
 }
 
+impl From<TemplateType> for liquid_core::Value {
+    fn from(value: TemplateType) -> Self {
+        Value::Scalar(value.extension().to_string().into())
+    }
+}
+impl From<liquid_core::Value> for TemplateType {
+    fn from(value: liquid_core::Value) -> Self {
+        Self::from_ext(value.to_kstr().as_str())
+    }
+}
+
 #[derive(Debug)]
 pub struct PageTemplate<'a> {
     pub definition: &'a ObjectDefinition,
@@ -89,7 +100,7 @@ pub struct Page<'a> {
     name: String,
     content: Option<String>,
     template: Option<PageTemplate<'a>>,
-    file_type: TemplateType,
+    pub file_type: TemplateType,
     pub debug_path: Option<PathBuf>,
 }
 
@@ -215,9 +226,9 @@ impl<'a> Page<'a> {
         panic!("Pages must have either a template or a path");
     }
 
-    pub fn extension(&self) -> &str {
-        self.file_type.extension()
-    }
+    // pub fn extension(&self) -> &str {
+    //     self.file_type.extension()
+    // }
 }
 
 #[cfg(test)]
