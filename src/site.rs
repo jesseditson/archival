@@ -27,6 +27,8 @@ pub enum InvalidFileError {
     UnrecognizedType(String),
     #[error("cannot define both {0} and {1}")]
     DuplicateObjectDefinition(String, String),
+    #[error("template file {0} does not exist.")]
+    MissingTemplate(String),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -279,6 +281,12 @@ impl Site {
             if let Some(template) = &object_def.template {
                 let template_path = pages_dir.join(format!("{}.liquid", template));
                 debug!("rendering template objects for {}", template_path.display());
+                if !fs.exists(&template_path)? {
+                    return Err(InvalidFileError::MissingTemplate(
+                        template_path.display().to_string(),
+                    )
+                    .into());
+                }
                 let template_r = fs.read_to_string(&template_path);
                 if template_r.is_err() {
                     warn!("failed rendering {}", template_path.display());
