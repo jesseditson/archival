@@ -9,6 +9,7 @@ use crate::FileSystemAPI;
 
 #[derive(Error, Debug)]
 pub enum FileSystemMutexError {
+    #[cfg(not(debug_assertions))]
     #[error("File System mutex lock failed.")]
     LockFailed,
 }
@@ -30,6 +31,9 @@ where
             let r = f(fs.deref_mut())?;
             Ok(r)
         } else {
+            #[cfg(debug_assertions)]
+            panic!("File System Lock Failed");
+            #[cfg(not(debug_assertions))]
             Err(FileSystemMutexError::LockFailed.into())
         }
     }

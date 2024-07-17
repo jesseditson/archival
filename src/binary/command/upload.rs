@@ -25,17 +25,17 @@ use thiserror::Error;
 pub enum UploadError {
     #[error("no access token found. Run archival login first.")]
     NotLoggedIn,
-    #[error("file {0} doesn't exist")]
+    #[error("file '{0}' doesn't exist")]
     FileNotExists(PathBuf),
     #[error("current archival manifest does not define archival_site")]
     NoArchivalSite,
-    #[error("invalid object path {0}")]
+    #[error("invalid object path '{0}'")]
     InvalidObjectPath(PathBuf),
-    #[error("invalid object type {0}")]
+    #[error("invalid object type '{0}'")]
     InvalidObjectType(String),
     #[error("invalid field {0}")]
     InvalidField(String),
-    #[error("cannot upload to type {0}")]
+    #[error("cannot upload to type '{0}'")]
     NonUploadableType(String),
     #[error("upload failed {0}")]
     UploadFailed(String),
@@ -87,18 +87,23 @@ impl BinaryCommand for Command {
             return Err(UploadError::FileNotExists(file_path.to_owned()).into());
         }
         let object = args.get_one::<PathBuf>("object").unwrap();
-        // TODO: handle root objects
         let object_name = object
             .with_extension("")
             .file_name()
             .ok_or_else(|| UploadError::InvalidObjectPath(object.to_owned()))?
             .to_string_lossy()
             .to_string();
-        let object_type = object
+        let mut object_type = object
             .parent()
             .ok_or_else(|| UploadError::InvalidObjectPath(object.to_owned()))?
             .to_string_lossy()
             .to_string();
+        // If we don't find the object type, it's likely that we mean to use a
+        // root object, in which case they're the same. A check below will make
+        // sure that this is truly the case (object_exists)
+        if object_type.is_empty() {
+            object_name.clone_into(&mut object_type);
+        }
         let field = args.get_one::<String>("field").unwrap();
         let field_path = ValuePath::from_string(field);
         // Set up an archival site to make sure we're able to modify fields
@@ -111,6 +116,10 @@ impl BinaryCommand for Command {
             .archival_site
             .as_ref()
             .ok_or(UploadError::NoArchivalSite)?;
+        // Make sure that the specified object exists
+        if !archival.object_exists(&object_type, &object_name)? {
+            return Err(UploadError::InvalidObjectPath(object.to_owned()).into());
+        }
         // Find the specified object definition
         let obj_def = archival
             .site
@@ -124,10 +133,6 @@ impl BinaryCommand for Command {
         // Validate that this is an ok field type to upload
         if !field_def.is_uploadable() {
             return Err(UploadError::NonUploadableType(field_def.to_string()).into());
-        }
-        // Make sure that the specified object exists
-        if !archival.object_exists(&object_type, &object_name)? {
-            return Err(UploadError::InvalidObjectPath(object.to_owned()).into());
         }
         // Ok, this looks legit. Upload the file
         let sha = archival.sha_for_file(file_path)?;
@@ -189,11 +194,19 @@ impl BinaryCommand for Command {
         }
         // Now write our file
         archival.send_event_no_rebuild(ArchivalEvent::EditField(EditFieldEvent {
-            object: object_type,
-            filename: object_name,
-            path: field_path,
-            value: field_data,
+            object: object_type.clone(),
+            filename: object_name.clone(),
+            path: field_path.clone(),
+            value: field_data.clone(),
         }))?;
+        if let FieldValue::File(fd) = field_data {
+            println!(
+                "Wrote {} {} {}: {:?}",
+                object_type, object_name, field_path, fd
+            );
+        } else {
+            panic!("Invalid field data");
+        }
         Ok(ExitStatus::Ok)
     }
 }

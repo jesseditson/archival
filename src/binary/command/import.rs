@@ -26,13 +26,13 @@ pub enum ImportError {
     FormatOrFileRequired,
     #[error("no file extension or format provided")]
     NoExtension,
-    #[error("invalid object filename {0}")]
+    #[error("invalid object filename '{0}'")]
     InvalidObjectFilename(PathBuf),
     #[error("object {0} of type {1} does not exist. found {2:?}")]
     ObjectNotExists(String, String, Option<Vec<String>>),
-    #[error("invalid object path {0}")]
+    #[error("invalid object path '{0}'")]
     InvalidObjectPath(PathBuf),
-    #[error("invalid object type {0}")]
+    #[error("invalid object type '{0}'")]
     InvalidObjectType(String),
     #[error("invalid field {0}")]
     InvalidField(String),

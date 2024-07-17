@@ -30,7 +30,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 #[cfg(feature = "binary")]
 pub mod binary;
 mod constants;
@@ -102,26 +102,25 @@ impl<F: FileSystemAPI> Archival<F> {
     }
     pub fn object_exists(&self, obj_type: &str, filename: &str) -> Result<bool, Box<dyn Error>> {
         self.fs_mutex
-            .with_fs(|fs| fs.exists(&self.object_path(obj_type, filename)))
+            .with_fs(|fs| fs.exists(&self.object_path_impl(obj_type, filename, fs)?))
     }
     pub fn object_path(&self, obj_type: &str, filename: &str) -> PathBuf {
-        let mut is_root = false;
-        match self.get_objects() {
-            Ok(objects) => match &objects.get(obj_type) {
-                Some(entry) => {
-                    if matches!(entry, ObjectEntry::Object(_)) {
-                        is_root = true;
-                    }
-                }
-                None => {
-                    warn!("object type not found: {}", obj_type.to_string());
-                }
-            },
-            Err(e) => {
-                warn!("Failed getting objects when generating object path: {}", e);
-            }
-        }
-        if is_root {
+        self.fs_mutex
+            .with_fs(|fs| Ok(self.object_path_impl(obj_type, filename, fs).unwrap()))
+            .unwrap()
+    }
+    fn object_path_impl(
+        &self,
+        obj_type: &str,
+        filename: &str,
+        fs: &F,
+    ) -> Result<PathBuf, Box<dyn Error>> {
+        let objects = self.site.get_objects(fs)?;
+        let entry = objects.get(obj_type).ok_or(ArchivalError::new(&format!(
+            "object type not found: {}",
+            obj_type
+        )))?;
+        Ok(if matches!(entry, ObjectEntry::Object(_)) {
             self.site
                 .manifest
                 .objects_dir
@@ -132,10 +131,11 @@ impl<F: FileSystemAPI> Archival<F> {
                 .objects_dir
                 .join(Path::new(&obj_type))
                 .join(Path::new(&format!("{}.toml", filename)))
-        }
+        })
     }
     pub fn object_file(&self, obj_type: &str, filename: &str) -> Result<String, Box<dyn Error>> {
-        self.modify_object_file(obj_type, filename, |o| Ok(o))
+        self.fs_mutex
+            .with_fs(|fs| self.modify_object_file(obj_type, filename, |o| Ok(o), fs))
     }
     pub fn sha_for_file(&self, file: &Path) -> Result<String, Box<dyn Error>> {
         let file_data = self
@@ -167,15 +167,16 @@ impl<F: FileSystemAPI> Archival<F> {
         let _ = Object::from_table(obj_def, Path::new(filename), &table)?;
         // Object is valid, write it
         self.fs_mutex
-            .with_fs(|fs| fs.write_str(&self.object_path(obj_type, filename), contents))
+            .with_fs(|fs| fs.write_str(&self.object_path_impl(obj_type, filename, fs)?, contents))
     }
     fn modify_object_file(
         &self,
         obj_type: &str,
         filename: &str,
         obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
+        fs: &F,
     ) -> Result<String, Box<dyn Error>> {
-        let mut all_objects = self.get_objects()?;
+        let mut all_objects = self.site.get_objects(fs)?;
         if let Some(objects) = all_objects.get_mut(obj_type) {
             if let Some(object) = objects.iter_mut().find(|o| o.filename == filename) {
                 let object = obj_cb(object)?;
@@ -227,12 +228,13 @@ impl<F: FileSystemAPI> Archival<F> {
                 "object not found: {}",
                 event.object
             )))?;
-        let path = self.object_path(&obj_def.name, &event.filename);
         self.fs_mutex.with_fs(|fs| {
+            let path = self.object_path_impl(&obj_def.name, &event.filename, fs)?;
             let object = Object::from_def(obj_def, &event.filename, event.order)?;
-            fs.write_str(&path, object.to_toml()?)
+            fs.write_str(&path, object.to_toml()?)?;
+            self.site.invalidate_file(&path);
+            Ok(())
         })?;
-        self.site.invalidate_file(&path);
         Ok(ArchivalEventResponse::None)
     }
 
@@ -248,9 +250,12 @@ impl<F: FileSystemAPI> Archival<F> {
                 "object not found: {}",
                 event.object
             )))?;
-        let path = self.object_path(&obj_def.name, &event.filename);
-        self.fs_mutex.with_fs(|fs| fs.delete(&path))?;
-        self.site.invalidate_file(&path);
+        self.fs_mutex.with_fs(|fs| {
+            let path = self.object_path_impl(&obj_def.name, &event.filename, fs)?;
+            fs.delete(&path)?;
+            self.site.invalidate_file(&path);
+            Ok(())
+        })?;
         Ok(ArchivalEventResponse::None)
     }
 
@@ -316,11 +321,13 @@ impl<F: FileSystemAPI> Archival<F> {
         obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
     ) -> Result<(), Box<dyn Error>> {
         debug!("write {}", filename);
-        let path = self.object_path(obj_type, filename);
-        let contents = self.modify_object_file(obj_type, filename, obj_cb)?;
-        self.fs_mutex.with_fs(|fs| fs.write_str(&path, contents))?;
-        self.site.invalidate_file(&path);
-        Ok(())
+        self.fs_mutex.with_fs(|fs| {
+            let path = self.object_path_impl(obj_type, filename, fs)?;
+            let contents = self.modify_object_file(obj_type, filename, obj_cb, fs)?;
+            fs.write_str(&path, contents)?;
+            self.site.invalidate_file(&path);
+            Ok(())
+        })
     }
 
     pub fn modify_manifest(
