@@ -30,12 +30,13 @@ runs:
       run: bin/archival build
       shell: bash
     - name: Push to Deploy Branch
-      uses: s0/git-publish-subdir-action@v2.6.0
+      uses: s0/git-publish-subdir-action@5bc6742efb946f4cba68c7a9067a31ea5631071d
       env:
         REPO: self
         BRANCH: ${{ inputs.branch }}
         FOLDER: ${{ steps.dist.outputs.dist }}
         GITHUB_TOKEN: ${{ inputs.token }}
+        SQUASH_HISTORY: true
     - name: Deploy
       uses: fjogeleit/http-request-action@v1
       with:
