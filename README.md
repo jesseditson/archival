@@ -1,7 +1,9 @@
 
+<a href="https://archival.dev">
 <p align="center">
   <img src="https://archival.dev/img/header.png" alt="archival" height="200px">
 </p>
+</a>
 
 [![license](https://img.shields.io/crates/l/archival)](LICENSE.md) [![Chat](https://img.shields.io/discord/1257848212744568853?label=chat&logo=discord)](https://archival.dev/chat.html)
 
