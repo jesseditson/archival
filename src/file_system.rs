@@ -23,6 +23,7 @@ pub trait FileSystemAPI {
     ) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>>;
 }
 
+#[cfg(feature = "binary")]
 pub trait WatchableFileSystemAPI {
     fn watch(
         &self,
