@@ -1,5 +1,6 @@
 pub use crate::value_path::ValuePath;
 use crate::{
+    events::AddObjectValue,
     fields::{FieldValue, InvalidFieldError, ObjectValues},
     object_definition::ObjectDefinition,
     reserved_fields::{self, is_reserved_field},
@@ -104,24 +105,30 @@ impl Object {
         definition: &ObjectDefinition,
         filename: &str,
         order: i32,
+        defaults: Vec<AddObjectValue>,
     ) -> Result<Self, Box<dyn Error>> {
         let path = Path::new(&definition.name).join(filename);
-        let empty = Table::new();
-        let values = Object::values_from_table(&path, &empty, definition)?;
-        Ok(Self {
+        let values = Object::values_from_table(&path, &Table::new(), definition)?;
+        let mut object = Self {
             filename: filename.to_owned(),
             object_name: definition.name.clone(),
             path: path.to_string_lossy().to_string(),
             order,
             values,
-        })
+        };
+        for default in defaults {
+            default.path.set_in_object(&mut object, default.value);
+        }
+        Ok(object)
     }
 
     pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
         let mut write_obj = Table::new();
         write_obj.insert("order".to_string(), toml::Value::Integer(self.order as i64));
         for (key, val) in &self.values {
-            write_obj.insert(key.to_string(), val.into());
+            if let Some(val) = val.into() {
+                write_obj.insert(key.to_string(), val);
+            }
         }
         toml::to_string_pretty(&write_obj)
     }
