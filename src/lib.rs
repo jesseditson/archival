@@ -412,7 +412,7 @@ mod lib {
             .contains(&as_path_str("post/a-post.html")));
         assert!(archival.dist_files().contains(&as_path_str("img/guy.webp")));
         assert!(archival.dist_files().contains(&as_path_str("rss.rss")));
-        assert_eq!(dist_files.len(), 19);
+        assert_eq!(dist_files.len(), 20);
         let guy = archival.dist_file(Path::new("img/guy.webp"));
         assert!(guy.is_some());
         let post_html = archival
