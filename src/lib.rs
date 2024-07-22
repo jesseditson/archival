@@ -230,7 +230,7 @@ impl<F: FileSystemAPI> Archival<F> {
             )))?;
         self.fs_mutex.with_fs(|fs| {
             let path = self.object_path_impl(&obj_def.name, &event.filename, fs)?;
-            let object = Object::from_def(obj_def, &event.filename, event.order)?;
+            let object = Object::from_def(obj_def, &event.filename, event.order, event.values)?;
             fs.write_str(&path, object.to_toml()?)?;
             self.site.invalidate_file(&path);
             Ok(())
@@ -368,6 +368,7 @@ mod lib {
         test_utils::as_path_str,
         value_path::{ValuePath, ValuePathComponent},
     };
+    use events::AddObjectValue;
     use tracing_test::traced_test;
 
     use super::*;
@@ -437,6 +438,11 @@ mod lib {
             object: "section".to_string(),
             filename: "my-section".to_string(),
             order: 3,
+            // Sections require a name field, so we have to add it or we'll get a build error
+            values: vec![AddObjectValue {
+                path: ValuePath::from_string("name"),
+                value: FieldValue::String("section three".to_string()),
+            }],
         }))?;
         // Sending an event should result in an updated fs
         let sections_dir = archival.site.manifest.objects_dir.join("section");

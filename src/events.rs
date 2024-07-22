@@ -46,10 +46,18 @@ pub struct DeleteObjectEvent {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
+pub struct AddObjectValue {
+    pub path: ValuePath,
+    pub value: FieldValue,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct AddObjectEvent {
     pub object: String,
     pub filename: String,
     pub order: i32,
+    pub values: Vec<AddObjectValue>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

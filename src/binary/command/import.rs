@@ -343,6 +343,7 @@ impl Command {
                     object: object.to_string(),
                     filename: f.to_string(),
                     order: 0,
+                    values: vec![],
                 }))
                 .map_err(|e| ImportError::WriteError(e.to_string()))?;
         }
@@ -382,6 +383,7 @@ impl Command {
                             object: object.to_string(),
                             filename: file_name.to_string(),
                             order: 0,
+                            values: vec![],
                         }))
                         .map_err(|e| ImportError::WriteError(e.to_string()))?;
                     file_name

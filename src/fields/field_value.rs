@@ -99,21 +99,15 @@ impl fmt::Display for FieldValue {
     }
 }
 
-impl From<&FieldType> for FieldValue {
-    fn from(f_type: &FieldType) -> Self {
-        f_type.default_value()
-    }
-}
-
-impl From<&FieldValue> for toml::Value {
+impl From<&FieldValue> for Option<toml::Value> {
     fn from(value: &FieldValue) -> Self {
         match value {
-            FieldValue::String(v) => Self::String(v.to_owned()),
-            FieldValue::Markdown(v) => Self::String(v.to_owned()),
-            FieldValue::Number(n) => Self::Float(*n),
+            FieldValue::String(v) => Some(toml::Value::String(v.to_owned())),
+            FieldValue::Markdown(v) => Some(toml::Value::String(v.to_owned())),
+            FieldValue::Number(n) => Some(toml::Value::Float(*n)),
             FieldValue::Date(d) => {
                 let d = d.as_datetime();
-                Self::Datetime(toml_datetime::Datetime {
+                Some(toml::Value::Datetime(toml_datetime::Datetime {
                     date: Some(toml_datetime::Date {
                         year: d.year() as u16,
                         month: d.month(),
@@ -126,21 +120,23 @@ impl From<&FieldValue> for toml::Value {
                         nanosecond: d.nanosecond(),
                     }),
                     offset: None,
-                })
+                }))
             }
-            FieldValue::Boolean(v) => Self::Boolean(v.to_owned()),
-            FieldValue::Objects(o) => Self::Array(
+            FieldValue::Boolean(v) => Some(toml::Value::Boolean(v.to_owned())),
+            FieldValue::Objects(o) => Some(toml::Value::Array(
                 o.iter()
                     .map(|child| {
                         let mut vals: toml::map::Map<String, Value> = toml::map::Map::new();
                         for (key, cv) in child {
-                            vals.insert(key.to_string(), cv.into());
+                            if let Some(val) = cv.into() {
+                                vals.insert(key.to_string(), val);
+                            }
                         }
-                        Self::Table(vals)
+                        toml::Value::Table(vals)
                     })
                     .collect(),
-            ),
-            FieldValue::File(f) => Self::Table(f.to_toml()),
+            )),
+            FieldValue::File(f) => Some(toml::Value::Table(f.to_toml())),
         }
     }
 }
@@ -396,7 +392,20 @@ impl FieldValue {
 pub fn def_to_values(def: &HashMap<String, FieldType>) -> HashMap<String, FieldValue> {
     let mut vals = HashMap::new();
     for (key, f_type) in def {
-        vals.insert(key.to_string(), FieldValue::from(f_type));
+        vals.insert(
+            key.to_string(),
+            match f_type {
+                FieldType::String => FieldValue::String("".to_string()),
+                FieldType::Number => FieldValue::Number(0.0),
+                FieldType::Date => FieldValue::Date(DateTime::now()),
+                FieldType::Markdown => FieldValue::Markdown("".to_string()),
+                FieldType::Boolean => FieldValue::Boolean(false),
+                FieldType::Image => FieldValue::File(File::image()),
+                FieldType::Video => FieldValue::File(File::video()),
+                FieldType::Audio => FieldValue::File(File::audio()),
+                FieldType::Upload => FieldValue::File(File::download()),
+            },
+        );
     }
     vals
 }

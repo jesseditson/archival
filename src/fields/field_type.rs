@@ -1,4 +1,3 @@
-use super::{file::File, DateTime, FieldValue};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display};
 use std::str::FromStr;
@@ -78,20 +77,6 @@ impl FieldType {
             Self::Video => "video",
             Self::Audio => "audio",
             Self::Upload => "upload",
-        }
-    }
-
-    pub fn default_value(&self) -> FieldValue {
-        match self {
-            Self::String => FieldValue::String("".to_string()),
-            Self::Number => FieldValue::Number(0.0),
-            Self::Date => FieldValue::Date(DateTime::now()),
-            Self::Markdown => FieldValue::Markdown("".to_string()),
-            Self::Boolean => FieldValue::Boolean(false),
-            Self::Image => FieldValue::File(File::image()),
-            Self::Video => FieldValue::File(File::video()),
-            Self::Audio => FieldValue::File(File::audio()),
-            Self::Upload => FieldValue::File(File::download()),
         }
     }
 }
