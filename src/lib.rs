@@ -16,6 +16,7 @@ mod tags;
 #[cfg(test)]
 mod test_utils;
 mod value_path;
+use constants::MIN_COMPAT_VERSION;
 use events::ArchivalEventResponse;
 use events::{
     AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
@@ -53,7 +54,6 @@ pub use object_definition::ObjectDefinition;
 
 pub static ARCHIVAL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const MIN_COMPAT_VERSION: &str = ">=0.4.0";
 pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
     let req = VersionReq::parse(MIN_COMPAT_VERSION).unwrap();
     match Version::parse(version_string) {

@@ -1,3 +1,4 @@
+pub const MIN_COMPAT_VERSION: &str = ">=0.6.0";
 pub const MANIFEST_FILE_NAME: &str = "manifest.toml";
 pub const OBJECT_DEFINITION_FILE_NAME: &str = "objects.toml";
 pub const PAGES_DIR_NAME: &str = "pages";
