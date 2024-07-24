@@ -45,6 +45,7 @@ pub enum FieldType {
     Video,
     Upload,
     Audio,
+    Meta,
 }
 
 impl FromStr for FieldType {
@@ -60,6 +61,7 @@ impl FromStr for FieldType {
             "video" => Ok(FieldType::Video),
             "audio" => Ok(FieldType::Audio),
             "upload" => Ok(FieldType::Upload),
+            "meta" => Ok(FieldType::Meta),
             _ => Err(InvalidFieldError::UnrecognizedType(string.to_string())),
         }
     }
@@ -77,6 +79,7 @@ impl FieldType {
             Self::Video => "video",
             Self::Audio => "audio",
             Self::Upload => "upload",
+            Self::Meta => "meta",
         }
     }
 }

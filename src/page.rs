@@ -188,6 +188,7 @@ impl<'a> Page<'a> {
                 "order": template_info.object.order,
                 "path": template_info.object.path,
             }));
+            println!("OV: {:?}", object_vals);
             let mut context = liquid::object!({
               template_info.definition.name.to_owned(): object_vals
             });
@@ -224,7 +225,7 @@ impl<'a> Page<'a> {
 mod tests {
 
     use crate::{
-        fields::{DateTime, FieldType, FieldValue},
+        fields::{meta::Meta, DateTime, FieldType, FieldValue, MetaValue},
         liquid_parser, MemoryFileSystem,
     };
 
@@ -249,6 +250,13 @@ mod tests {
             (
                 "name".to_string(),
                 FieldValue::String("Tormenta Rey".to_string()),
+            ),
+            (
+                "meta".to_string(),
+                FieldValue::Meta(Meta(HashMap::from([(
+                    "number".to_string(),
+                    Some(MetaValue::Number(42.26)),
+                )]))),
             ),
             ("numbers".to_string(), FieldValue::Objects(numbers_objects)),
             (
@@ -348,6 +356,7 @@ mod tests {
     }
     fn artist_template_content() -> &'static str {
         "name: {{artist.name}}
+        metanum: {{artist.meta.number}}
         {% for number in artist.numbers %}
           number: {{number.number}}
         {% endfor %}
@@ -391,6 +400,7 @@ mod tests {
         let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
         let object = objects_map["artist"].into_iter().next().unwrap();
+        println!("OBJ: {:?}", object);
         let artist_def = artist_definition();
         let page = Page::new_with_template(
             "tormenta-rey".to_string(),
@@ -403,6 +413,10 @@ mod tests {
         let rendered = page.render(&liquid_parser, &objects_map)?;
         println!("rendered: {}", rendered);
         assert!(rendered.contains("name: Tormenta Rey"), "root field");
+        assert!(
+            rendered.contains("metanum: 42.26"),
+            "child meta number field"
+        );
         assert!(rendered.contains("number: 2.57"), "child number field");
         assert!(rendered.contains("date: Dec 22, 22"), "child date field");
         assert!(rendered.contains("link: foo.com"), "child string field");

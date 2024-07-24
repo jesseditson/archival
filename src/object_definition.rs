@@ -86,6 +86,7 @@ pub mod tests {
     pub fn artist_and_example_definition_str() -> &'static str {
         "[artist]
         name = \"string\"
+        meta = \"meta\"
         template = \"artist\"
         [artist.tour_dates]
         date = \"date\"
@@ -112,11 +113,12 @@ pub mod tests {
         assert!(defs.contains_key("artist"));
         assert!(defs.contains_key("example"));
         let artist = defs.get("artist").unwrap();
-        assert_eq!(artist.field_order.len(), 4);
+        assert_eq!(artist.field_order.len(), 5);
         assert_eq!(artist.field_order[0], "name".to_string());
-        assert_eq!(artist.field_order[1], "tour_dates".to_string());
-        assert_eq!(artist.field_order[2], "videos".to_string());
-        assert_eq!(artist.field_order[3], "numbers".to_string());
+        assert_eq!(artist.field_order[1], "meta".to_string());
+        assert_eq!(artist.field_order[2], "tour_dates".to_string());
+        assert_eq!(artist.field_order[3], "videos".to_string());
+        assert_eq!(artist.field_order[4], "numbers".to_string());
         assert!(!artist.field_order.contains(&"template".to_string()));
         assert!(artist.fields.contains_key("name"));
         assert_eq!(artist.fields.get("name").unwrap(), &FieldType::String);

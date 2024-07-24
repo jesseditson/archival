@@ -22,6 +22,20 @@ export type File = {
     "display_type": string;
     "url": string;
 };
+export type MetaValue = ({
+    "String": string;
+} | {
+    "Number": F64;
+} | {
+    "Boolean": boolean;
+} | {
+    "DateTime": DateTime;
+} | {
+    "Array": MetaValue[];
+} | {
+    "Map": Record<string, MetaValue>;
+});
+export type Meta = Record<string, (MetaValue | null)>;
 export type FieldValue = ({
     "String": string;
 } | {
@@ -31,9 +45,13 @@ export type FieldValue = ({
 } | {
     "Date": DateTime;
 } | {
+    "Objects": Record<string, FieldValue>[];
+} | {
     "Boolean": boolean;
 } | {
     "File": File;
+} | {
+    "Meta": Meta;
 });
 export type AddObjectValue = {
     "path": ValuePath;

@@ -99,7 +99,7 @@ impl DateTime {
         Ok(date_str)
     }
 
-    pub fn as_datetime(&self) -> model::DateTime {
+    pub fn as_liquid_datetime(&self) -> model::DateTime {
         if let Some(inner) = self.inner {
             inner
         } else {
