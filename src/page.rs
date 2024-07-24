@@ -253,10 +253,16 @@ mod tests {
             ),
             (
                 "meta".to_string(),
-                FieldValue::Meta(Meta(HashMap::from([(
-                    "number".to_string(),
-                    MetaValue::Number(42.26),
-                )]))),
+                FieldValue::Meta(Meta(HashMap::from([
+                    ("number".to_string(), MetaValue::Number(42.26)),
+                    (
+                        "deep".to_string(),
+                        MetaValue::Map(Meta(HashMap::from([(
+                            "deep".to_string(),
+                            MetaValue::Array(vec![MetaValue::String("HELLO!".to_string())]),
+                        )]))),
+                    ),
+                ]))),
             ),
             ("numbers".to_string(), FieldValue::Objects(numbers_objects)),
             (
@@ -357,6 +363,7 @@ mod tests {
     fn artist_template_content() -> &'static str {
         "name: {{artist.name}}
         metanum: {{artist.meta.number}}
+        deep: {{artist.meta.deep.deep | first}}
         {% for number in artist.numbers %}
           number: {{number.number}}
         {% endfor %}
@@ -418,6 +425,7 @@ mod tests {
             "child meta number field"
         );
         assert!(rendered.contains("number: 2.57"), "child number field");
+        assert!(rendered.contains("deep: HELLO!"), "child deep field");
         assert!(rendered.contains("date: Dec 22, 22"), "child date field");
         assert!(rendered.contains("link: foo.com"), "child string field");
         Ok(())
