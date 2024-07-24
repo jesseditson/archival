@@ -27,15 +27,13 @@ mod typedefs {
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
-pub struct Meta(pub HashMap<String, Option<MetaValue>>);
+pub struct Meta(pub HashMap<String, MetaValue>);
 
 impl Meta {
     pub fn to_toml(&self) -> toml::map::Map<std::string::String, toml::Value> {
         let mut m = toml::map::Map::new();
         for (k, v) in &self.0 {
-            if let Some(val) = v {
-                m.insert(k.to_string(), val.to_toml());
-            }
+            m.insert(k.to_string(), v.to_toml());
         }
         m
     }
@@ -50,7 +48,7 @@ impl From<&MetaValue> for model::Value {
             MetaValue::DateTime(d) => model::Value::scalar(d.as_liquid_datetime()),
             MetaValue::Array(v) => model::Value::array(
                 v.iter()
-                    .map(|n| model::Value::from(n))
+                    .map(model::Value::from)
                     .collect::<Vec<model::Value>>(),
             ),
             MetaValue::Map(m) => model::Value::Object(model::Object::from(m)),
@@ -61,9 +59,7 @@ impl From<&Meta> for model::Object {
     fn from(value: &Meta) -> Self {
         let mut m = model::Object::new();
         for (k, v) in &value.0 {
-            if let Some(val) = v {
-                m.insert(k.into(), val.into());
-            }
+            m.insert(k.into(), v.into());
         }
         m
     }
@@ -73,9 +69,7 @@ impl From<&Meta> for serde_json::Value {
     fn from(value: &Meta) -> Self {
         let mut m = serde_json::Map::<String, serde_json::Value>::new();
         for (k, v) in &value.0 {
-            if let Some(val) = v {
-                m.insert(k.to_string(), val.into());
-            }
+            m.insert(k.to_string(), v.into());
         }
         serde_json::Value::Object(m)
     }
@@ -139,7 +133,7 @@ impl From<&MetaValue> for serde_json::Value {
             MetaValue::Number(v) => (*v).into(),
             MetaValue::Boolean(v) => (*v).into(),
             MetaValue::DateTime(d) => d.to_string().into(),
-            MetaValue::Array(v) => v.into_iter().collect::<serde_json::Value>().into(),
+            MetaValue::Array(v) => v.iter().collect::<serde_json::Value>(),
             MetaValue::Map(m) => m.into(),
         }
     }
@@ -165,7 +159,7 @@ impl From<&toml::map::Map<String, toml::Value>> for Meta {
     fn from(value: &toml::map::Map<String, toml::Value>) -> Self {
         let mut meta = HashMap::new();
         for (k, v) in value {
-            meta.insert(k.to_string(), Some(MetaValue::from(v)));
+            meta.insert(k.to_string(), MetaValue::from(v));
         }
         Self(meta)
     }
@@ -226,7 +220,7 @@ impl model::ValueView for Meta {
         "meta"
     }
 
-    fn query_state(&self, state: model::State) -> bool {
+    fn query_state(&self, _state: model::State) -> bool {
         false
     }
 
@@ -237,9 +231,7 @@ impl model::ValueView for Meta {
     fn to_value(&self) -> model::Value {
         let mut m = model::Object::new();
         for (k, v) in &self.0 {
-            if let Some(val) = v {
-                m.insert(k.into(), val.into());
-            }
+            m.insert(k.into(), v.into());
         }
         model::Value::Object(m)
     }
@@ -259,8 +251,7 @@ impl model::ObjectView for Meta {
     }
 
     fn values<'k>(&'k self) -> Box<dyn Iterator<Item = &'k dyn model::ValueView> + 'k> {
-        let values = self.0.values().filter(|i| i.is_none()).flatten();
-        Box::new(values)
+        Box::new(self.keys().map(|k| self.get(&k).unwrap()))
     }
 
     fn iter<'k>(
@@ -275,11 +266,7 @@ impl model::ObjectView for Meta {
 
     fn get<'s>(&'s self, index: &str) -> Option<&'s dyn model::ValueView> {
         if let Some(o) = self.0.get(index) {
-            if let Some(i) = o {
-                Some(i)
-            } else {
-                None
-            }
+            Some(o)
         } else {
             None
         }

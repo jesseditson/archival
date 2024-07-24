@@ -35,7 +35,7 @@ export type MetaValue = ({
 } | {
     "Map": Record<string, MetaValue>;
 });
-export type Meta = Record<string, (MetaValue | null)>;
+export type Meta = Record<string, MetaValue>;
 export type FieldValue = ({
     "String": string;
 } | {

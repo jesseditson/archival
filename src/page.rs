@@ -255,7 +255,7 @@ mod tests {
                 "meta".to_string(),
                 FieldValue::Meta(Meta(HashMap::from([(
                     "number".to_string(),
-                    Some(MetaValue::Number(42.26)),
+                    MetaValue::Number(42.26),
                 )]))),
             ),
             ("numbers".to_string(), FieldValue::Objects(numbers_objects)),
