@@ -663,6 +663,7 @@ mod lib {
         assert!(output.contains("archival_site = \"test\""));
         assert!(output.contains("site_url = \"test.com\""));
         // Doesn't fill defaults
+        assert!(!output.contains("objects_dir"));
         assert!(!output.contains("objects"));
         // Does show non-defaults
         assert!(output.contains("prebuild = [\"test\"]"));
