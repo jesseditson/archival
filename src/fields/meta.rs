@@ -1,6 +1,6 @@
 use liquid_core::model;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use super::DateTime;
 
@@ -29,6 +29,12 @@ mod typedefs {
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Meta(pub HashMap<String, MetaValue>);
 
+impl Display for Meta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.to_toml())
+    }
+}
+
 impl Meta {
     pub fn to_toml(&self) -> toml::map::Map<std::string::String, toml::Value> {
         let mut m = toml::map::Map::new();
@@ -36,6 +42,9 @@ impl Meta {
             m.insert(k.to_string(), v.to_toml());
         }
         m
+    }
+    pub fn get_value(&self, key: &str) -> Option<&MetaValue> {
+        self.0.get(key)
     }
 }
 
@@ -330,10 +339,6 @@ impl model::ValueView for MetaValue {
         }
     }
 
-    fn is_scalar(&self) -> bool {
-        self.as_scalar().is_some()
-    }
-
     fn as_array(&self) -> Option<&dyn model::ArrayView> {
         if let MetaValue::Array(v) = self {
             Some(v)
@@ -341,11 +346,6 @@ impl model::ValueView for MetaValue {
             None
         }
     }
-
-    fn is_array(&self) -> bool {
-        self.as_array().is_some()
-    }
-
     fn as_object(&self) -> Option<&dyn model::ObjectView> {
         if let MetaValue::Map(m) = self {
             Some(m)
@@ -354,32 +354,22 @@ impl model::ValueView for MetaValue {
         }
     }
 
-    fn is_object(&self) -> bool {
-        self.as_object().is_some()
-    }
-
-    fn as_state(&self) -> Option<model::State> {
-        None
-    }
-
-    fn is_state(&self) -> bool {
-        self.as_state().is_some()
-    }
-
-    fn is_nil(&self) -> bool {
-        false
-    }
-
     fn as_debug(&self) -> &dyn std::fmt::Debug {
         self
     }
 
     fn render(&self) -> model::DisplayCow<'_> {
-        todo!()
+        match self {
+            MetaValue::String(s) => s.render(),
+            MetaValue::Number(v) => v.render(),
+            MetaValue::Boolean(v) => v.render(),
+            MetaValue::DateTime(d) => d.borrowed_as_datetime().render(),
+            _ => todo!("MetaValue render not implemented for non-scalar values"),
+        }
     }
 
     fn source(&self) -> model::DisplayCow<'_> {
-        todo!()
+        todo!("MetaValue source not implemented")
     }
 
     fn type_name(&self) -> &'static str {

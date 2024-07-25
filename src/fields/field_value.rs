@@ -107,6 +107,7 @@ impl FieldValue {
                 let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
                 Self::Meta(Meta::from(f_info))
             }
+            FieldType::Alias(a) => Self::val_with_type(&a.0, value)?,
         })
     }
 
@@ -304,6 +305,7 @@ impl FieldValue {
             )),
         }
     }
+
     #[instrument(skip(value))]
     pub fn from_toml(
         key: &String,
@@ -411,6 +413,7 @@ impl FieldValue {
                     value: value.to_string(),
                 },
             )?))),
+            FieldType::Alias(a) => Self::from_toml(key, &a.0, value),
         }
     }
 
@@ -428,24 +431,25 @@ impl FieldValue {
     }
 }
 
+fn default_val(f_type: &FieldType) -> FieldValue {
+    match f_type {
+        FieldType::String => FieldValue::String("".to_string()),
+        FieldType::Number => FieldValue::Number(0.0),
+        FieldType::Date => FieldValue::Date(DateTime::now()),
+        FieldType::Markdown => FieldValue::Markdown("".to_string()),
+        FieldType::Boolean => FieldValue::Boolean(false),
+        FieldType::Image => FieldValue::File(File::image()),
+        FieldType::Video => FieldValue::File(File::video()),
+        FieldType::Audio => FieldValue::File(File::audio()),
+        FieldType::Upload => FieldValue::File(File::download()),
+        FieldType::Meta => FieldValue::Meta(Meta::default()),
+        FieldType::Alias(a) => default_val(&a.0),
+    }
+}
 pub fn def_to_values(def: &HashMap<String, FieldType>) -> HashMap<String, FieldValue> {
     let mut vals = HashMap::new();
     for (key, f_type) in def {
-        vals.insert(
-            key.to_string(),
-            match f_type {
-                FieldType::String => FieldValue::String("".to_string()),
-                FieldType::Number => FieldValue::Number(0.0),
-                FieldType::Date => FieldValue::Date(DateTime::now()),
-                FieldType::Markdown => FieldValue::Markdown("".to_string()),
-                FieldType::Boolean => FieldValue::Boolean(false),
-                FieldType::Image => FieldValue::File(File::image()),
-                FieldType::Video => FieldValue::File(File::video()),
-                FieldType::Audio => FieldValue::File(File::audio()),
-                FieldType::Upload => FieldValue::File(File::download()),
-                FieldType::Meta => FieldValue::Meta(Meta::default()),
-            },
-        );
+        vals.insert(key.to_string(), default_val(f_type));
     }
     vals
 }

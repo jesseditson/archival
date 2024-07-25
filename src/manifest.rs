@@ -1,8 +1,10 @@
-use serde::{Deserialize, Serialize};
+use regex::Regex;
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::{
     collections::HashMap,
     error::Error,
     fmt::{self, Display},
+    ops::Deref,
     path::{Path, PathBuf},
 };
 use toml::{Table, Value};
@@ -28,6 +30,8 @@ pub enum InvalidManifestError {
     FailedParsing,
     #[error("Manifest Field {0} was of an unrecognized type.")]
     BadType(String),
+    #[error("Validator {0} was not a valid regular expression ({1}).")]
+    InvalidValidator(String, String),
     #[error("Manifest Missing Required Field: {0}")]
     MissingRequired(String),
     #[error("Bad Path '{1}' for Field {0}")]
@@ -38,17 +42,72 @@ pub enum InvalidManifestError {
     InvalidField(Value, String),
 }
 
+#[derive(Debug)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
+pub struct Validator(#[cfg_attr(feature = "typescript", type_def(type_of = "String"))] Regex);
+
+impl Validator {
+    pub fn new(regex: &str, name: &str) -> Result<Self, InvalidManifestError> {
+        Ok(Self(Regex::new(regex).map_err(|e| {
+            InvalidManifestError::InvalidValidator(name.to_string(), e.to_string())
+        })?))
+    }
+    pub fn validate(&self, input: &str) -> bool {
+        self.0.is_match(input)
+    }
+}
+
+impl Display for Validator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.as_str())
+    }
+}
+
+impl Deref for Validator {
+    type Target = Regex;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Serialize for Validator {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.0.as_str())
+    }
+}
+struct ValidatorVisitor;
+impl<'de> Visitor<'de> for ValidatorVisitor {
+    type Value = Validator;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a regular expression")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let re = Regex::new(v).map_err(|e| E::custom(format!("Invalid Regex {}: {}", v, e)))?;
+        Ok(Validator(re))
+    }
+}
+impl<'de> Deserialize<'de> for Validator {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_str(ValidatorVisitor)
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ManifestEditorTypePathValidator {
     pub path: ValuePath,
-    pub validate: String,
+    pub validate: Validator,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ManifestEditorTypeValidator {
-    Value(String),
+    Value(Validator),
     Path(ManifestEditorTypePathValidator),
 }
 
@@ -416,7 +475,7 @@ impl Manifest {
                                             ))
                                         })?,
                                 );
-                                let validate = t
+                                let validate_string = t
                                     .get("validate")
                                     .ok_or_else(|| {
                                         InvalidManifestError::MissingRequired(format!(
@@ -431,12 +490,15 @@ impl Manifest {
                                     })?
                                     .to_string();
                                 Ok(ManifestEditorTypeValidator::Path(
-                                    ManifestEditorTypePathValidator { path, validate },
+                                    ManifestEditorTypePathValidator {
+                                        path,
+                                        validate: Validator::new(&validate_string, &type_name)?,
+                                    },
                                 ))
                             }
-                            toml::Value::String(s) => {
-                                Ok(ManifestEditorTypeValidator::Value(s.to_owned()))
-                            }
+                            toml::Value::String(s) => Ok(ManifestEditorTypeValidator::Value(
+                                Validator::new(s, &type_name)?,
+                            )),
                             _ => Err(InvalidManifestError::BadType("validate (item)".to_string())),
                         })
                         .collect::<Result<Vec<ManifestEditorTypeValidator>, _>>()?,
@@ -589,7 +651,7 @@ mod tests {
             ManifestEditorTypeValidator::Value(_)
         ));
         if let ManifestEditorTypeValidator::Value(v) = &t1.validate[0] {
-            assert_eq!(v, "\\d{2}/\\d{2}/\\d{4}");
+            assert_eq!(v.to_string(), "\\d{2}/\\d{2}/\\d{4}");
         }
         let t2 = &m.editor_types["custom"];
         assert_eq!(t2.alias_of, "meta");
@@ -600,7 +662,7 @@ mod tests {
         ));
         if let ManifestEditorTypeValidator::Path(v) = &t2.validate[0] {
             assert_eq!(v.path.to_string(), "field_a");
-            assert_eq!(v.validate, ".+");
+            assert_eq!(v.validate.to_string(), ".+");
         }
         assert!(matches!(
             t2.validate[1],
@@ -608,7 +670,7 @@ mod tests {
         ));
         if let ManifestEditorTypeValidator::Path(v) = &t2.validate[1] {
             assert_eq!(v.path.to_string(), "field_b");
-            assert_eq!(v.validate, ".+");
+            assert_eq!(v.validate.to_string(), ".+");
         }
         let manifest_output = m.to_toml()?;
         println!("MTOML {}", manifest_output);

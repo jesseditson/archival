@@ -88,6 +88,16 @@ impl File {
         f.mime = m_type.to_string();
         f
     }
+    pub fn get_key(&self, str: &str) -> Option<&String> {
+        match str {
+            "sha" => Some(&self.sha),
+            "name" => self.name.as_ref(),
+            "filename" => Some(&self.filename),
+            "mime" => Some(&self.mime),
+            "display_type" => Some(&self.display_type),
+            _ => None,
+        }
+    }
     pub fn fill_from_map(mut self, map: &toml::map::Map<String, toml::Value>) -> Self {
         for (k, v) in map {
             match &k[..] {

@@ -164,7 +164,12 @@ impl<F: FileSystemAPI> Archival<F> {
                 obj_type
             )))?;
         let table: toml::Table = toml::from_str(&contents)?;
-        let _ = Object::from_table(obj_def, Path::new(filename), &table)?;
+        let _ = Object::from_table(
+            obj_def,
+            Path::new(filename),
+            &table,
+            &self.site.manifest.editor_types,
+        )?;
         // Object is valid, write it
         self.fs_mutex
             .with_fs(|fs| fs.write_str(&self.object_path_impl(obj_type, filename, fs)?, contents))

@@ -71,18 +71,19 @@ impl Site {
     #[instrument(skip(fs))]
     pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
         // Load our manifest (should it exist)
-        let manifest = match Manifest::from_file(Path::new(MANIFEST_FILE_NAME), fs) {
-            Ok(m) => {
-                // When loading a manifest, check its compatibility.
-                if let Some(manifest_version) = &m.archival_version {
-                    let (compat, message) = check_compatibility(manifest_version);
-                    if !compat {
-                        return Err(ArchivalError::new(&message).into());
-                    }
+        let manifest_path = Path::new(MANIFEST_FILE_NAME);
+        let manifest = if fs.exists(manifest_path)? {
+            let manifest = Manifest::from_file(manifest_path, fs)?;
+            // When loading a manifest, check its compatibility.
+            if let Some(manifest_version) = &manifest.archival_version {
+                let (compat, message) = check_compatibility(manifest_version);
+                if !compat {
+                    return Err(ArchivalError::new(&message).into());
                 }
-                m
             }
-            Err(_) => Manifest::default(Path::new("")),
+            manifest
+        } else {
+            Manifest::default(Path::new(""))
         };
         let odf = Path::new(&manifest.object_definition_file);
         if !fs.exists(odf)? {
@@ -96,7 +97,7 @@ impl Site {
         // Load our object definitions
         debug!("loading definition {}", odf.display());
         let objects_table = read_toml(odf, fs)?;
-        let objects = ObjectDefinition::from_table(&objects_table)?;
+        let objects = ObjectDefinition::from_table(&objects_table, &manifest.editor_types)?;
         Ok(Site {
             manifest,
             object_definitions: objects,
@@ -213,6 +214,7 @@ impl Site {
                 object_def,
                 Path::new(path.with_extension("").file_name().unwrap()),
                 &obj_table,
+                &self.manifest.editor_types,
             )?;
             cache.insert(path.to_path_buf(), o.clone());
             Ok(o)

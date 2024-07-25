@@ -1,10 +1,10 @@
 use crate::{
     fields::{field_type::InvalidFieldError, FieldType, ObjectValues},
+    manifest::EditorTypes,
     reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
     FieldValue,
 };
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use std::{collections::HashMap, error::Error, fmt::Debug};
 use toml::Table;
 use tracing::instrument;
@@ -23,7 +23,11 @@ pub struct ObjectDefinition {
 }
 
 impl ObjectDefinition {
-    pub fn new(name: &str, definition: &Table) -> Result<ObjectDefinition, Box<dyn Error>> {
+    pub fn new(
+        name: &str,
+        definition: &Table,
+        editor_types: &EditorTypes,
+    ) -> Result<ObjectDefinition, Box<dyn Error>> {
         if is_reserved_field(name) {
             return Err(InvalidFieldError::ReservedObjectNameError(name.to_string()).into());
         }
@@ -39,9 +43,10 @@ impl ObjectDefinition {
                 obj_def.field_order.push(key.to_string());
             }
             if let Some(child_table) = m_value.as_table() {
-                obj_def
-                    .children
-                    .insert(key.clone(), ObjectDefinition::new(key, child_table)?);
+                obj_def.children.insert(
+                    key.clone(),
+                    ObjectDefinition::new(key, child_table, editor_types)?,
+                );
             } else if let Some(value) = m_value.as_str() {
                 if key == reserved_fields::TEMPLATE {
                     obj_def.template = Some(value.to_string());
@@ -52,17 +57,23 @@ impl ObjectDefinition {
                 } else {
                     obj_def
                         .fields
-                        .insert(key.clone(), FieldType::from_str(value)?);
+                        .insert(key.clone(), FieldType::from_str(value, editor_types)?);
                 }
             }
         }
         Ok(obj_def)
     }
-    pub fn from_table(table: &Table) -> Result<HashMap<String, ObjectDefinition>, Box<dyn Error>> {
+    pub fn from_table(
+        table: &Table,
+        editor_types: &EditorTypes,
+    ) -> Result<HashMap<String, ObjectDefinition>, Box<dyn Error>> {
         let mut objects: HashMap<String, ObjectDefinition> = HashMap::new();
         for (name, m_def) in table.into_iter() {
             if let Some(def) = m_def.as_table() {
-                objects.insert(name.clone(), ObjectDefinition::new(name, def)?);
+                objects.insert(
+                    name.clone(),
+                    ObjectDefinition::new(name, def, editor_types)?,
+                );
             }
         }
         Ok(objects)
@@ -105,7 +116,7 @@ pub mod tests {
     #[test]
     fn parsing() -> Result<(), Box<dyn Error>> {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table)?;
+        let defs = ObjectDefinition::from_table(&table, &HashMap::new())?;
 
         println!("{:?}", defs);
 

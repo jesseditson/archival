@@ -1,7 +1,7 @@
 pub use crate::value_path::ValuePath;
 use crate::{
     events::AddObjectValue,
-    fields::{FieldValue, InvalidFieldError, ObjectValues},
+    fields::{FieldType, FieldValue, InvalidFieldError, ObjectValues},
     manifest::{EditorTypes, ManifestEditorTypeValidator},
     object_definition::ObjectDefinition,
     reserved_fields::{self, is_reserved_field},
@@ -28,27 +28,80 @@ pub struct Object {
 }
 
 impl Object {
+    #[instrument]
+    pub fn validate(
+        field_type: &FieldType,
+        field_value: &FieldValue,
+        custom_types: &EditorTypes,
+    ) -> Result<(), InvalidFieldError> {
+        // You can only define a validator via editor_types, which will always
+        // create an alias type
+        if let FieldType::Alias(a) = field_type {
+            if let Some(custom_type) = custom_types.get(&a.1) {
+                for validator in &custom_type.validate {
+                    match validator {
+                        ManifestEditorTypeValidator::Path(p) => {
+                            if let Ok(validated_value) = p.path.get_value(field_value) {
+                                if !p.validate.validate(&validated_value.to_string()) {
+                                    return Err(InvalidFieldError::FailedValidation(
+                                        validated_value.to_string(),
+                                        p.validate.to_string(),
+                                    ));
+                                }
+                            } else {
+                                // Value not found - if our validator passes
+                                // with an empty string, this is ok. Otherwise
+                                // this is an error.
+                                if !p.validate.validate("") {
+                                    return Err(InvalidFieldError::FailedValidation(
+                                        "(not found)".to_string(),
+                                        p.validate.to_string(),
+                                    ));
+                                }
+                            }
+                        }
+                        ManifestEditorTypeValidator::Value(v) => {
+                            if !v.validate(&field_value.to_string()) {
+                                return Err(InvalidFieldError::FailedValidation(
+                                    field_value.to_string(),
+                                    v.to_string(),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     #[instrument(skip(definition, table))]
     pub fn values_from_table(
         file: &Path,
         table: &Table,
         definition: &ObjectDefinition,
+        custom_types: &EditorTypes,
     ) -> Result<ObjectValues, Box<dyn Error>> {
         // liquid-rust only supports strict parsing. This is reasonable but we
         // also want to allow empty root keys, so we fill in defaults for any
         // missing definition keys
         let mut values = definition.empty_object();
-        for (key, value) in table {
-            if let Some(field_type) = definition.fields.get(&key.to_string()) {
-                // Primitive values
-                let field_value = FieldValue::from_toml(key, field_type, value)?;
-                values.insert(key.to_string(), field_value);
-            } else if let Some(child_def) = definition.children.get(&key.to_string()) {
+        for (type_name, value) in table {
+            let def_key = custom_types
+                .get(type_name)
+                .map(|i| &i.alias_of)
+                .unwrap_or(type_name);
+            if let Some(field_type) = definition.fields.get(def_key) {
+                // Values
+                let field_value = FieldValue::from_toml(def_key, field_type, value)?;
+                Object::validate(field_type, &field_value, custom_types)?;
+                values.insert(def_key.to_string(), field_value);
+            } else if let Some(child_def) = definition.children.get(&def_key.to_string()) {
                 // Children
                 let m_objects = value
                     .as_array()
                     .ok_or_else(|| InvalidFieldError::NotAnArray {
-                        key: key.to_string(),
+                        key: def_key.to_string(),
                         value: value.to_string(),
                     })?;
                 let mut objects: Vec<ObjectValues> = Vec::new();
@@ -57,17 +110,18 @@ impl Object {
                         object
                             .as_table()
                             .ok_or_else(|| InvalidFieldError::InvalidChild {
-                                key: key.to_owned(),
+                                key: def_key.to_owned(),
                                 index,
                                 child: value.to_string(),
                             })?;
-                    let object = Object::values_from_table(file, table, child_def)?;
+                    let object = Object::values_from_table(file, table, child_def, custom_types)?;
                     objects.push(object);
                 }
                 let field_value = FieldValue::Objects(objects);
-                values.insert(key.to_string(), field_value);
-            } else if !is_reserved_field(key) {
-                warn!("{}: unknown field {}", file.display(), key);
+
+                values.insert(def_key.to_string(), field_value);
+            } else if !is_reserved_field(def_key) {
+                warn!("{}: unknown field {}", file.display(), def_key);
             }
         }
         Ok(values)
@@ -78,8 +132,9 @@ impl Object {
         definition: &ObjectDefinition,
         file: &Path,
         table: &Table,
+        custom_types: &EditorTypes,
     ) -> Result<Object, Box<dyn Error>> {
-        let values = Object::values_from_table(file, table, definition)?;
+        let values = Object::values_from_table(file, table, definition, custom_types)?;
         let mut order = -1;
         if let Some(t_order) = table.get(reserved_fields::ORDER) {
             if let Some(int_order) = t_order.as_integer() {
@@ -109,7 +164,7 @@ impl Object {
         defaults: Vec<AddObjectValue>,
     ) -> Result<Self, Box<dyn Error>> {
         let path = Path::new(&definition.name).join(filename);
-        let values = Object::values_from_table(&path, &Table::new(), definition)?;
+        let values = Object::values_from_table(&path, &Table::new(), definition, &HashMap::new())?;
         let mut object = Self {
             filename: filename.to_owned(),
             object_name: definition.name.clone(),
@@ -155,6 +210,8 @@ impl Object {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::{
         fields::DateTime, object_definition::tests::artist_and_example_definition_str, FieldConfig,
     };
@@ -178,13 +235,16 @@ mod tests {
 
     #[test]
     fn object_parsing() -> Result<(), Box<dyn Error>> {
-        let defs =
-            ObjectDefinition::from_table(&toml::from_str(artist_and_example_definition_str())?)?;
+        let defs = ObjectDefinition::from_table(
+            &toml::from_str(artist_and_example_definition_str())?,
+            &HashMap::new(),
+        )?;
         let table: Table = toml::from_str(artist_object_str())?;
         let obj = Object::from_table(
             defs.get("artist").unwrap(),
             Path::new("tormenta-rey"),
             &table,
+            &HashMap::new(),
         )?;
         assert_eq!(obj.order, 1);
         assert_eq!(obj.object_name, "artist");
