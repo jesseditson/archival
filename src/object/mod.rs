@@ -2,6 +2,7 @@ pub use crate::value_path::ValuePath;
 use crate::{
     events::AddObjectValue,
     fields::{FieldValue, InvalidFieldError, ObjectValues},
+    manifest::{EditorTypes, ManifestEditorTypeValidator},
     object_definition::ObjectDefinition,
     reserved_fields::{self, is_reserved_field},
 };
@@ -10,7 +11,7 @@ use liquid::{
     ObjectView, ValueView,
 };
 use serde::{Deserialize, Serialize};
-use std::{error::Error, fmt::Debug, path::Path};
+use std::{collections::HashMap, error::Error, fmt::Debug, path::Path};
 use toml::Table;
 use tracing::{instrument, warn};
 mod object_entry;

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     error::Error,
-    fmt,
+    fmt::{self, Display},
     path::{Path, PathBuf},
 };
 use toml::{Table, Value};
@@ -15,20 +15,29 @@ use super::constants::{
     BUILD_DIR_NAME, OBJECTS_DIR_NAME, OBJECT_DEFINITION_FILE_NAME, PAGES_DIR_NAME, STATIC_DIR_NAME,
 };
 
-#[derive(Debug, Clone)]
-struct InvalidManifestError;
-impl Error for InvalidManifestError {}
-impl fmt::Display for InvalidManifestError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid manifest")
-    }
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum InvalidManifestError {
+    #[error("Invalid Site Path")]
+    InvalidSitePath,
+    #[error("Failed Parsing Manifest File")]
+    FailedParsing,
+    #[error("Manifest Field {0} was of an unrecognized type.")]
+    BadType(String),
+    #[error("Manifest Missing Required Field: {0}")]
+    MissingRequired(String),
+    #[error("Bad Path '{1}' for Field {0}")]
+    BadPath(Value, String),
+    #[error("Invalid Manifest value '{1}' for field {0}.")]
+    InvalidField(Value, String),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ManifestEditorTypePathValidator {
-    path: ValuePath,
-    validate: String,
+    pub path: ValuePath,
+    pub validate: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -36,6 +45,21 @@ pub struct ManifestEditorTypePathValidator {
 pub enum ManifestEditorTypeValidator {
     Value(String),
     Path(ManifestEditorTypePathValidator),
+}
+
+impl Display for ManifestEditorTypeValidator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Path(p) => {
+                    format!("{}: {}", p.path.to_string(), p.validate)
+                }
+                Self::Value(v) => v.to_string(),
+            }
+        )
+    }
 }
 
 impl From<&ManifestEditorTypeValidator> for toml::Value {
@@ -57,9 +81,9 @@ impl From<&ManifestEditorTypeValidator> for toml::Value {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ManifestEditorType {
-    alias_of: String,
-    validate: Vec<ManifestEditorTypeValidator>,
-    editor_url: String,
+    pub alias_of: String,
+    pub validate: Vec<ManifestEditorTypeValidator>,
+    pub editor_url: String,
 }
 
 impl From<&ManifestEditorType> for toml::Value {
@@ -73,6 +97,8 @@ impl From<&ManifestEditorType> for toml::Value {
         map.into()
     }
 }
+
+pub type EditorTypes = HashMap<String, ManifestEditorType>;
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
@@ -90,7 +116,7 @@ pub struct Manifest {
     pub static_dir: PathBuf,
     pub layout_dir: PathBuf,
     pub uploads_url: Option<String>,
-    pub editor_types: HashMap<String, ManifestEditorType>,
+    pub editor_types: EditorTypes,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -145,7 +171,7 @@ impl fmt::Display for Manifest {
         static files: {}
         layout dir: {}
         build dir: {}
-        editor types: {:?}
+        {}
         "#,
             self.archival_version
                 .as_ref()
@@ -161,7 +187,36 @@ impl fmt::Display for Manifest {
             self.static_dir.display(),
             self.layout_dir.display(),
             self.build_dir.display(),
-            self.editor_types
+            if !self.editor_types.is_empty() {
+                format!(
+                    "editor types:\n{}",
+                    self.editor_types
+                        .iter()
+                        .map(|(tn, i)| {
+                            format!(
+                                "            {}: {}{}",
+                                tn,
+                                i.alias_of,
+                                if i.validate.is_empty() {
+                                    "".to_string()
+                                } else {
+                                    format!(
+                                        " ({})",
+                                        i.validate
+                                            .iter()
+                                            .map(|v| v.to_string())
+                                            .collect::<Vec<String>>()
+                                            .join(",")
+                                    )
+                                }
+                            )
+                        })
+                        .collect::<Vec<String>>()
+                        .join("\n")
+                )
+            } else {
+                "".to_string()
+            }
         )
     }
 }
@@ -216,11 +271,11 @@ impl Manifest {
     pub fn from_string(root: &Path, string: String) -> Result<Manifest, Box<dyn Error>> {
         let mut manifest = Manifest::default(root);
         let values: Table = toml::from_str(&string)?;
-        let path_or_err = |value: Value| -> Result<PathBuf, InvalidManifestError> {
+        let path_or_err = |value: Value, field: &str| -> Result<PathBuf, InvalidManifestError> {
             if let Some(string) = value.as_str() {
                 return Ok(root.join(string));
             }
-            Err(InvalidManifestError)
+            Err(InvalidManifestError::BadPath(value, field.to_string()))
         };
         for (key, value) in values.into_iter() {
             match key.as_str() {
@@ -237,13 +292,15 @@ impl Manifest {
                             .collect()
                     })
                 }
-                "pages" => manifest.pages_dir = path_or_err(value)?,
-                "objects" => manifest.objects_dir = path_or_err(value)?,
-                "build_dir" => manifest.build_dir = path_or_err(value)?,
-                "static_dir" => manifest.static_dir = path_or_err(value)?,
-                "layout_dir" => manifest.layout_dir = path_or_err(value)?,
-                "object_file" => manifest.object_definition_file = path_or_err(value)?,
-                "editor_types" => manifest.parse_editor_types(value)?,
+                "pages" => manifest.pages_dir = path_or_err(value, "pages")?,
+                "objects" => manifest.objects_dir = path_or_err(value, "objects")?,
+                "build_dir" => manifest.build_dir = path_or_err(value, "build_dir")?,
+                "static_dir" => manifest.static_dir = path_or_err(value, "static_dir")?,
+                "layout_dir" => manifest.layout_dir = path_or_err(value, "layout_dir")?,
+                "object_file" => {
+                    manifest.object_definition_file = path_or_err(value, "object_file")?
+                }
+                "editor_types" => manifest.parse_editor_types(value).unwrap(),
                 _ => {}
             }
         }
@@ -254,7 +311,9 @@ impl Manifest {
         manifest_path: &Path,
         fs: &impl FileSystemAPI,
     ) -> Result<Manifest, Box<dyn Error>> {
-        let root = manifest_path.parent().ok_or(InvalidManifestError)?;
+        let root = manifest_path
+            .parent()
+            .ok_or(InvalidManifestError::InvalidSitePath)?;
         let string = fs.read_to_string(manifest_path)?.unwrap_or_default();
         Manifest::from_string(root, string)
     }
@@ -308,51 +367,70 @@ impl Manifest {
     fn parse_editor_types(&mut self, types: toml::Value) -> Result<(), InvalidManifestError> {
         let types = match types {
             toml::Value::Table(t) => t,
-            _ => return Err(InvalidManifestError),
+            _ => return Err(InvalidManifestError::FailedParsing),
         };
         let mut editor_types = HashMap::new();
         for (type_name, info) in types {
             let mut editor_type = ManifestEditorType::default();
             let info_map = match info {
                 toml::Value::Table(t) => t,
-                _ => return Err(InvalidManifestError),
+                _ => return Err(InvalidManifestError::FailedParsing),
             };
             editor_type.alias_of = info_map
                 .get("type")
-                .ok_or(InvalidManifestError)?
+                .ok_or_else(|| InvalidManifestError::MissingRequired(format!("{type_name}.type")))?
                 .as_str()
-                .ok_or(InvalidManifestError)?
+                .ok_or_else(|| {
+                    InvalidManifestError::MissingRequired(format!("{type_name}.type (string)"))
+                })?
                 .to_string();
-            let validator_val = info_map.get("validate").ok_or(InvalidManifestError)?;
-            editor_type.validate = match validator_val {
-                toml::Value::Array(arr) => arr
-                    .iter()
-                    .map(|val| match val {
-                        toml::Value::Table(t) => {
-                            let path = ValuePath::from_string(
-                                t.get("path")
-                                    .ok_or(InvalidManifestError)?
+            if let Some(validator_val) = info_map.get("validate") {
+                editor_type.validate = match validator_val {
+                    toml::Value::Array(arr) => arr
+                        .iter()
+                        .map(|val| match val {
+                            toml::Value::Table(t) => {
+                                let path = ValuePath::from_string(
+                                    t.get("path")
+                                        .ok_or_else(|| {
+                                            InvalidManifestError::MissingRequired(format!(
+                                                "{type_name}.validate.path"
+                                            ))
+                                        })?
+                                        .as_str()
+                                        .ok_or_else(|| {
+                                            InvalidManifestError::MissingRequired(format!(
+                                                "{type_name}.validate.path (string)"
+                                            ))
+                                        })?,
+                                );
+                                let validate = t
+                                    .get("validate")
+                                    .ok_or_else(|| {
+                                        InvalidManifestError::MissingRequired(format!(
+                                            "{type_name}.validate.validate"
+                                        ))
+                                    })?
                                     .as_str()
-                                    .ok_or(InvalidManifestError)?,
-                            );
-                            let validate = t
-                                .get("validate")
-                                .ok_or(InvalidManifestError)?
-                                .as_str()
-                                .ok_or(InvalidManifestError)?
-                                .to_string();
-                            Ok(ManifestEditorTypeValidator::Path(
-                                ManifestEditorTypePathValidator { path, validate },
-                            ))
-                        }
-                        toml::Value::String(s) => {
-                            Ok(ManifestEditorTypeValidator::Value(s.to_owned()))
-                        }
-                        _ => Err(InvalidManifestError),
-                    })
-                    .collect::<Result<Vec<ManifestEditorTypeValidator>, _>>()?,
-                _ => return Err(InvalidManifestError),
-            };
+                                    .ok_or_else(|| {
+                                        InvalidManifestError::MissingRequired(format!(
+                                            "{type_name}.validate.validate (string)"
+                                        ))
+                                    })?
+                                    .to_string();
+                                Ok(ManifestEditorTypeValidator::Path(
+                                    ManifestEditorTypePathValidator { path, validate },
+                                ))
+                            }
+                            toml::Value::String(s) => {
+                                Ok(ManifestEditorTypeValidator::Value(s.to_owned()))
+                            }
+                            _ => Err(InvalidManifestError::BadType("validate (item)".to_string())),
+                        })
+                        .collect::<Result<Vec<ManifestEditorTypeValidator>, _>>()?,
+                    _ => return Err(InvalidManifestError::BadType("validate (root)".to_string())),
+                };
+            }
             editor_types.insert(type_name, editor_type);
         }
         self.editor_types = editor_types;
