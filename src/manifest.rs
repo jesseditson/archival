@@ -8,7 +8,10 @@ use std::{
 use toml::{Table, Value};
 
 use crate::{
-    constants::LAYOUT_DIR_NAME, file_system::FileSystemAPI, object::ValuePath, FieldConfig,
+    constants::{LAYOUT_DIR_NAME, NESTED_TYPES},
+    file_system::FileSystemAPI,
+    object::ValuePath,
+    FieldConfig,
 };
 
 use super::constants::{
@@ -29,6 +32,8 @@ pub enum InvalidManifestError {
     MissingRequired(String),
     #[error("Bad Path '{1}' for Field {0}")]
     BadPath(Value, String),
+    #[error("Cannot define a nested validator for type {0} ({1})")]
+    InvalidNestedValidator(String, String),
     #[error("Invalid Manifest value '{1}' for field {0}.")]
     InvalidField(Value, String),
 }
@@ -54,7 +59,7 @@ impl Display for ManifestEditorTypeValidator {
             "{}",
             match self {
                 Self::Path(p) => {
-                    format!("{}: {}", p.path.to_string(), p.validate)
+                    format!("{}: {}", p.path, p.validate)
                 }
                 Self::Value(v) => v.to_string(),
             }
@@ -385,11 +390,18 @@ impl Manifest {
                 })?
                 .to_string();
             if let Some(validator_val) = info_map.get("validate") {
+                let is_nested_type = NESTED_TYPES.contains(&&editor_type.alias_of[..]);
                 editor_type.validate = match validator_val {
                     toml::Value::Array(arr) => arr
                         .iter()
                         .map(|val| match val {
                             toml::Value::Table(t) => {
+                                if !is_nested_type {
+                                    return Err(InvalidManifestError::InvalidNestedValidator(
+                                        editor_type.alias_of.to_string(),
+                                        type_name.to_string(),
+                                    ));
+                                }
                                 let path = ValuePath::from_string(
                                     t.get("path")
                                         .ok_or_else(|| {
