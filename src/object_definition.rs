@@ -11,6 +11,20 @@ use tracing::instrument;
 
 pub type ObjectDefinitions = HashMap<String, ObjectDefinition>;
 
+#[cfg(feature = "typescript")]
+mod typedefs {
+    use typescript_type_def::{
+        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
+        TypeDef,
+    };
+    pub struct ObjectDefinitionChildrenDef;
+    impl TypeDef for ObjectDefinitionChildrenDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::ident(Ident("Record<string, ObjectDefinition>")),
+        });
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ObjectDefinition {
@@ -18,7 +32,10 @@ pub struct ObjectDefinition {
     pub fields: HashMap<String, FieldType>,
     pub field_order: Vec<String>,
     pub template: Option<String>,
-    #[cfg_attr(feature = "typescript", serde(skip))]
+    #[cfg_attr(
+        feature = "typescript",
+        type_def(type_of = "typedefs::ObjectDefinitionChildrenDef")
+    )]
     pub children: HashMap<String, ObjectDefinition>,
 }
 
