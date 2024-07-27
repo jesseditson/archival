@@ -164,11 +164,13 @@ impl<F: FileSystemAPI> Archival<F> {
                 obj_type
             )))?;
         let table: toml::Table = toml::from_str(&contents)?;
+        // Note that this also fails when custom validation fails.
         let _ = Object::from_table(
             obj_def,
             Path::new(filename),
             &table,
             &self.site.manifest.editor_types,
+            false,
         )?;
         // Object is valid, write it
         self.fs_mutex
@@ -281,7 +283,10 @@ impl<F: FileSystemAPI> Archival<F> {
 
     fn edit_field(&self, event: EditFieldEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         self.write_object(&event.object, &event.filename, |existing| {
-            event.path.set_in_object(existing, event.value);
+            event
+                .path
+                .append((&event.field).into())
+                .set_in_object(existing, event.value);
             Ok(existing)
         })?;
         Ok(ArchivalEventResponse::None)
@@ -325,7 +330,7 @@ impl<F: FileSystemAPI> Archival<F> {
         filename: &str,
         obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
     ) -> Result<(), Box<dyn Error>> {
-        debug!("write {}", filename);
+        debug!("write {}", obj_type);
         self.fs_mutex.with_fs(|fs| {
             let path = self.object_path_impl(obj_type, filename, fs)?;
             let contents = self.modify_object_file(obj_type, filename, obj_cb, fs)?;
@@ -480,8 +485,9 @@ mod lib {
         archival.send_event(ArchivalEvent::EditField(EditFieldEvent {
             object: "section".to_string(),
             filename: "first".to_string(),
-            path: ValuePath::default().join(value_path::ValuePathComponent::key("name")),
-            value: FieldValue::String("This is the new title".to_string()),
+            path: ValuePath::empty(),
+            field: "name".to_string(),
+            value: FieldValue::String("This is the new name".to_string()),
         }))?;
         // Sending an event should result in an updated fs
         let index_html = archival
@@ -489,7 +495,7 @@ mod lib {
             .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
-        assert!(index_html.contains("This is the new title"));
+        assert!(index_html.contains("This is the new name"));
         Ok(())
     }
 
@@ -580,7 +586,7 @@ mod lib {
             .send_event(ArchivalEvent::AddChild(ChildEvent {
                 object: "post".to_string(),
                 filename: "a-post".to_string(),
-                path: ValuePath::default().join(ValuePathComponent::key("links")),
+                path: ValuePath::default().append(ValuePathComponent::key("links")),
             }))
             .unwrap();
         let objects = archival.get_objects()?;
@@ -628,8 +634,8 @@ mod lib {
                 object: "post".to_string(),
                 filename: "a-post".to_string(),
                 path: ValuePath::default()
-                    .join(ValuePathComponent::key("links"))
-                    .join(ValuePathComponent::Index(0)),
+                    .append(ValuePathComponent::key("links"))
+                    .append(ValuePathComponent::Index(0)),
             }))
             .unwrap();
         // Sending an event should result in an updated fs

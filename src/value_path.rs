@@ -33,6 +33,17 @@ impl ValuePathComponent {
     }
 }
 
+impl From<&String> for ValuePathComponent {
+    fn from(value: &String) -> Self {
+        ValuePathComponent::Key(value.to_string())
+    }
+}
+impl From<usize> for ValuePathComponent {
+    fn from(value: usize) -> Self {
+        ValuePathComponent::Index(value)
+    }
+}
+
 impl Display for ValuePathComponent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -85,6 +96,9 @@ impl FromIterator<ValuePathComponent> for ValuePath {
 }
 
 impl ValuePath {
+    pub fn empty() -> Self {
+        Self { path: vec![] }
+    }
     pub fn from_string(string: &str) -> Self {
         let mut vpv: Vec<ValuePathComponent> = vec![];
         for part in string.split('.') {
@@ -95,16 +109,37 @@ impl ValuePath {
         }
         Self { path: vpv }
     }
+    pub fn is_empty(&self) -> bool {
+        self.path.is_empty()
+    }
 
-    pub fn join(mut self, component: ValuePathComponent) -> Self {
+    pub fn append(mut self, component: ValuePathComponent) -> Self {
         self.path.push(component);
         self
     }
     pub fn concat(mut self, path: ValuePath) -> Self {
         for p in path.path {
-            self = self.join(p);
+            self = self.append(p);
         }
         self
+    }
+
+    pub fn first(&self) -> ValuePath {
+        let first = self
+            .path
+            .first()
+            .expect("called .first on an empty value_path");
+        ValuePath {
+            path: vec![first.clone()],
+        }
+    }
+
+    pub fn unshift(&mut self) -> Option<ValuePathComponent> {
+        if !self.path.is_empty() {
+            Some(self.path.remove(0))
+        } else {
+            None
+        }
     }
 
     pub fn pop(&mut self) -> Option<ValuePathComponent> {
@@ -236,6 +271,32 @@ impl ValuePath {
         last_val
     }
 
+    pub fn get_object_values<'a>(&self, object: &'a Object) -> Option<&'a ObjectValues> {
+        let mut i_path = self.path.iter().map(|v| match v {
+            ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
+            ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
+        });
+        let mut last_val = &object.values;
+        while let Some(cmp) = i_path.next() {
+            if let ValuePathComponent::Key(k) = cmp {
+                if let Some(FieldValue::Objects(children)) = last_val.get(&k) {
+                    if let Some(ValuePathComponent::Index(idx)) = i_path.next() {
+                        if let Some(child) = children.get(idx) {
+                            last_val = child;
+                        }
+                    } else {
+                        panic!("invalid value path {} for {:?}", self, object);
+                    }
+                } else {
+                    return None;
+                }
+            } else {
+                panic!("invalid value path {} for {:?}", self, object);
+            }
+        }
+        Some(last_val)
+    }
+
     pub fn get_field_definition<'a>(
         &self,
         def: &'a ObjectDefinition,
@@ -269,7 +330,7 @@ impl ValuePath {
         ))
     }
 
-    pub fn get_child_definition<'a>(
+    pub fn get_definition<'a>(
         &self,
         def: &'a ObjectDefinition,
     ) -> Result<&'a ObjectDefinition, ValuePathError> {
@@ -294,7 +355,7 @@ impl ValuePath {
         object: &mut Object,
         obj_def: &ObjectDefinition,
     ) -> Result<usize, ValuePathError> {
-        let child_def = self.get_child_definition(obj_def)?;
+        let child_def = self.get_definition(obj_def)?;
         let new_child = field_value::def_to_values(&child_def.fields);
         self.modify_children(object, |children| {
             children.push(new_child);

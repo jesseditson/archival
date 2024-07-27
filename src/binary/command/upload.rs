@@ -196,8 +196,9 @@ impl BinaryCommand for Command {
         archival.send_event_no_rebuild(ArchivalEvent::EditField(EditFieldEvent {
             object: object_type.clone(),
             filename: object_name.clone(),
-            path: field_path.clone(),
+            path: ValuePath::empty(),
             value: field_data.clone(),
+            field: field.to_string(),
         }))?;
         if let FieldValue::File(fd) = field_data {
             println!(

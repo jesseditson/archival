@@ -49,7 +49,7 @@ impl From<&str> for DisplayType {
     }
 }
 
-#[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct File {
     pub sha: String,

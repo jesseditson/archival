@@ -215,6 +215,9 @@ impl Site {
                 Path::new(path.with_extension("").file_name().unwrap()),
                 &obj_table,
                 &self.manifest.editor_types,
+                // Skip validation when populating the cache, we may have new
+                // objects with invalid unset keys
+                true,
             )?;
             cache.insert(path.to_path_buf(), o.clone());
             Ok(o)

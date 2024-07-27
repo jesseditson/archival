@@ -81,6 +81,7 @@ impl Object {
         table: &Table,
         definition: &ObjectDefinition,
         custom_types: &EditorTypes,
+        skip_validation: bool,
     ) -> Result<ObjectValues, Box<dyn Error>> {
         // liquid-rust only supports strict parsing. This is reasonable but we
         // also want to allow empty root keys, so we fill in defaults for any
@@ -94,7 +95,9 @@ impl Object {
             if let Some(field_type) = definition.fields.get(def_key) {
                 // Values
                 let field_value = FieldValue::from_toml(def_key, field_type, value)?;
-                Object::validate(field_type, &field_value, custom_types)?;
+                if !skip_validation {
+                    Object::validate(field_type, &field_value, custom_types)?;
+                }
                 values.insert(def_key.to_string(), field_value);
             } else if let Some(child_def) = definition.children.get(&def_key.to_string()) {
                 // Children
@@ -114,7 +117,13 @@ impl Object {
                                 index,
                                 child: value.to_string(),
                             })?;
-                    let object = Object::values_from_table(file, table, child_def, custom_types)?;
+                    let object = Object::values_from_table(
+                        file,
+                        table,
+                        child_def,
+                        custom_types,
+                        skip_validation,
+                    )?;
                     objects.push(object);
                 }
                 let field_value = FieldValue::Objects(objects);
@@ -133,8 +142,10 @@ impl Object {
         file: &Path,
         table: &Table,
         custom_types: &EditorTypes,
+        skip_validation: bool,
     ) -> Result<Object, Box<dyn Error>> {
-        let values = Object::values_from_table(file, table, definition, custom_types)?;
+        let values =
+            Object::values_from_table(file, table, definition, custom_types, skip_validation)?;
         let mut order = -1;
         if let Some(t_order) = table.get(reserved_fields::ORDER) {
             if let Some(int_order) = t_order.as_integer() {
@@ -164,7 +175,8 @@ impl Object {
         defaults: Vec<AddObjectValue>,
     ) -> Result<Self, Box<dyn Error>> {
         let path = Path::new(&definition.name).join(filename);
-        let values = Object::values_from_table(&path, &Table::new(), definition, &HashMap::new())?;
+        let values =
+            Object::values_from_table(&path, &Table::new(), definition, &HashMap::new(), true)?;
         let mut object = Self {
             filename: filename.to_owned(),
             object_name: definition.name.clone(),
@@ -245,6 +257,7 @@ mod tests {
             Path::new("tormenta-rey"),
             &table,
             &HashMap::new(),
+            false,
         )?;
         assert_eq!(obj.order, 1);
         assert_eq!(obj.object_name, "artist");

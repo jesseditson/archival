@@ -9,7 +9,7 @@ use std::{
 };
 use time::{format_description, UtcOffset};
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct DateTime {
     #[serde(skip)]

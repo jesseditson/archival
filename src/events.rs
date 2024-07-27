@@ -27,6 +27,7 @@ pub struct EditFieldEvent {
     pub object: String,
     pub filename: String,
     pub path: ValuePath,
+    pub field: String,
     pub value: FieldValue,
 }
 #[derive(Debug, Serialize, Deserialize)]
