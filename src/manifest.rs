@@ -448,6 +448,17 @@ impl Manifest {
                     InvalidManifestError::MissingRequired(format!("{type_name}.type (string)"))
                 })?
                 .to_string();
+            if let Some(editor_url) = info_map.get("editor_url") {
+                editor_type.editor_url = editor_url
+                    .as_str()
+                    .ok_or_else(|| {
+                        InvalidManifestError::InvalidField(
+                            editor_url.to_owned(),
+                            "editor_url".to_string(),
+                        )
+                    })?
+                    .to_string();
+            }
             if let Some(validator_val) = info_map.get("validate") {
                 let is_nested_type = NESTED_TYPES.contains(&&editor_type.alias_of[..]);
                 editor_type.validate = match validator_val {
@@ -613,6 +624,7 @@ mod tests {
         validate = ['\\d{2}/\\d{2}/\\d{4}']
         [editor_types.custom]
         type = 'meta'
+        editor_url = 'https://editor.archival.dev/editors/json/editor.html'
         [[editor_types.custom.validate]]
         path = 'field_a'
         validate = '.+'
@@ -655,6 +667,10 @@ mod tests {
         }
         let t2 = &m.editor_types["custom"];
         assert_eq!(t2.alias_of, "meta");
+        assert_eq!(
+            t2.editor_url,
+            "https://editor.archival.dev/editors/json/editor.html"
+        );
         assert_eq!(t2.validate.len(), 2);
         assert!(matches!(
             t2.validate[0],
@@ -676,6 +692,7 @@ mod tests {
         println!("MTOML {}", manifest_output);
         assert!(manifest_output.contains("[editor_types.day]"));
         assert!(manifest_output.contains("[editor_types.custom]"));
+        assert!(manifest_output.contains("editor_url = \""));
         assert!(manifest_output.contains("[[editor_types.custom.validate]]"));
         Ok(())
     }
