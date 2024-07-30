@@ -52,11 +52,9 @@ macro_rules! compare_values {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldValue {
-    #[default]
-    None,
     String(String),
     Markdown(String),
     Number(f64),
@@ -161,7 +159,6 @@ impl fmt::Display for FieldValue {
 impl From<&FieldValue> for Option<toml::Value> {
     fn from(value: &FieldValue) -> Self {
         match value {
-            FieldValue::None => None,
             FieldValue::String(v) => Some(toml::Value::String(v.to_owned())),
             FieldValue::Markdown(v) => Some(toml::Value::String(v.to_owned())),
             FieldValue::Number(n) => Some(toml::Value::Float(*n)),
@@ -219,7 +216,6 @@ impl ValueView for FieldValue {
     /// Report the data type (generally for error reporting).
     fn type_name(&self) -> &'static str {
         match self {
-            FieldValue::None => "none",
             FieldValue::String(_) => "string",
             FieldValue::Markdown(_) => "markdown",
             FieldValue::Number(_) => "number",
@@ -246,7 +242,6 @@ impl ValueView for FieldValue {
 
     fn as_scalar(&self) -> Option<model::ScalarCow<'_>> {
         match self {
-            FieldValue::None => None,
             FieldValue::String(s) => Some(model::ScalarCow::new(s)),
             FieldValue::Number(n) => Some(model::ScalarCow::new(*n)),
             // TODO: should be able to return a datetime value here
@@ -277,7 +272,6 @@ impl ValueView for FieldValue {
 
     fn to_value(&self) -> liquid::model::Value {
         match self {
-            FieldValue::None => self.as_scalar().to_value(),
             FieldValue::String(_) => self.as_scalar().to_value(),
             FieldValue::Markdown(_) => self.as_scalar().to_value(),
             FieldValue::Number(_) => self.as_scalar().to_value(),
@@ -455,7 +449,6 @@ impl FieldValue {
 
     fn as_string(&self) -> String {
         match self {
-            FieldValue::None => "(none)".to_string(),
             FieldValue::String(s) => s.clone(),
             FieldValue::Markdown(n) => n.clone(),
             FieldValue::Number(n) => n.to_string(),
