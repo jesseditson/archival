@@ -36,7 +36,7 @@ export type MetaValue = ({
     "Map": Record<string, MetaValue>;
 });
 export type Meta = Record<string, MetaValue>;
-export type FieldValue = ("None" | {
+export type FieldValue = ({
     "String": string;
 } | {
     "Markdown": string;
@@ -72,7 +72,7 @@ export type EditFieldEvent = {
     "filename": string;
     "path": ValuePath;
     "field": string;
-    "value": FieldValue;
+    "value": (FieldValue | null);
 };
 export type EditOrderEvent = {
     "object": string;

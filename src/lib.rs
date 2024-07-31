@@ -487,7 +487,7 @@ mod lib {
             filename: "first".to_string(),
             path: ValuePath::empty(),
             field: "name".to_string(),
-            value: FieldValue::String("This is the new name".to_string()),
+            value: Some(FieldValue::String("This is the new name".to_string())),
         }))?;
         // Sending an event should result in an updated fs
         let index_html = archival

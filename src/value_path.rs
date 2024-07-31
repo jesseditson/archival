@@ -101,10 +101,12 @@ impl ValuePath {
     }
     pub fn from_string(string: &str) -> Self {
         let mut vpv: Vec<ValuePathComponent> = vec![];
-        for part in string.split('.') {
-            match part.parse::<usize>() {
-                Ok(index) => vpv.push(ValuePathComponent::Index(index)),
-                Err(_) => vpv.push(ValuePathComponent::Key(part.to_string())),
+        if !string.is_empty() {
+            for part in string.split('.') {
+                match part.parse::<usize>() {
+                    Ok(index) => vpv.push(ValuePathComponent::Index(index)),
+                    Err(_) => vpv.push(ValuePathComponent::Key(part.to_string())),
+                }
             }
         }
         Self { path: vpv }
@@ -420,7 +422,7 @@ impl ValuePath {
         }
     }
 
-    pub fn set_in_object(&self, object: &mut Object, value: FieldValue) {
+    pub fn set_in_object(&self, object: &mut Object, value: Option<FieldValue>) {
         let mut i_path = self.path.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
@@ -434,7 +436,10 @@ impl ValuePath {
                         last_val = object.values.get_mut(&k);
                         continue;
                     } else {
-                        object.values.insert(k, value);
+                        match value {
+                            Some(value) => object.values.insert(k, value),
+                            None => object.values.remove(&k),
+                        };
                         break;
                     }
                 }
@@ -450,7 +455,10 @@ impl ValuePath {
                                     last_val = child.get_mut(&k);
                                     continue;
                                 } else {
-                                    child.insert(k, value);
+                                    match value {
+                                        Some(value) => child.insert(k, value),
+                                        None => child.remove(&k),
+                                    };
                                 }
                             }
                         }

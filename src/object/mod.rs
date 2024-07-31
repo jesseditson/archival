@@ -1,4 +1,4 @@
-pub use crate::value_path::ValuePath;
+pub use crate::value_path::{ValuePath, ValuePathComponent};
 use crate::{
     events::AddObjectValue,
     fields::{FieldType, FieldValue, InvalidFieldError, ObjectValues},
@@ -185,7 +185,7 @@ impl Object {
             values,
         };
         for default in defaults {
-            default.path.set_in_object(&mut object, default.value);
+            default.path.set_in_object(&mut object, Some(default.value));
         }
         Ok(object)
     }

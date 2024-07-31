@@ -28,7 +28,7 @@ pub struct EditFieldEvent {
     pub filename: String,
     pub path: ValuePath,
     pub field: String,
-    pub value: FieldValue,
+    pub value: Option<FieldValue>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]

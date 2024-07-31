@@ -404,7 +404,7 @@ impl Command {
                             object: object.to_string(),
                             filename: filename.to_string(),
                             path: current_path.clone(),
-                            value,
+                            value: Some(value),
                             field: name.to_string(),
                         }))
                         .map_err(|e| ImportError::WriteError(e.to_string()))?;

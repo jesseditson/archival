@@ -197,7 +197,7 @@ impl BinaryCommand for Command {
             object: object_type.clone(),
             filename: object_name.clone(),
             path: ValuePath::empty(),
-            value: field_data.clone(),
+            value: Some(field_data.clone()),
             field: field.to_string(),
         }))?;
         if let FieldValue::File(fd) = field_data {
