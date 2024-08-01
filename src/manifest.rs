@@ -42,7 +42,7 @@ pub enum InvalidManifestError {
     InvalidField(Value, String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Validator(#[cfg_attr(feature = "typescript", type_def(type_of = "String"))] Regex);
 
@@ -97,14 +97,14 @@ impl<'de> Deserialize<'de> for Validator {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ManifestEditorTypePathValidator {
     pub path: ValuePath,
     pub validate: Validator,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ManifestEditorTypeValidator {
     Value(Validator),
@@ -142,7 +142,7 @@ impl From<&ManifestEditorTypeValidator> for toml::Value {
         }
     }
 }
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ManifestEditorType {
     pub alias_of: String,
@@ -164,7 +164,7 @@ impl From<&ManifestEditorType> for toml::Value {
 
 pub type EditorTypes = HashMap<String, ManifestEditorType>;
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Manifest {
     #[serde(skip)]
