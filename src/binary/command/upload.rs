@@ -138,7 +138,7 @@ impl BinaryCommand for Command {
         let sha = archival.sha_for_file(file_path)?;
         let upload_url = format!("{}/upload/{}/{}", API_URL, archival_site, sha);
         let mime = mime_guess::from_path(file_path);
-        let mut file = File::from_mime(mime);
+        let mut file = File::from_mime_guess(mime);
         file.sha = sha;
         file.filename = file_path
             .file_name()

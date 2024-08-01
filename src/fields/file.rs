@@ -1,8 +1,8 @@
 use crate::fields::FieldConfig;
 use liquid::{ObjectView, ValueView};
-use mime_guess::MimeGuess;
+use mime_guess::{mime::FromStrError, Mime, MimeGuess};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,7 +77,18 @@ impl File {
             display_type: display_type.to_string(),
         }
     }
-    pub fn from_mime(mime: MimeGuess) -> Self {
+    pub fn from_mime(mime_str: &str) -> Result<Self, FromStrError> {
+        let mime = Mime::from_str(mime_str)?;
+        let mut f = match mime.type_() {
+            mime_guess::mime::VIDEO => Self::video(),
+            mime_guess::mime::AUDIO => Self::audio(),
+            mime_guess::mime::IMAGE => Self::image(),
+            _ => Self::download(),
+        };
+        f.mime = mime.to_string();
+        Ok(f)
+    }
+    pub fn from_mime_guess(mime: MimeGuess) -> Self {
         let m_type = mime.first_or_octet_stream();
         let mut f = match m_type.type_() {
             mime_guess::mime::VIDEO => Self::video(),
