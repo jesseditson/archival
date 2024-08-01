@@ -49,6 +49,20 @@ impl From<&str> for DisplayType {
     }
 }
 
+#[cfg(feature = "typescript")]
+mod typedefs {
+    use typescript_type_def::{
+        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
+        TypeDef,
+    };
+    pub struct DisplayTypeType;
+    impl TypeDef for DisplayTypeType {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::ident(Ident("\"image\"|\"audio\"|\"video\"|\"upload\"")),
+        });
+    }
+}
+
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct File {
@@ -56,6 +70,10 @@ pub struct File {
     pub name: Option<String>,
     pub filename: String,
     pub mime: String,
+    #[cfg_attr(
+        feature = "typescript",
+        type_def(type_of = "typedefs::DisplayTypeType")
+    )]
     pub display_type: String,
     pub url: String,
 }

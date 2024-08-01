@@ -19,7 +19,7 @@ export type File = {
     "name": (string | null);
     "filename": string;
     "mime": string;
-    "display_type": string;
+    "display_type": "image"|"audio"|"video"|"upload";
     "url": string;
 };
 export type MetaValue = ({
