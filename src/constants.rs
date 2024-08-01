@@ -6,6 +6,7 @@ pub const OBJECTS_DIR_NAME: &str = "objects";
 pub const BUILD_DIR_NAME: &str = "dist";
 pub const STATIC_DIR_NAME: &str = "public";
 pub const LAYOUT_DIR_NAME: &str = "layout";
+pub const NESTED_TYPES: [&str; 5] = ["meta", "upload", "video", "audio", "image"];
 #[cfg(debug_assertions)]
 pub const UPLOADS_URL: &str = "http://localhost:7777";
 #[cfg(not(debug_assertions))]

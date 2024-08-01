@@ -9,7 +9,7 @@ use std::{
 };
 use time::{format_description, UtcOffset};
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct DateTime {
     #[serde(skip)]
@@ -99,7 +99,23 @@ impl DateTime {
         Ok(date_str)
     }
 
-    pub fn as_datetime(&self) -> model::DateTime {
+    pub fn bounce(&mut self) {
+        let date_str = Self::parse_date_string(self.raw.to_string())
+            .unwrap_or_else(|_| format!("Invalid date value {}", self.raw));
+        self.inner = Some(
+            model::DateTime::from_str(&date_str)
+                .unwrap_or_else(|| panic!("Invalid date value {}", self.raw)),
+        )
+    }
+
+    pub fn borrowed_as_datetime(&self) -> &model::DateTime {
+        if self.inner.is_none() {
+            panic!("cannot borrow datetime before it is bounced");
+        }
+        return self.inner.as_ref().unwrap();
+    }
+
+    pub fn as_liquid_datetime(&self) -> model::DateTime {
         if let Some(inner) = self.inner {
             inner
         } else {

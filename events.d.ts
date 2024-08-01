@@ -19,9 +19,23 @@ export type File = {
     "name": (string | null);
     "filename": string;
     "mime": string;
-    "display_type": string;
+    "display_type": "image"|"audio"|"video"|"upload";
     "url": string;
 };
+export type MetaValue = ({
+    "String": string;
+} | {
+    "Number": F64;
+} | {
+    "Boolean": boolean;
+} | {
+    "DateTime": DateTime;
+} | {
+    "Array": MetaValue[];
+} | {
+    "Map": Record<string, MetaValue>;
+});
+export type Meta = Record<string, MetaValue>;
 export type FieldValue = ({
     "String": string;
 } | {
@@ -31,9 +45,13 @@ export type FieldValue = ({
 } | {
     "Date": DateTime;
 } | {
+    "Objects": Record<string, FieldValue>[];
+} | {
     "Boolean": boolean;
 } | {
     "File": File;
+} | {
+    "Meta": Meta;
 });
 export type AddObjectValue = {
     "path": ValuePath;
@@ -53,7 +71,8 @@ export type EditFieldEvent = {
     "object": string;
     "filename": string;
     "path": ValuePath;
-    "value": FieldValue;
+    "field": string;
+    "value": (FieldValue | null);
 };
 export type EditOrderEvent = {
     "object": string;

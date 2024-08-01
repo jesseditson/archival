@@ -2,10 +2,12 @@ mod date_time;
 pub(crate) mod field_type;
 pub(crate) mod field_value;
 mod file;
+pub(crate) mod meta;
 pub use date_time::DateTime;
 pub use field_type::{FieldType, InvalidFieldError};
 pub use field_value::{FieldValue, ObjectValues};
 pub use file::File;
+pub use meta::MetaValue;
 use once_cell::sync::Lazy;
 use std::sync::{Mutex, MutexGuard};
 

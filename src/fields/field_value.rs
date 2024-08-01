@@ -1,9 +1,11 @@
 use super::file::File;
+use super::meta::Meta;
 use super::DateTime;
 use super::{FieldType, InvalidFieldError};
 use comrak::{markdown_to_html, ComrakOptions};
 use liquid::{model, ValueView};
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::{
     collections::HashMap,
     error::Error,
@@ -21,6 +23,35 @@ pub enum FieldValueError {
 
 pub type ObjectValues = HashMap<String, FieldValue>;
 
+#[cfg(feature = "typescript")]
+mod typedefs {
+    use typescript_type_def::{
+        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
+        TypeDef,
+    };
+    pub struct ObjectValuesTypeDef;
+    impl TypeDef for ObjectValuesTypeDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::ident(Ident("Record<string, FieldValue>[]")),
+        });
+    }
+}
+
+macro_rules! compare_values {
+    ($left:ident, $right:ident, $($t:path),*) => {
+        match $left {
+            $($t(lv) => {
+                if let $t(rv) = $right {
+                    lv.partial_cmp(rv)
+                } else {
+                    None
+                }
+            })*
+            _ => None
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldValue {
@@ -28,16 +59,37 @@ pub enum FieldValue {
     Markdown(String),
     Number(f64),
     Date(DateTime),
-    #[cfg_attr(feature = "typescript", serde(skip))]
-    Objects(Vec<ObjectValues>),
+    // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
+    Objects(
+        #[cfg_attr(
+            feature = "typescript",
+            type_def(type_of = "typedefs::ObjectValuesTypeDef")
+        )]
+        Vec<ObjectValues>,
+    ),
     Boolean(bool),
     File(File),
+    Meta(Meta),
 }
 fn err(f_type: &FieldType, value: String) -> FieldValueError {
     FieldValueError::InvalidValue(f_type.to_string(), value.to_owned())
 }
 
 impl FieldValue {
+    // Note that this comparison just skips fields that cannot be compared and
+    // returns None.
+    pub fn compare(&self, to: &FieldValue) -> Option<Ordering> {
+        compare_values!(
+            self,
+            to,
+            Self::String,
+            Self::Markdown,
+            Self::Number,
+            Self::Date,
+            Self::Boolean,
+            Self::File
+        )
+    }
     pub fn val_with_type(f_type: &FieldType, value: String) -> Result<Self, Box<dyn Error>> {
         let t_val = toml::Value::try_from(&value)?;
         Ok(match f_type {
@@ -81,13 +133,18 @@ impl FieldValue {
                 let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
                 Self::File(File::download().fill_from_map(f_info))
             }
+            FieldType::Meta => {
+                let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
+                Self::Meta(Meta::from(f_info))
+            }
+            FieldType::Alias(a) => Self::val_with_type(&a.0, value)?,
         })
     }
 
     #[cfg(test)]
     pub fn liquid_date(&self) -> model::DateTime {
         match self {
-            FieldValue::Date(d) => d.as_datetime(),
+            FieldValue::Date(d) => d.as_liquid_datetime(),
             _ => panic!("Not a date"),
         }
     }
@@ -106,7 +163,7 @@ impl From<&FieldValue> for Option<toml::Value> {
             FieldValue::Markdown(v) => Some(toml::Value::String(v.to_owned())),
             FieldValue::Number(n) => Some(toml::Value::Float(*n)),
             FieldValue::Date(d) => {
-                let d = d.as_datetime();
+                let d = d.as_liquid_datetime();
                 Some(toml::Value::Datetime(toml_datetime::Datetime {
                     date: Some(toml_datetime::Date {
                         year: d.year() as u16,
@@ -137,6 +194,7 @@ impl From<&FieldValue> for Option<toml::Value> {
                     .collect(),
             )),
             FieldValue::File(f) => Some(toml::Value::Table(f.to_toml())),
+            FieldValue::Meta(m) => Some(toml::Value::Table(m.to_toml())),
         }
     }
 }
@@ -165,6 +223,7 @@ impl ValueView for FieldValue {
             FieldValue::Objects(_) => "objects",
             FieldValue::Boolean(_) => "boolean",
             FieldValue::File(_) => "file",
+            FieldValue::Meta(_) => "meta",
         }
     }
     /// Interpret as a string.
@@ -186,7 +245,7 @@ impl ValueView for FieldValue {
             FieldValue::String(s) => Some(model::ScalarCow::new(s)),
             FieldValue::Number(n) => Some(model::ScalarCow::new(*n)),
             // TODO: should be able to return a datetime value here
-            FieldValue::Date(d) => Some(model::ScalarCow::new((*d).as_datetime())),
+            FieldValue::Date(d) => Some(model::ScalarCow::new((*d).as_liquid_datetime())),
             FieldValue::Markdown(s) => Some(model::ScalarCow::new(markdown_to_html(
                 s,
                 &ComrakOptions::default(),
@@ -194,6 +253,7 @@ impl ValueView for FieldValue {
             FieldValue::Boolean(b) => Some(model::ScalarCow::new(*b)),
             FieldValue::Objects(_) => None,
             FieldValue::File(_f) => None,
+            FieldValue::Meta(_m) => None,
         }
     }
     fn as_array(&self) -> Option<&dyn model::ArrayView> {
@@ -205,6 +265,7 @@ impl ValueView for FieldValue {
     fn as_object(&self) -> Option<&dyn model::ObjectView> {
         match self {
             FieldValue::File(f) => Some(f),
+            FieldValue::Meta(m) => Some(m),
             _ => None,
         }
     }
@@ -218,6 +279,7 @@ impl ValueView for FieldValue {
             FieldValue::Boolean(_) => self.as_scalar().to_value(),
             FieldValue::Objects(_) => self.as_array().to_value(),
             FieldValue::File(_) => self.as_object().to_value(),
+            FieldValue::Meta(_) => self.as_object().to_value(),
         }
     }
 }
@@ -273,6 +335,7 @@ impl FieldValue {
             )),
         }
     }
+
     #[instrument(skip(value))]
     pub fn from_toml(
         key: &String,
@@ -373,6 +436,14 @@ impl FieldValue {
                     }
                 })?),
             )),
+            FieldType::Meta => Ok(FieldValue::Meta(Meta::from(value.as_table().ok_or_else(
+                || InvalidFieldError::TypeMismatch {
+                    field: key.to_owned(),
+                    field_type: field_type.to_string(),
+                    value: value.to_string(),
+                },
+            )?))),
+            FieldType::Alias(a) => Self::from_toml(key, &a.0, value),
         }
     }
 
@@ -381,31 +452,34 @@ impl FieldValue {
             FieldValue::String(s) => s.clone(),
             FieldValue::Markdown(n) => n.clone(),
             FieldValue::Number(n) => n.to_string(),
-            FieldValue::Date(d) => d.as_datetime().to_rfc2822(),
+            FieldValue::Date(d) => d.as_liquid_datetime().to_rfc2822(),
             FieldValue::Boolean(b) => b.to_string(),
             FieldValue::Objects(o) => format!("{:?}", o),
             FieldValue::File(f) => format!("{:?}", f.to_map(true)),
+            FieldValue::Meta(m) => format!("{:?}", serde_json::Value::from(m)),
         }
     }
 }
 
+fn default_val(f_type: &FieldType) -> FieldValue {
+    match f_type {
+        FieldType::String => FieldValue::String("".to_string()),
+        FieldType::Number => FieldValue::Number(0.0),
+        FieldType::Date => FieldValue::Date(DateTime::now()),
+        FieldType::Markdown => FieldValue::Markdown("".to_string()),
+        FieldType::Boolean => FieldValue::Boolean(false),
+        FieldType::Image => FieldValue::File(File::image()),
+        FieldType::Video => FieldValue::File(File::video()),
+        FieldType::Audio => FieldValue::File(File::audio()),
+        FieldType::Upload => FieldValue::File(File::download()),
+        FieldType::Meta => FieldValue::Meta(Meta::default()),
+        FieldType::Alias(a) => default_val(&a.0),
+    }
+}
 pub fn def_to_values(def: &HashMap<String, FieldType>) -> HashMap<String, FieldValue> {
     let mut vals = HashMap::new();
     for (key, f_type) in def {
-        vals.insert(
-            key.to_string(),
-            match f_type {
-                FieldType::String => FieldValue::String("".to_string()),
-                FieldType::Number => FieldValue::Number(0.0),
-                FieldType::Date => FieldValue::Date(DateTime::now()),
-                FieldType::Markdown => FieldValue::Markdown("".to_string()),
-                FieldType::Boolean => FieldValue::Boolean(false),
-                FieldType::Image => FieldValue::File(File::image()),
-                FieldType::Video => FieldValue::File(File::video()),
-                FieldType::Audio => FieldValue::File(File::audio()),
-                FieldType::Upload => FieldValue::File(File::download()),
-            },
-        );
+        vals.insert(key.to_string(), default_val(f_type));
     }
     vals
 }
