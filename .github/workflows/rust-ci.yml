@@ -35,15 +35,15 @@ jobs:
     name: Tests
     strategy:
       matrix:
-        os: [
-            macOS-12,
-            # windows-2022,
-            ubuntu-22.04,
-          ]
+        os: [macOS-12, windows-2022, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+          components: rustc-dev, clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fetch
       - name: cargo test build
@@ -51,18 +51,18 @@ jobs:
       - name: run tests
         run: ./test.sh
 
-  # msrv-check:
-  #   name: Minimum Stable Rust Version Check
-  #   runs-on: ubuntu-22.04
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - uses: dtolnay/rust-toolchain@master
-  #       with:
-  #         toolchain: "1.65.0"
-  #     - uses: Swatinem/rust-cache@v2
-  #     - run: cargo fetch
-  #     - name: cargo check
-  #       run: cargo check --all-targets
+  msrv-check:
+    name: Minimum Stable Rust Version Check
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.65.0"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fetch
+      - name: cargo check
+        run: cargo check --all-targets
 
   build-aarch64-apple-darwin:
     name: Build aarch64-apple-darwin
@@ -96,22 +96,6 @@ jobs:
   #     - run: sudo apt install -y musl-tools
   #     - uses: Swatinem/rust-cache@v2
   #     - run: cargo run --release --target x86_64-unknown-linux-musl -- generate --fail about.hbs
-
-  # Build `mdBook` documentation and upload it as a temporary build artifact
-  # doc-book:
-  #   name: Build the book
-  #   runs-on: ubuntu-22.04
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - run: |
-  #         set -e
-  #         curl -L https://github.com/rust-lang-nursery/mdBook/releases/download/v0.4.21/mdbook-v0.4.21-x86_64-unknown-linux-gnu.tar.gz | tar xzf -
-  #         echo `pwd` >> $GITHUB_PATH
-  #     - run: (cd docs && mdbook build)
-  #     - uses: actions/upload-artifact@v1
-  #       with:
-  #         name: doc-book
-  #         path: docs/book
 
   publish-check:
     name: Publish Check
@@ -178,28 +162,3 @@ jobs:
           files: "archival*"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # publish:
-  #   name: Publish Docs
-  #   needs: [doc-book]
-  #   runs-on: ubuntu-22.04
-  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-  #   steps:
-  #     - name: Download book
-  #       uses: actions/download-artifact@v1
-  #       with:
-  #         name: doc-book
-  #     - name: Assemble gh-pages
-  #       run: |
-  #         mv doc-book gh-pages
-  #     # If this is a push to the main branch push to the `gh-pages` using a
-  #     # deploy key. Note that a deploy key is necessary for now because otherwise
-  #     # using the default token for github actions doesn't actually trigger a page
-  #     # rebuild.
-  #     - name: Push to gh-pages
-  #       # Uses a rust script to setup and push to the gh-pages branch
-  #       run: curl -LsSf https://git.io/fhJ8n | rustc - && (cd gh-pages && ../rust_out)
-  #       env:
-  #         GITHUB_DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-  #         BUILD_REPOSITORY_ID: ${{ github.repository }}
-  #         BUILD_SOURCEVERSION: ${{ github.sha }}
