@@ -138,7 +138,7 @@ impl BinaryCommand for Command {
         let sha = archival.sha_for_file(file_path)?;
         let upload_url = format!("{}/upload/{}/{}", API_URL, archival_site, sha);
         let mime = mime_guess::from_path(file_path);
-        let mut file = File::from_mime(mime);
+        let mut file = File::from_mime_guess(mime);
         file.sha = sha;
         file.filename = file_path
             .file_name()
@@ -196,8 +196,9 @@ impl BinaryCommand for Command {
         archival.send_event_no_rebuild(ArchivalEvent::EditField(EditFieldEvent {
             object: object_type.clone(),
             filename: object_name.clone(),
-            path: field_path.clone(),
-            value: field_data.clone(),
+            path: ValuePath::empty(),
+            value: Some(field_data.clone()),
+            field: field.to_string(),
         }))?;
         if let FieldValue::File(fd) = field_data {
             println!(

@@ -1,8 +1,8 @@
 use crate::fields::FieldConfig;
 use liquid::{ObjectView, ValueView};
-use mime_guess::MimeGuess;
+use mime_guess::{mime::FromStrError, Mime, MimeGuess};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,13 +49,31 @@ impl From<&str> for DisplayType {
     }
 }
 
-#[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg(feature = "typescript")]
+mod typedefs {
+    use typescript_type_def::{
+        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
+        TypeDef,
+    };
+    pub struct DisplayTypeType;
+    impl TypeDef for DisplayTypeType {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::ident(Ident("\"image\"|\"audio\"|\"video\"|\"upload\"")),
+        });
+    }
+}
+
+#[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct File {
     pub sha: String,
     pub name: Option<String>,
     pub filename: String,
     pub mime: String,
+    #[cfg_attr(
+        feature = "typescript",
+        type_def(type_of = "typedefs::DisplayTypeType")
+    )]
     pub display_type: String,
     pub url: String,
 }
@@ -77,7 +95,18 @@ impl File {
             display_type: display_type.to_string(),
         }
     }
-    pub fn from_mime(mime: MimeGuess) -> Self {
+    pub fn from_mime(mime_str: &str) -> Result<Self, FromStrError> {
+        let mime = Mime::from_str(mime_str)?;
+        let mut f = match mime.type_() {
+            mime_guess::mime::VIDEO => Self::video(),
+            mime_guess::mime::AUDIO => Self::audio(),
+            mime_guess::mime::IMAGE => Self::image(),
+            _ => Self::download(),
+        };
+        f.mime = mime.to_string();
+        Ok(f)
+    }
+    pub fn from_mime_guess(mime: MimeGuess) -> Self {
         let m_type = mime.first_or_octet_stream();
         let mut f = match m_type.type_() {
             mime_guess::mime::VIDEO => Self::video(),
@@ -87,6 +116,16 @@ impl File {
         };
         f.mime = m_type.to_string();
         f
+    }
+    pub fn get_key(&self, str: &str) -> Option<&String> {
+        match str {
+            "sha" => Some(&self.sha),
+            "name" => self.name.as_ref(),
+            "filename" => Some(&self.filename),
+            "mime" => Some(&self.mime),
+            "display_type" => Some(&self.display_type),
+            _ => None,
+        }
     }
     pub fn fill_from_map(mut self, map: &toml::map::Map<String, toml::Value>) -> Self {
         for (k, v) in map {
@@ -163,6 +202,9 @@ impl File {
         }
         let config = FieldConfig::get();
         format!("{}/{}", config.uploads_url, sha)
+    }
+    pub fn update_url(&mut self) {
+        self.url = Self::_url(&self.sha);
     }
     pub fn url(&self) -> String {
         Self::_url(&self.sha)

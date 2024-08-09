@@ -234,7 +234,7 @@ impl BinaryCommand for Command {
             // Find the specified child, if present
             Some(
                 child_path
-                    .get_child_definition(obj_def)
+                    .get_definition(obj_def)
                     .map_err(|_| ImportError::InvalidField(child_path.to_string()))?,
             )
         } else {
@@ -367,7 +367,7 @@ impl Command {
                         }))
                         .map_err(|e| ImportError::WriteError(e.to_string()))?;
                     if let ArchivalEventResponse::Index(i) = r {
-                        current_path = current_path.join(ValuePathComponent::Index(i));
+                        current_path = current_path.append(ValuePathComponent::Index(i));
                     } else {
                         panic!("archival did not return an index for an inserted child");
                     }
@@ -396,9 +396,6 @@ impl Command {
                     name
                 };
                 if let Some(value) = row.get(from_name) {
-                    let field_path = current_path
-                        .clone()
-                        .join(ValuePathComponent::Key(name.to_string()));
                     // Validate type
                     let value = FieldValue::from_string(name, field_type, value.to_string())
                         .map_err(|e| ImportError::ParseError(e.to_string()))?;
@@ -406,8 +403,9 @@ impl Command {
                         .send_event_no_rebuild(ArchivalEvent::EditField(EditFieldEvent {
                             object: object.to_string(),
                             filename: filename.to_string(),
-                            path: field_path,
-                            value,
+                            path: current_path.clone(),
+                            value: Some(value),
+                            field: name.to_string(),
                         }))
                         .map_err(|e| ImportError::WriteError(e.to_string()))?;
                 } else {
