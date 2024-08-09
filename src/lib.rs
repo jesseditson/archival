@@ -273,6 +273,7 @@ impl<F: FileSystemAPI> Archival<F> {
     pub fn get_objects(&self) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
         self.fs_mutex.with_fs(|fs| self.site.get_objects(fs))
     }
+
     pub fn get_objects_sorted(
         &self,
         sort: impl Fn(&Object, &Object) -> Ordering,

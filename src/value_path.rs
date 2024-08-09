@@ -31,6 +31,24 @@ impl ValuePathComponent {
     pub fn key(name: &str) -> Self {
         Self::Key(name.to_string())
     }
+    pub fn as_key(vp: Option<Self>) -> Option<String> {
+        match vp {
+            Some(vp) => match vp {
+                ValuePathComponent::Key(k) => Some(k),
+                ValuePathComponent::Index(_) => None,
+            },
+            None => None,
+        }
+    }
+    pub fn as_index(vp: Option<Self>) -> Option<usize> {
+        match vp {
+            Some(vp) => match vp {
+                ValuePathComponent::Key(_) => None,
+                ValuePathComponent::Index(i) => Some(i),
+            },
+            None => None,
+        }
+    }
 }
 
 impl From<&String> for ValuePathComponent {
@@ -271,6 +289,38 @@ impl ValuePath {
             break;
         }
         last_val
+    }
+
+    pub fn get_children<'a>(&self, object: &'a Object) -> Option<&'a Vec<ObjectValues>> {
+        let mut i_path = self.path.iter().map(|v| match v {
+            ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
+            ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
+        });
+        let mut last_val = &object.values;
+        while let Some(cmp) = i_path.next() {
+            if let ValuePathComponent::Key(key) = cmp {
+                if let Some(FieldValue::Objects(children)) = last_val.get(&key) {
+                    let next = i_path.next();
+                    if next.is_none() {
+                        // Reached the end of the path, return the
+                        // children here.
+                        return Some(children);
+                    } else if let Some(ValuePathComponent::Index(k)) = next {
+                        // Path continues, recurse.
+                        if let Some(c) = children.get(k) {
+                            last_val = c;
+                            continue;
+                        }
+                    } else {
+                        // Path continues but next item is not an index,
+                        // so this is not a valid path. Return nothing.
+                        return None;
+                    }
+                }
+            }
+            break;
+        }
+        None
     }
 
     pub fn get_object_values<'a>(&self, object: &'a Object) -> Option<&'a ObjectValues> {

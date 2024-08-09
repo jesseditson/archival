@@ -203,6 +203,9 @@ impl File {
         let config = FieldConfig::get();
         format!("{}/{}", config.uploads_url, sha)
     }
+    pub fn update_url(&mut self) {
+        self.url = Self::_url(&self.sha);
+    }
     pub fn url(&self) -> String {
         Self::_url(&self.sha)
     }
