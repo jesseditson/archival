@@ -18,15 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+          components: rustc-dev, clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
 
-      # make sure all code has been formatted with rustfmt
-      - run: rustup component add rustfmt
       - name: check rustfmt
         run: cargo fmt -- --check --color always
 
-      # run clippy to verify we have no warnings
-      - run: rustup component add clippy
       - run: cargo fetch
       - name: cargo clippy
         run: cargo clippy --all-features --all-targets -- --no-deps -D warnings
