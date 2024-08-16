@@ -9,6 +9,9 @@ pub enum ObjectEntry {
 }
 
 impl ObjectEntry {
+    pub fn empty_list() -> Self {
+        Self::List(vec![])
+    }
     pub fn from_vec(vec: Vec<Object>) -> Self {
         Self::List(vec)
     }

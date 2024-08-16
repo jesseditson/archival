@@ -29,6 +29,8 @@ pub enum InvalidFileError {
     DuplicateObjectDefinition(String, String),
     #[error("template file {0} does not exist.")]
     MissingTemplate(String),
+    #[error("invalid root object {0}: {1}")]
+    InvalidRootObject(String, String),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -179,12 +181,24 @@ impl Site {
                     objects.sort_by(sort);
                 }
                 all_objects.insert(object_name.clone(), ObjectEntry::from_vec(objects));
-            } else if let Ok(obj) =
-                self.object_for_path(&object_file_path, object_def, &mut cache, fs)
-            {
-                all_objects.insert(object_name.clone(), ObjectEntry::from_object(obj));
+            } else if fs.exists(&object_file_path)? {
+                match self.object_for_path(&object_file_path, object_def, &mut cache, fs) {
+                    Ok(obj) => {
+                        all_objects.insert(object_name.clone(), ObjectEntry::from_object(obj));
+                    }
+                    Err(error) => {
+                        // This error is unrecoverable because if we have a root
+                        // file, we cannot create an empty list for this type
+                        // since it would violate our "list or root" rule.
+                        return Err(InvalidFileError::InvalidRootObject(
+                            object_file_path.display().to_string(),
+                            error.to_string(),
+                        )
+                        .into());
+                    }
+                }
             } else {
-                warn!("failed parsing {:?}", object_file_path);
+                all_objects.insert(object_name.clone(), ObjectEntry::empty_list());
             }
         }
         Ok(all_objects)
