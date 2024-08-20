@@ -1,4 +1,8 @@
-use crate::{page::TemplateType, tags::layout::LayoutTag, FileSystemAPI};
+use crate::{
+    page::TemplateType,
+    tags::{default::DefaultTag, layout::LayoutTag},
+    FileSystemAPI,
+};
 use liquid_core::partials::{EagerCompiler, PartialSource};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -88,6 +92,7 @@ pub fn get(
     let partials = EagerCompiler::new(ArchivalPartialSource::new(pages_path, layout_path, fs)?);
     let parser = liquid::ParserBuilder::with_stdlib()
         .tag(LayoutTag)
+        .tag(DefaultTag)
         .partials(partials);
     Ok(parser.build()?)
 }
