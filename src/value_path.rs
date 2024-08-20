@@ -86,7 +86,7 @@ impl Display for ValuePath {
                 .iter()
                 .map(|p| format!("{}", p))
                 .collect::<Vec<String>>()
-                .join(":")
+                .join(".")
         )
     }
 }
@@ -523,5 +523,50 @@ impl ValuePath {
 impl From<&str> for ValuePath {
     fn from(value: &str) -> Self {
         Self::from_string(value)
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+
+    use std::{collections::HashMap, error::Error};
+
+    use super::*;
+
+    fn object() -> Object {
+        Object {
+            filename: "test_filename".to_string(),
+            object_name: "test_object_name".to_string(),
+            order: -1,
+            path: "".to_string(),
+            values: HashMap::from([
+                ("title".to_string(), FieldValue::String("title".to_string())),
+                (
+                    "children".to_string(),
+                    FieldValue::Objects(vec![
+                        HashMap::from([(
+                            "name".to_string(),
+                            FieldValue::String("NAME ONE!".to_string()),
+                        )]),
+                        HashMap::from([(
+                            "name".to_string(),
+                            FieldValue::String("NAME TWO!".to_string()),
+                        )]),
+                    ]),
+                ),
+            ]),
+        }
+    }
+
+    #[test]
+    fn get_object_values() -> Result<(), Box<dyn Error>> {
+        let object = object();
+        let child_vp = ValuePath::from_string("children.1");
+
+        let children = child_vp.get_object_values(&object);
+        println!("{:?}", children);
+        assert!(children.is_some());
+
+        Ok(())
     }
 }
