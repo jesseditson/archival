@@ -100,6 +100,16 @@ mod test {
     }
 
     #[test]
+    fn does_not_default_defined() -> Result<(), Box<dyn Error>> {
+        let options = options();
+        let template = "{% default defined_var \"Something else\" %}".to_template(&options)?;
+        let runtime = RuntimeBuilder::new().build();
+        runtime.set_global("defined_var".into(), Value::scalar("HELLO"));
+        let output = template.render(&runtime)?;
+        assert_eq!(output, "HELLO");
+        Ok(())
+    }
+    #[test]
     fn default_root() -> Result<(), Box<dyn Error>> {
         let options = options();
         let template = "{% default undefined_var defined_var %}".to_template(&options)?;

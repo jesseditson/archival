@@ -188,7 +188,6 @@ impl<'a> Page<'a> {
                 "order": template_info.object.order,
                 "path": template_info.object.path,
             }));
-            println!("OV: {:?}", object_vals);
             let mut context = liquid::object!({
               template_info.definition.name.to_owned(): object_vals
             });
