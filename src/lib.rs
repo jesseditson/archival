@@ -92,6 +92,12 @@ impl<F: FileSystemAPI> Archival<F> {
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self { fs_mutex, site })
     }
+    pub fn new_with_field_config(fs: F, field_config: FieldConfig) -> Result<Self, Box<dyn Error>> {
+        let site = Site::load(&fs)?;
+        FieldConfig::set(field_config);
+        let fs_mutex = FileSystemMutex::init(fs);
+        Ok(Self { fs_mutex, site })
+    }
     pub fn build(&self) -> Result<(), Box<dyn Error>> {
         debug!("build {}", self.site);
         self.fs_mutex.with_fs(|fs| self.site.build(fs))

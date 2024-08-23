@@ -32,10 +32,10 @@ impl FieldConfig {
             uploads_url: uploads_url.unwrap_or_else(|| UPLOADS_URL.to_owned()),
         }
     }
-    pub fn get<'a>() -> MutexGuard<'a, FieldConfig> {
+    pub(crate) fn get<'a>() -> MutexGuard<'a, FieldConfig> {
         CONFIG.lock().expect("Invalid FieldConfig::get access")
     }
-    pub fn set(fc: FieldConfig) {
+    pub(crate) fn set(fc: FieldConfig) {
         let mut c = CONFIG.lock().expect("Invalid FieldConfig::set call");
         *c = fc;
     }
