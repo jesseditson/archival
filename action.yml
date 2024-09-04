@@ -26,9 +26,9 @@ runs:
       run: echo "bytes=$(du -s dist | cut -f1)" >> $GITHUB_OUTPUT
       shell: bash
     - name: Limit Build Size
-      if: ${{ steps.size.outputs.bytes }} > 104857600
+      if: ${{ steps.size.outputs.bytes > 104857600 }}
       run: |
-        echo "::error title={Artifact Too Big}::{${{ steps.size.outputs.bytes }} exceeds maximum build size of 104857600 bytes}"
+        echo "::error title={Artifact Too Big}::${{ steps.size.outputs.bytes }} exceeds maximum build size of 104857600 bytes"
         exit 1
       shell: bash
     - name: Upload Build Artifact
