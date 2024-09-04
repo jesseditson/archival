@@ -21,18 +21,27 @@ runs:
     - name: Build with Archival
       run: bin/archival build
       shell: bash
+    - name: Get Build Size
+      id: size
+      run: echo "bytes=$(du -s dist | cut -f1)" >> $GITHUB_OUTPUT
+      shell: bash
+    - name: Limit Build Size
+      if: ${{ size.outputs.bytes }} > 104857600
+      run: |
+        echo "::error title={Artifact Too Big}::{${{ size.outputs.bytes }} exceeds maximum build size of 104857600 bytes}"
+        exit 1
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
+      id: artifact
       with:
         name: ${{ github.sha }}
         path: ${{ steps.dist.outputs.dist }}
         if-no-files-found: error
-        compression-level: 0
         retention-days: 1
         overwrite: true
         include-hidden-files: true
     - name: Deploy
       uses: fjogeleit/http-request-action@v1
       with:
-        url: "https://api.archival.dev/sync/${{ github.repository }}/${{ github.sha }}/${{ github.ref_name }}"
+        url: "https://api.archival.dev/sync/${{ github.repository }}/${{ steps.artifacts.artifact-id }}/${{ github.ref_name }}"
         method: "PUT"
