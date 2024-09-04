@@ -30,6 +30,7 @@ runs:
       run: |
         echo "::error title={Artifact Too Big}::{${{ steps.size.outputs.bytes }} exceeds maximum build size of 104857600 bytes}"
         exit 1
+      shell: bash
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       id: artifact
