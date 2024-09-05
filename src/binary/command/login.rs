@@ -16,8 +16,8 @@ impl BinaryCommand for Command {
     fn name(&self) -> &str {
         "login"
     }
-    fn has_path(&self) -> bool {
-        false
+    fn no_path(&self) -> bool {
+        true
     }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
         cmd.about("Log in to archival.dev and store credentials locally in ~/.archivalrc")

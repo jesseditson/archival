@@ -3,17 +3,19 @@ mod config;
 use self::command::{ExitStatus, COMMANDS};
 use clap::{arg, command, value_parser, Command};
 pub use config::ArchivalConfig;
-use std::{env, error::Error, fs, path::PathBuf};
+use std::{env, error::Error, fs, path::PathBuf, sync::LazyLock};
+
+static CWD: LazyLock<PathBuf> = std::sync::LazyLock::new(|| env::current_dir().unwrap());
 
 pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn Error>> {
-    let build_dir = env::current_dir()?;
     let mut cmd = command!().arg_required_else_help(true);
     for command in COMMANDS {
         let mut subcommand = command.cli(Command::new(command.name()));
-        if command.has_path() {
+        if !command.no_path() {
             subcommand = subcommand.arg(
                 arg!([site_path] "an optional path to the archival site. Otherwise will be auto-detected from cwd.")
                     .required(false)
+                    .default_value(CWD.to_str())
                     .value_parser(value_parser!(PathBuf)),
             );
         }
@@ -24,14 +26,16 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn 
         .iter()
         .find_map(|c| {
             if let Some(args) = matches.subcommand_matches(c.name()) {
-                let build_dir = if c.has_path() {
-                    if let Some(path) = args.get_one::<PathBuf>("site_path") {
-                        fs::canonicalize(build_dir.join(path)).unwrap()
+                let build_dir = if !c.no_path() {
+                    let path = args.get_one::<PathBuf>("site_path").unwrap(); // defaulted so unwrap is ok
+                    if *path != *CWD {
+                        // If not default, the path is relative
+                        fs::canonicalize(CWD.join(path)).unwrap()
                     } else {
-                        build_dir.to_path_buf()
+                        CWD.to_path_buf()
                     }
                 } else {
-                    build_dir.to_path_buf()
+                    CWD.to_path_buf()
                 };
                 Some(c.handler(&build_dir, args))
             } else {

@@ -156,8 +156,7 @@ impl BinaryCommand for Command {
                     .value_parser(value_parser!(PathBuf)),
             )
             .arg(
-                arg!([child] "If importing to a child list, this is the name of the children to import to.")
-                    .required(false)
+                arg!(-c --child <child> "If importing to a child list, this is the name of the children to import to.")
                     .value_parser(value_parser!(ValuePath)),
             )
             .arg(
