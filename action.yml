@@ -4,14 +4,6 @@ author: "Archival Team"
 branding:
   icon: "archive"
   color: "green"
-inputs:
-  token:
-    description: "github token to use. Typically secrets.GITHUB_TOKEN"
-    required: true
-  branch:
-    description: "branch to write output to"
-    required: false
-    default: "archival-dist"
 runs:
   using: "composite"
   steps:
@@ -29,16 +21,28 @@ runs:
     - name: Build with Archival
       run: bin/archival build
       shell: bash
-    - name: Push to Deploy Branch
-      uses: s0/git-publish-subdir-action@5bc6742efb946f4cba68c7a9067a31ea5631071d
-      env:
-        REPO: self
-        BRANCH: ${{ inputs.branch }}
-        FOLDER: ${{ steps.dist.outputs.dist }}
-        GITHUB_TOKEN: ${{ inputs.token }}
-        SQUASH_HISTORY: true
+    - name: Get Build Size
+      id: size
+      run: echo "bytes=$(du -s dist | cut -f1)" >> $GITHUB_OUTPUT
+      shell: bash
+    - name: Limit Build Size
+      if: ${{ steps.size.outputs.bytes > 104857600 }}
+      run: |
+        echo "::error title={Artifact Too Big}::${{ steps.size.outputs.bytes }} exceeds maximum build size of 104857600 bytes"
+        exit 1
+      shell: bash
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      id: artifact
+      with:
+        name: ${{ github.sha }}
+        path: ${{ steps.dist.outputs.dist }}
+        if-no-files-found: error
+        retention-days: 1
+        overwrite: true
+        include-hidden-files: true
     - name: Deploy
       uses: fjogeleit/http-request-action@v1
       with:
-        url: "https://api.archival.dev/sync/${{ github.repository }}/heads/${{ inputs.branch }}"
+        url: "https://api.archival.dev/sync/${{ github.repository }}/${{ steps.artifact.outputs.artifact-id }}/${{ github.ref_name }}"
         method: "PUT"
