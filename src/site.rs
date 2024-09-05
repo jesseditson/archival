@@ -153,7 +153,7 @@ impl Site {
         let objects_dir = &self.manifest.objects_dir;
         for (object_name, object_def) in self.object_definitions.iter() {
             let object_files_path = objects_dir.join(object_name);
-            let object_file_path = objects_dir.join(&format!("{}.toml", object_name));
+            let object_file_path = objects_dir.join(format!("{}.toml", object_name));
             let mut cache = self.obj_cache.borrow_mut();
             if fs.is_dir(&object_files_path)? {
                 if fs.exists(&object_file_path)? {
