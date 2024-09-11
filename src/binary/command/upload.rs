@@ -27,8 +27,6 @@ pub enum UploadError {
     NotLoggedIn,
     #[error("file '{0}' doesn't exist")]
     FileNotExists(PathBuf),
-    #[error("current archival manifest does not define archival_site")]
-    NoArchivalSite,
     #[error("invalid object path '{0}'")]
     InvalidObjectPath(PathBuf),
     #[error("invalid object type '{0}'")]
@@ -109,13 +107,6 @@ impl BinaryCommand for Command {
         // Set up an archival site to make sure we're able to modify fields
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let archival = Archival::new(fs)?;
-        // Make sure we have a site
-        let archival_site = archival
-            .site
-            .manifest
-            .archival_site
-            .as_ref()
-            .ok_or(UploadError::NoArchivalSite)?;
         // Make sure that the specified object exists
         if !archival.object_exists(&object_type, &object_name)? {
             return Err(UploadError::InvalidObjectPath(object.to_owned()).into());
@@ -136,7 +127,7 @@ impl BinaryCommand for Command {
         }
         // Ok, this looks legit. Upload the file
         let sha = archival.sha_for_file(file_path)?;
-        let upload_url = format!("{}/upload/{}/{}", API_URL, archival_site, sha);
+        let upload_url = format!("{}/upload/{}", API_URL, sha);
         let mime = mime_guess::from_path(file_path);
         let mut file = File::from_mime_guess(mime);
         file.sha = sha;

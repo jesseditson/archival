@@ -673,12 +673,10 @@ mod lib {
         let mut archival = Archival::new(fs)?;
         archival.modify_manifest(|m| {
             m.site_url = Some("test.com".to_string());
-            m.archival_site = Some("test".to_string());
             m.prebuild = vec!["test".to_string()];
         })?;
         let output = archival.site.manifest.to_toml()?;
         println!("{}", output);
-        assert!(output.contains("archival_site = \"test\""));
         assert!(output.contains("site_url = \"test.com\""));
         // Doesn't fill defaults
         assert!(!output.contains("objects_dir"));
