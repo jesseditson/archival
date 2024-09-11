@@ -597,7 +597,7 @@ mod tests {
     use super::*;
 
     fn full_manifest_content() -> &'static str {
-        "archival_version = '0.6.0'
+        "archival_version = '0.8.0'
         site_url = 'https://jesse.onarchival.dev'
         object_file = 'm_objects.toml'
         prebuild = ['echo \"HELLO!\"']
@@ -626,7 +626,7 @@ mod tests {
     fn manifest_parsing() -> Result<(), Box<dyn Error>> {
         let m = Manifest::from_string(Path::new(""), full_manifest_content().to_string())?;
         println!("M: {:?}", m);
-        assert_eq!(m.archival_version, Some("0.6.0".to_string()));
+        assert_eq!(m.archival_version, Some("0.8.0".to_string()));
         assert_eq!(m.site_url, Some("https://jesse.onarchival.dev".to_string()));
         assert_eq!(
             m.object_definition_file,
