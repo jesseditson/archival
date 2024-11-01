@@ -334,8 +334,8 @@ impl Command {
     ) -> Result<(), ImportError> {
         // Generate a list of rows from our input data
         progress("parsing file...", 0, 0);
-        let inverted_field_map: HashMap<&String, &String> = field_map.iter()
-        .map(|(k, v)| (v, k)).collect();
+        let inverted_field_map: HashMap<&String, &String> =
+            field_map.iter().map(|(k, v)| (v, k)).collect();
         let parsed = file_format.parse(reader)?;
         if let ImportName::Field(f) = &import_name {
             progress("creating object...", 0, 0);
