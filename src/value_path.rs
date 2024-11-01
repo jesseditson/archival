@@ -5,7 +5,7 @@ use crate::{
 };
 use liquid::ValueView;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -131,6 +131,9 @@ impl ValuePath {
     }
     pub fn is_empty(&self) -> bool {
         self.path.is_empty()
+    }
+    pub fn len(&self) -> usize {
+        self.path.len()
     }
 
     pub fn append(mut self, component: ValuePathComponent) -> Self {
@@ -388,9 +391,15 @@ impl ValuePath {
     ) -> Result<&'a ObjectDefinition, ValuePathError> {
         let mut last_val = def;
         for cmp in self.path.iter() {
-            if let ValuePathComponent::Key(k) = cmp {
-                if let Some(child_def) = last_val.children.get(k) {
-                    last_val = child_def;
+            match cmp {
+                ValuePathComponent::Key(k) => {
+                    if let Some(child_def) = last_val.children.get(k) {
+                        last_val = child_def;
+                        continue;
+                    }
+                },
+                ValuePathComponent::Index(_) => {
+                    // Skip indexes in definitions
                     continue;
                 }
             }
@@ -448,7 +457,7 @@ impl ValuePath {
                     if let ValuePathComponent::Index(index) = cmp {
                         if let Some(child) = children.get_mut(index) {
                             if let Some(ValuePathComponent::Key(k)) = i_path.next() {
-                                if i_path.len() > 0 {
+                                if child.contains_key(&k) {
                                     last_val = child.get_mut(&k);
                                     continue;
                                 }
@@ -499,17 +508,21 @@ impl ValuePath {
                 // the index and then finds a key on it.
                 if let Some(FieldValue::Objects(children)) = last_val {
                     if let ValuePathComponent::Index(index) = cmp {
-                        if let Some(child) = children.get_mut(index) {
-                            if let Some(ValuePathComponent::Key(k)) = i_path.next() {
-                                if i_path.len() > 0 {
-                                    last_val = child.get_mut(&k);
-                                    continue;
-                                } else {
-                                    match value {
-                                        Some(value) => child.insert(k, value),
-                                        None => child.remove(&k),
-                                    };
-                                }
+                        while children.len() <= index {
+                            // No child yet - since we're setting, insert one
+                            // here.
+                            children.push(HashMap::new());
+                        }
+                        let child = children.get_mut(index).unwrap();
+                        if let Some(ValuePathComponent::Key(k)) = i_path.next() {
+                            if i_path.len() > 0 {
+                                last_val = child.get_mut(&k);
+                                continue;
+                            } else {
+                                match value {
+                                    Some(value) => child.insert(k, value),
+                                    None => child.remove(&k),
+                                };
                             }
                         }
                     }
