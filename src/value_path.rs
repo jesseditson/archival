@@ -397,7 +397,7 @@ impl ValuePath {
                         last_val = child_def;
                         continue;
                     }
-                },
+                }
                 ValuePathComponent::Index(_) => {
                     // Skip indexes in definitions
                     continue;
