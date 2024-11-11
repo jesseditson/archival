@@ -27,10 +27,18 @@ pub enum InvalidFileError {
     UnrecognizedType(String),
     #[error("cannot define both {0} and {1}")]
     DuplicateObjectDefinition(String, String),
-    #[error("template file {0} does not exist.")]
-    MissingTemplate(String),
     #[error("invalid root object {0}: {1}")]
     InvalidRootObject(String, String),
+}
+
+#[derive(Error, Debug, Clone)]
+pub enum BuildError {
+    #[error("template file {0} does not exist.")]
+    MissingTemplate(String),
+    #[error("failed rendering object {0} to {1} template:\n{2}")]
+    TemplateRenderError(String, String, String),
+    #[error("page {0} failed rendering:\n{1}")]
+    PageRenderError(String, String),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -301,10 +309,9 @@ impl Site {
                 let template_path = pages_dir.join(format!("{}.liquid", template));
                 debug!("rendering template objects for {}", template_path.display());
                 if !fs.exists(&template_path)? {
-                    return Err(InvalidFileError::MissingTemplate(
-                        template_path.display().to_string(),
-                    )
-                    .into());
+                    return Err(
+                        BuildError::MissingTemplate(template_path.display().to_string()).into(),
+                    );
                 }
                 let template_r = fs.read_to_string(&template_path);
                 if template_r.is_err() {
@@ -315,25 +322,23 @@ impl Site {
                     if let Some(t_objects) = all_objects.get(name) {
                         for object in t_objects.into_iter() {
                             debug!("rendering {}", object.filename);
-                            let page = Page::new_with_template(
-                                object.filename.clone(),
-                                object_def,
+                            if let Err(error) = Self::render_template_page(
                                 object,
-                                template_str.to_owned(),
-                                TemplateType::Default,
+                                object_def,
+                                &template_str,
                                 &template_path,
-                            );
-                            let render_o = page.render(&liquid_parser, &all_objects);
-                            if render_o.is_err() {
-                                warn!("failed rendering {}", object.filename);
+                                build_dir,
+                                &all_objects,
+                                fs,
+                                &liquid_parser,
+                            ) {
+                                return Err(BuildError::TemplateRenderError(
+                                    object.filename.to_string(),
+                                    template.to_string(),
+                                    error.to_string(),
+                                )
+                                .into());
                             }
-                            let rendered = layout::post_process(render_o?);
-                            let render_name = format!("{}.{}", object.filename, page.extension());
-                            let t_dir = build_dir.join(&object_def.name);
-                            fs.create_dir_all(&t_dir)?;
-                            let build_path = t_dir.join(render_name);
-                            debug!("write {}", build_path.display());
-                            fs.write_str(&build_path, rendered)?;
                         }
                     }
                 }
@@ -365,34 +370,97 @@ impl Site {
                         file_path.display(),
                         page_type.extension()
                     );
-                    if let Some(template_str) = fs.read_to_string(&file_path)? {
-                        let page = Page::new(
+                    if let Err(error) = Self::render_page(
+                        &rel_path,
+                        &file_path,
+                        page_name,
+                        page_type,
+                        build_dir,
+                        &all_objects,
+                        fs,
+                        &liquid_parser,
+                    ) {
+                        return Err(BuildError::PageRenderError(
                             page_name.to_string(),
-                            template_str,
-                            TemplateType::Default,
-                            &file_path,
-                        );
-                        let render_o = page.render(&liquid_parser, &all_objects);
-                        if render_o.is_err() {
-                            warn!("failed rendering {}", file_path.display());
-                        }
-                        let rendered = layout::post_process(render_o?);
-                        let mut render_dir = build_dir.to_path_buf();
-                        if let Some(parent_dir) = rel_path.parent() {
-                            render_dir = render_dir.join(parent_dir);
-                            fs.create_dir_all(&render_dir)?;
-                        }
-                        let render_path =
-                            render_dir.join(format!("{}.{}", page_name, page_type.extension()));
-                        debug!("write {}", render_path.display());
-                        fs.write_str(&render_path, rendered)?;
-                    } else {
-                        warn!("page not found: {}", file_path.display());
+                            error.to_string(),
+                        )
+                        .into());
                     }
                 }
             }
         }
+        Ok(())
+    }
 
+    #[instrument(skip(all_objects, fs, liquid_parser))]
+    #[allow(clippy::too_many_arguments)]
+    fn render_template_page<T: FileSystemAPI>(
+        object: &Object,
+        object_def: &ObjectDefinition,
+        template_str: &String,
+        template_path: &PathBuf,
+        build_dir: &PathBuf,
+        all_objects: &HashMap<String, ObjectEntry>,
+        fs: &mut T,
+        liquid_parser: &liquid::Parser,
+    ) -> Result<(), Box<dyn Error>> {
+        let page = Page::new_with_template(
+            object.filename.clone(),
+            object_def,
+            object,
+            template_str.to_owned(),
+            TemplateType::Default,
+            template_path,
+        );
+        let render_o = page.render(liquid_parser, all_objects);
+        if render_o.is_err() {
+            warn!("failed rendering {}", object.filename);
+        }
+        let rendered = layout::post_process(render_o?);
+        let render_name = format!("{}.{}", object.filename, page.extension());
+        let t_dir = build_dir.join(&object_def.name);
+        fs.create_dir_all(&t_dir)?;
+        let build_path = t_dir.join(render_name);
+        debug!("write {}", build_path.display());
+        fs.write_str(&build_path, rendered)?;
+        Ok(())
+    }
+
+    #[instrument(skip(all_objects, fs, liquid_parser))]
+    #[allow(clippy::too_many_arguments)]
+    fn render_page<T: FileSystemAPI>(
+        rel_path: &PathBuf,
+        file_path: &PathBuf,
+        page_name: &str,
+        page_type: TemplateType,
+        build_dir: &PathBuf,
+        all_objects: &HashMap<String, ObjectEntry>,
+        fs: &mut T,
+        liquid_parser: &liquid::Parser,
+    ) -> Result<(), Box<dyn Error>> {
+        if let Some(template_str) = fs.read_to_string(file_path)? {
+            let page = Page::new(
+                page_name.to_string(),
+                template_str,
+                TemplateType::Default,
+                file_path,
+            );
+            let render_o = page.render(liquid_parser, all_objects);
+            if render_o.is_err() {
+                warn!("failed rendering {}", file_path.display());
+            }
+            let rendered = layout::post_process(render_o?);
+            let mut render_dir = build_dir.to_path_buf();
+            if let Some(parent_dir) = rel_path.parent() {
+                render_dir = render_dir.join(parent_dir);
+                fs.create_dir_all(&render_dir)?;
+            }
+            let render_path = render_dir.join(format!("{}.{}", page_name, page_type.extension()));
+            debug!("write {}", render_path.display());
+            fs.write_str(&render_path, rendered)?;
+        } else {
+            warn!("page not found: {}", file_path.display());
+        }
         Ok(())
     }
 }
