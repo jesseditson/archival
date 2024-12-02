@@ -112,7 +112,7 @@ impl DateTime {
         if self.inner.is_none() {
             panic!("cannot borrow datetime before it is bounced");
         }
-        return self.inner.as_ref().unwrap();
+        self.inner.as_ref().unwrap()
     }
 
     pub fn as_liquid_datetime(&self) -> model::DateTime {

@@ -22,7 +22,7 @@ impl ServerBuilder {
         }
     }
 
-    /// Override the hostname
+    // Override the hostname
     // pub fn hostname(&mut self, hostname: impl Into<String>) -> &mut Self {
     //     self.hostname = Some(hostname.into());
     //     self
@@ -70,7 +70,7 @@ pub struct Server {
 }
 
 impl Server {
-    /// Serve on first available port on localhost
+    // Serve on first available port on localhost
     // pub fn new(source: impl Into<std::path::PathBuf>, not_found_path: Option<&str>) -> Self {
     //     ServerBuilder::new(source, not_found_path).build()
     // }

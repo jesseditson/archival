@@ -76,7 +76,7 @@ impl Serialize for Validator {
     }
 }
 struct ValidatorVisitor;
-impl<'de> Visitor<'de> for ValidatorVisitor {
+impl Visitor<'_> for ValidatorVisitor {
     type Value = Validator;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
