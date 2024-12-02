@@ -334,6 +334,8 @@ impl Command {
     ) -> Result<(), ImportError> {
         // Generate a list of rows from our input data
         progress("parsing file...", 0, 0);
+        let inverted_field_map: HashMap<&String, &String> =
+            field_map.iter().map(|(k, v)| (v, k)).collect();
         let parsed = file_format.parse(reader)?;
         if let ImportName::Field(f) = &import_name {
             progress("creating object...", 0, 0);
@@ -388,6 +390,7 @@ impl Command {
                     file_name
                 }
             };
+            let mut unused_cols = row.clone();
             for (name, field_type) in &mapped_type.fields {
                 let from_name = if let Some(mapped) = field_map.get(name) {
                     mapped
@@ -407,8 +410,41 @@ impl Command {
                             field: name.to_string(),
                         }))
                         .map_err(|e| ImportError::WriteError(e.to_string()))?;
+                    unused_cols.remove(from_name);
                 } else {
                     println!("field '{}' not found in row: {:?}", from_name, row);
+                }
+            }
+            // We support pathing in csv column names, so if the name begins
+            // with a child name, insert it.
+            for (name, value) in unused_cols {
+                let import_name = if let Some(import_name) = inverted_field_map.get(&name) {
+                    import_name
+                } else {
+                    &name
+                };
+                let mut col_path = ValuePath::from_string(import_name);
+                // The final component is the field
+                let col_field = col_path.pop();
+                if col_field.is_none() {
+                    continue;
+                }
+                if let Ok(found_type) = col_path.get_definition(mapped_type) {
+                    let col_field = col_field.unwrap().to_string().trim().to_string();
+                    if let Some(field_type) = found_type.fields.get(&col_field) {
+                        // Validate type
+                        let value = FieldValue::from_string(&name, field_type, value.to_string())
+                            .map_err(|e| ImportError::ParseError(e.to_string()))?;
+                        archival
+                            .send_event_no_rebuild(ArchivalEvent::EditField(EditFieldEvent {
+                                object: object.to_string(),
+                                filename: filename.to_string(),
+                                path: current_path.clone().concat(col_path),
+                                value: Some(value),
+                                field: col_field,
+                            }))
+                            .map_err(|e| ImportError::WriteError(e.to_string()))?;
+                    }
                 }
             }
         }

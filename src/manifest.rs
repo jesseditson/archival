@@ -172,7 +172,6 @@ pub struct Manifest {
     pub archival_version: Option<String>,
     pub prebuild: Vec<String>,
     pub site_url: Option<String>,
-    pub archival_site: Option<String>,
     pub object_definition_file: PathBuf,
     pub pages_dir: PathBuf,
     pub objects_dir: PathBuf,
@@ -189,7 +188,6 @@ pub struct Manifest {
 pub enum ManifestField {
     ArchivalVersion,
     SiteUrl,
-    ArchivalSite,
     ObjectDefinitionFile,
     ObjectsDir,
     Prebuild,
@@ -205,7 +203,6 @@ impl ManifestField {
     fn field_name(&self) -> &str {
         match self {
             ManifestField::ArchivalVersion => "archival_version",
-            ManifestField::ArchivalSite => "archival_site",
             ManifestField::SiteUrl => "site_url",
             ManifestField::ObjectDefinitionFile => "object_file",
             ManifestField::ObjectsDir => "objects",
@@ -226,7 +223,6 @@ impl fmt::Display for Manifest {
             f,
             r#"
         archival_version: {}
-        archival_site: {}
         site_url: {}
         uploads_url: {}
         object file: {}
@@ -240,7 +236,6 @@ impl fmt::Display for Manifest {
             self.archival_version
                 .as_ref()
                 .unwrap_or(&"unknown".to_owned()),
-            self.archival_site.as_ref().unwrap_or(&"none".to_owned()),
             self.site_url.as_ref().unwrap_or(&"none".to_owned()),
             self.uploads_url
                 .as_ref()
@@ -293,7 +288,6 @@ impl Manifest {
             prebuild: vec![],
             site_url: None,
             uploads_url: None,
-            archival_site: None,
             object_definition_file: root.join(OBJECT_DEFINITION_FILE_NAME),
             pages_dir: root.join(PAGES_DIR_NAME),
             objects_dir: root.join(OBJECTS_DIR_NAME),
@@ -346,7 +340,6 @@ impl Manifest {
                 "archival_version" => {
                     manifest.archival_version = value.as_str().map(|s| s.to_string())
                 }
-                "archival_site" => manifest.archival_site = value.as_str().map(|s| s.to_string()),
                 "uploads_url" => manifest.uploads_url = value.as_str().map(|s| s.to_string()),
                 "site_url" => manifest.site_url = value.as_str().map(|s| s.to_string()),
                 "prebuild" => {
@@ -385,7 +378,6 @@ impl Manifest {
     fn toml_field(&self, field: &ManifestField) -> Option<Value> {
         match field {
             ManifestField::ArchivalVersion => self.archival_version.to_owned().map(Value::String),
-            ManifestField::ArchivalSite => self.archival_site.to_owned().map(Value::String),
             ManifestField::SiteUrl => self.site_url.to_owned().map(Value::String),
             ManifestField::ObjectDefinitionFile => Some(Value::String(
                 self.object_definition_file.to_string_lossy().to_string(),
@@ -525,7 +517,6 @@ impl Manifest {
     pub fn set(&mut self, field: &ManifestField, value: String) {
         match field {
             ManifestField::ArchivalVersion => self.archival_version = Some(value),
-            ManifestField::ArchivalSite => self.archival_site = Some(value),
             ManifestField::ObjectDefinitionFile => {
                 self.object_definition_file = PathBuf::from(value)
             }
@@ -560,12 +551,10 @@ impl Manifest {
     fn durable_fields() -> Vec<ManifestField> {
         vec![
             ManifestField::ArchivalVersion,
-            ManifestField::ArchivalSite,
             ManifestField::SiteUrl,
             ManifestField::CdnUrl,
             ManifestField::Prebuild,
             ManifestField::ObjectDefinitionFile,
-            ManifestField::ArchivalSite,
             ManifestField::PagesDir,
             ManifestField::ObjectsDir,
             ManifestField::BuildDir,
@@ -608,8 +597,7 @@ mod tests {
     use super::*;
 
     fn full_manifest_content() -> &'static str {
-        "archival_version = '0.6.0'
-        archival_site = 'jesse'
+        "archival_version = '0.8.0'
         site_url = 'https://jesse.onarchival.dev'
         object_file = 'm_objects.toml'
         prebuild = ['echo \"HELLO!\"']
@@ -638,8 +626,7 @@ mod tests {
     fn manifest_parsing() -> Result<(), Box<dyn Error>> {
         let m = Manifest::from_string(Path::new(""), full_manifest_content().to_string())?;
         println!("M: {:?}", m);
-        assert_eq!(m.archival_version, Some("0.6.0".to_string()));
-        assert_eq!(m.archival_site, Some("jesse".to_string()));
+        assert_eq!(m.archival_version, Some("0.8.0".to_string()));
         assert_eq!(m.site_url, Some("https://jesse.onarchival.dev".to_string()));
         assert_eq!(
             m.object_definition_file,
