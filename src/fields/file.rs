@@ -225,6 +225,64 @@ impl File {
     }
 }
 
+#[cfg(feature = "json-schema")]
+impl File {
+    pub fn to_json_schema_property(
+        description: &str,
+        display_type: DisplayType,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        use serde_json::json;
+
+        let mut property = serde_json::Map::new();
+        property.insert("type".to_string(), "object".into());
+        property.insert("description".to_string(), description.to_string().into());
+        let mut properties = serde_json::Map::new();
+        properties.insert(
+            "sha".into(),
+            json!({
+                "type": "string",
+                "description": "a unique sha representing the hashed content of this file",
+                "minLength": 64,
+                "maxLength": 64,
+            }),
+        );
+        properties.insert(
+            "name".into(),
+            json!({
+                "type": "string",
+                "description": "the name of the file",
+            }),
+        );
+        properties.insert(
+            "filename".into(),
+            json!({
+                "type": "string",
+                "description": "the filename that this upload was generated from",
+            }),
+        );
+        properties.insert(
+            "mime".into(),
+            json!({
+                "type": "string",
+                "description": "the mime type of this content",
+            }),
+        );
+        properties.insert(
+            "display_type".into(),
+            json!({
+                "const": display_type.to_str(),
+                "description": "the display type of this content",
+            }),
+        );
+        property.insert("properties".into(), properties.into());
+        property.insert(
+            "required".into(),
+            json!(["sha", "filename", "mime", "display_type"]),
+        );
+        property
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
 

@@ -4,6 +4,9 @@ use thiserror::Error;
 
 use crate::manifest::EditorTypes;
 
+#[cfg(feature = "json-schema")]
+use super::{file::DisplayType, File};
+
 #[derive(Error, Debug, Clone)]
 pub enum InvalidFieldError {
     #[error("unrecognized type {0}")]
@@ -117,5 +120,50 @@ impl FieldType {
 impl Display for FieldType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_str())
+    }
+}
+
+#[cfg(feature = "json-schema")]
+impl FieldType {
+    fn maybe_file_type(&self) -> Option<DisplayType> {
+        match self {
+            FieldType::Image => Some(DisplayType::Image),
+            FieldType::Video => Some(DisplayType::Video),
+            FieldType::Audio => Some(DisplayType::Audio),
+            FieldType::Upload => Some(DisplayType::Download),
+            _ => None,
+        }
+    }
+
+    pub fn to_json_schema_property(
+        &self,
+        description: &str,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        match self {
+            Self::Alias(a) => a.0.to_json_schema_property(description),
+            _ => {
+                if let Some(display_type) = self.maybe_file_type() {
+                    File::to_json_schema_property(description, display_type)
+                } else {
+                    let mut schema = serde_json::Map::new();
+                    schema.insert("description".into(), description.into());
+                    // Simple types
+                    schema.insert(
+                        "type".into(),
+                        match self {
+                            Self::String => "string".into(),
+                            Self::Number => "number".into(),
+                            Self::Date => "string".into(),
+                            Self::Markdown => "string".into(),
+                            Self::Boolean => "boolean".into(),
+                            // At some point, we should support providing a schema for meta types
+                            Self::Meta => "object".into(),
+                            _ => panic!("don't know how to parse a schema from {:?}", self),
+                        },
+                    );
+                    schema
+                }
+            }
+        }
     }
 }

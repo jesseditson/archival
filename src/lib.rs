@@ -21,7 +21,6 @@ use events::ArchivalEventResponse;
 use events::{
     AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
 };
-pub mod fields;
 pub use fields::FieldConfig;
 pub use fields::FieldValue;
 use manifest::Manifest;
@@ -37,6 +36,8 @@ pub mod binary;
 mod constants;
 #[cfg(feature = "stdlib-fs")]
 mod file_system_stdlib;
+#[cfg(feature = "json-schema")]
+mod json_schema;
 #[cfg(feature = "binary")]
 mod server;
 use file_system_mutex::FileSystemMutex;
@@ -45,6 +46,7 @@ use semver::{Version, VersionReq};
 
 // Re-exports
 pub mod events;
+pub mod fields;
 pub mod object;
 pub use archival_error::ArchivalError;
 pub use file_system::unpack_zip;
@@ -101,6 +103,20 @@ impl<F: FileSystemAPI> Archival<F> {
     pub fn build(&self) -> Result<(), Box<dyn Error>> {
         debug!("build {}", self.site);
         self.fs_mutex.with_fs(|fs| self.site.build(fs))
+    }
+    #[cfg(feature = "json-schema")]
+    pub fn dump_schemas(&self) -> Result<(), Box<dyn Error>> {
+        debug!("dump schemas {}", self.site);
+        self.fs_mutex.with_fs(|fs| self.site.dump_schemas(fs))
+    }
+    #[cfg(feature = "json-schema")]
+    pub fn generate_root_json_schema(&self) -> String {
+        json_schema::generate_root_json_schema(
+            &format!("{}/root.schema.json", self.site.site_url()),
+            self.site.manifest.site_name.as_deref(),
+            &format!("Object definitions for {}", self.site.site_url()),
+            &self.site.object_definitions,
+        )
     }
     pub fn dist_file(&self, path: &Path) -> Option<Vec<u8>> {
         let path = self.site.manifest.build_dir.join(path);
