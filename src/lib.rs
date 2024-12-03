@@ -110,12 +110,13 @@ impl<F: FileSystemAPI> Archival<F> {
         self.fs_mutex.with_fs(|fs| self.site.dump_schemas(fs))
     }
     #[cfg(feature = "json-schema")]
-    pub fn generate_root_json_schema(&self) -> String {
+    pub fn generate_root_json_schema(&self, pretty: bool) -> String {
         json_schema::generate_root_json_schema(
             &format!("{}/root.schema.json", self.site.site_url()),
             self.site.manifest.site_name.as_deref(),
             &format!("Object definitions for {}", self.site.site_url()),
             &self.site.object_definitions,
+            pretty,
         )
     }
     pub fn dist_file(&self, path: &Path) -> Option<Vec<u8>> {

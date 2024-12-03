@@ -139,10 +139,10 @@ impl Site {
         let _ = fs.remove_dir_all(&self.manifest.schemas_dir);
         fs.create_dir_all(&self.manifest.schemas_dir)?;
         for (name, def) in &self.object_definitions {
-            println!("HI");
             let schema = json_schema::generate_json_schema(
                 &format!("{}/{}.schema.json", site_url, name),
                 def,
+                true,
             );
             fs.write_str(
                 &self
@@ -166,8 +166,11 @@ impl Site {
             .get(object)
             .ok_or_else(|| InvalidFileError::UnknownObject(object.clone()))?;
         let site_url = self.site_url();
-        let schema =
-            json_schema::generate_json_schema(&format!("{}/{}.schema.json", site_url, object), def);
+        let schema = json_schema::generate_json_schema(
+            &format!("{}/{}.schema.json", site_url, object),
+            def,
+            true,
+        );
         fs.write_str(
             &self
                 .manifest

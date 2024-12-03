@@ -30,6 +30,9 @@ impl BinaryCommand for Command {
         .arg(
             arg!(-i --inline "If provided, this will print the schema to stdout instead of generating schema files.").required(false),
         )
+        .arg(
+            arg!(-p --pretty "If provided, will prettify json before printing or dumping.").required(false),
+        )
     }
     fn handler(
         &self,
@@ -39,6 +42,7 @@ impl BinaryCommand for Command {
         let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let object = args.get_one::<String>("object");
         let inline = *args.get_one::<bool>("inline").unwrap();
+        let pretty = *args.get_one::<bool>("pretty").unwrap();
         let site = Site::load(&fs)?;
         if inline {
             let schema = if let Some(object) = object {
@@ -47,13 +51,14 @@ impl BinaryCommand for Command {
                     .get(object)
                     .ok_or_else(|| SchemaError::NoObject(object.clone()))?;
                 let site_url = site.site_url();
-                generate_json_schema(&format!("{}/{}.schema.json", site_url, object), def)
+                generate_json_schema(&format!("{}/{}.schema.json", site_url, object), def, pretty)
             } else {
                 generate_root_json_schema(
                     &format!("{}/root.schema.json", site.site_url()),
                     site.manifest.site_name.as_deref(),
                     &format!("Object definitions for {}", site.site_url()),
                     &site.object_definitions,
+                    pretty,
                 )
             };
             println!("{}", schema);

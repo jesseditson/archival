@@ -9,6 +9,7 @@ pub fn generate_root_json_schema(
     title: Option<&str>,
     description: &str,
     objects: &HashMap<String, ObjectDefinition>,
+    pretty: bool,
 ) -> String {
     let mut schema = serde_json::Map::new();
     schema.insert(
@@ -33,7 +34,11 @@ pub fn generate_root_json_schema(
         );
     }
     schema.insert("properties".into(), properties.into());
-    serde_json::to_string_pretty(&schema).unwrap()
+    if pretty {
+        serde_json::to_string_pretty(&schema).unwrap()
+    } else {
+        serde_json::to_string(&schema).unwrap()
+    }
 }
 
 pub fn generate_json_schema(
@@ -41,6 +46,7 @@ pub fn generate_json_schema(
     // title: &str,
     // description: &str,
     definition: &ObjectDefinition,
+    pretty: bool,
 ) -> String {
     let mut schema = serde_json::Map::new();
     schema.insert(
@@ -55,7 +61,11 @@ pub fn generate_json_schema(
         "properties".into(),
         definition.to_json_schema_properties().into(),
     );
-    serde_json::to_string_pretty(&schema).unwrap()
+    if pretty {
+        serde_json::to_string_pretty(&schema).unwrap()
+    } else {
+        serde_json::to_string(&schema).unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -91,7 +101,7 @@ pub mod tests {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
         let defs = ObjectDefinition::from_table(&table, &HashMap::new())?;
 
-        let schema_str = generate_json_schema("artist", defs.get("artist").unwrap());
+        let schema_str = generate_json_schema("artist", defs.get("artist").unwrap(), false);
         println!("SCHEMA: {}", schema_str);
         let instance = json!({
             "tour_dates": [{
