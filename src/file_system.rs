@@ -6,6 +6,7 @@ use std::{
 use tracing::debug;
 
 pub trait FileSystemAPI {
+    fn root_dir(&self) -> &Path;
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
     fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
     fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;

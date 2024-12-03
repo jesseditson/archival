@@ -8,6 +8,8 @@ mod manifest;
 mod objects;
 mod prebuild;
 mod run;
+#[cfg(feature = "json-schema")]
+mod schemas;
 mod upload;
 
 pub enum ExitStatus {
@@ -32,7 +34,7 @@ pub trait BinaryCommand {
     fn handler(&self, build_dir: &Path, args: &ArgMatches) -> Result<ExitStatus, Box<dyn Error>>;
 }
 
-pub const COMMANDS: [&dyn BinaryCommand; 9] = [
+pub const COMMANDS: [&dyn BinaryCommand; 10] = [
     &build::Command {},
     &run::Command {},
     &manifest::Command {},
@@ -42,4 +44,5 @@ pub const COMMANDS: [&dyn BinaryCommand; 9] = [
     &upload::Command {},
     &import::Command {},
     &objects::Command {},
+    &schemas::Command {},
 ];

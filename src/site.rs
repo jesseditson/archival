@@ -1,3 +1,5 @@
+#[cfg(feature = "json-schema")]
+use crate::json_schema;
 use crate::{
     check_compatibility,
     constants::MANIFEST_FILE_NAME,
@@ -29,6 +31,9 @@ pub enum InvalidFileError {
     DuplicateObjectDefinition(String, String),
     #[error("invalid root object {0}: {1}")]
     InvalidRootObject(String, String),
+    #[cfg(feature = "json-schema")]
+    #[error("unknown object {0}")]
+    UnknownObject(String),
 }
 
 #[derive(Error, Debug, Clone)]
@@ -99,7 +104,7 @@ impl Site {
         if !fs.exists(odf)? {
             return Err(ArchivalError::new(&format!(
                 "Object definition file {} does not exist",
-                odf.to_string_lossy()
+                fs.root_dir().join(odf).to_string_lossy()
             ))
             .into());
         }
@@ -108,11 +113,69 @@ impl Site {
         debug!("loading definition {}", odf.display());
         let objects_table = read_toml(odf, fs)?;
         let objects = ObjectDefinition::from_table(&objects_table, &manifest.editor_types)?;
+
         Ok(Site {
             manifest,
             object_definitions: objects,
             obj_cache: RefCell::new(HashMap::new()),
         })
+    }
+
+    pub fn site_url(&self) -> &str {
+        self.manifest
+            .site_url
+            .as_ref()
+            // TODO: probably should actually be the hash of the objects.toml file
+            .map_or("unknown", |s| &s[..])
+    }
+
+    #[cfg(feature = "json-schema")]
+    pub fn dump_schemas(&self, fs: &mut impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
+        debug!(
+            "dumping schemas for {}",
+            self.manifest.object_definition_file.display()
+        );
+        let site_url = self.site_url();
+        let _ = fs.remove_dir_all(&self.manifest.schemas_dir);
+        fs.create_dir_all(&self.manifest.schemas_dir)?;
+        for (name, def) in &self.object_definitions {
+            println!("HI");
+            let schema = json_schema::generate_json_schema(
+                &format!("{}/{}.schema.json", site_url, name),
+                def,
+            );
+            fs.write_str(
+                &self
+                    .manifest
+                    .schemas_dir
+                    .join(format!("{}.schema.json", name)),
+                schema,
+            )?;
+        }
+        Ok(())
+    }
+    #[cfg(feature = "json-schema")]
+    pub fn dump_schema(
+        &self,
+        object: &String,
+        fs: &mut impl FileSystemAPI,
+    ) -> Result<(), Box<dyn Error>> {
+        debug!("dumping schema for {}", object);
+        let def = self
+            .object_definitions
+            .get(object)
+            .ok_or_else(|| InvalidFileError::UnknownObject(object.clone()))?;
+        let site_url = self.site_url();
+        let schema =
+            json_schema::generate_json_schema(&format!("{}/{}.schema.json", site_url, object), def);
+        fs.write_str(
+            &self
+                .manifest
+                .schemas_dir
+                .join(format!("{}.schema.json", object)),
+            schema,
+        )?;
+        Ok(())
     }
 
     pub fn get_field_config(&self) -> FieldConfig {
@@ -258,14 +321,14 @@ impl Site {
         if !fs.exists(objects_dir)? {
             return Err(ArchivalError::new(&format!(
                 "Objects dir {} does not exist",
-                objects_dir.to_string_lossy()
+                fs.root_dir().join(objects_dir).to_string_lossy()
             ))
             .into());
         }
         if !fs.exists(pages_dir)? {
             return Err(ArchivalError::new(&format!(
                 "Pages dir {} does not exist",
-                pages_dir.to_string_lossy()
+                fs.root_dir().join(pages_dir).to_string_lossy()
             ))
             .into());
         }

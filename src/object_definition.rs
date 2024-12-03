@@ -106,6 +106,30 @@ impl ObjectDefinition {
     }
 }
 
+#[cfg(feature = "json-schema")]
+impl ObjectDefinition {
+    pub fn to_json_schema_properties(&self) -> serde_json::Map<String, serde_json::Value> {
+        let mut schema = serde_json::Map::new();
+        for (field, field_type) in &self.fields {
+            schema.insert(
+                field.into(),
+                field_type.to_json_schema_property(field).into(),
+            );
+        }
+        for (name, definition) in &self.children {
+            let mut child = serde_json::Map::new();
+            child.insert("description".into(), name.to_string().into());
+            child.insert("type".into(), "array".into());
+            child.insert(
+                "items".into(),
+                serde_json::json!({ "type": "object", "properties": definition.to_json_schema_properties()}),
+            );
+            schema.insert(name.into(), child.into());
+        }
+        schema
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
 

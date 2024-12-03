@@ -28,6 +28,9 @@ impl NativeFileSystem {
 }
 
 impl FileSystemAPI for NativeFileSystem {
+    fn root_dir(&self) -> &Path {
+        &self.root
+    }
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
         Ok(fs::metadata(self.get_path(path)).is_ok())
     }

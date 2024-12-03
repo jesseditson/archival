@@ -10,7 +10,7 @@ use std::{
 use toml::{Table, Value};
 
 use crate::{
-    constants::{LAYOUT_DIR_NAME, NESTED_TYPES},
+    constants::{LAYOUT_DIR_NAME, NESTED_TYPES, SCHEMAS_DIR_NAME},
     file_system::FileSystemAPI,
     object::ValuePath,
     FieldConfig,
@@ -171,8 +171,10 @@ pub struct Manifest {
     root: PathBuf,
     pub archival_version: Option<String>,
     pub prebuild: Vec<String>,
+    pub site_name: Option<String>,
     pub site_url: Option<String>,
     pub object_definition_file: PathBuf,
+    pub schemas_dir: PathBuf,
     pub pages_dir: PathBuf,
     pub objects_dir: PathBuf,
     pub build_dir: PathBuf,
@@ -188,12 +190,14 @@ pub struct Manifest {
 pub enum ManifestField {
     ArchivalVersion,
     SiteUrl,
+    SiteName,
     ObjectDefinitionFile,
     ObjectsDir,
     Prebuild,
     PagesDir,
     BuildDir,
     StaticDir,
+    SchemasDir,
     LayoutDir,
     CdnUrl,
     EditorTypes,
@@ -204,12 +208,14 @@ impl ManifestField {
         match self {
             ManifestField::ArchivalVersion => "archival_version",
             ManifestField::SiteUrl => "site_url",
+            ManifestField::SiteName => "site_name",
             ManifestField::ObjectDefinitionFile => "object_file",
             ManifestField::ObjectsDir => "objects",
             ManifestField::Prebuild => "prebuild",
             ManifestField::PagesDir => "pages",
             ManifestField::BuildDir => "build_dir",
             ManifestField::StaticDir => "static_dir",
+            ManifestField::SchemasDir => "schemas_dir",
             ManifestField::LayoutDir => "layout_dir",
             ManifestField::CdnUrl => "uploads_url",
             ManifestField::EditorTypes => "editor_types",
@@ -287,10 +293,12 @@ impl Manifest {
             archival_version: None,
             prebuild: vec![],
             site_url: None,
+            site_name: None,
             uploads_url: None,
             object_definition_file: root.join(OBJECT_DEFINITION_FILE_NAME),
             pages_dir: root.join(PAGES_DIR_NAME),
             objects_dir: root.join(OBJECTS_DIR_NAME),
+            schemas_dir: root.join(SCHEMAS_DIR_NAME),
             build_dir: root.join(BUILD_DIR_NAME),
             static_dir: root.join(STATIC_DIR_NAME),
             layout_dir: root.join(LAYOUT_DIR_NAME),
@@ -342,6 +350,7 @@ impl Manifest {
                 }
                 "uploads_url" => manifest.uploads_url = value.as_str().map(|s| s.to_string()),
                 "site_url" => manifest.site_url = value.as_str().map(|s| s.to_string()),
+                "site_name" => manifest.site_name = value.as_str().map(|s| s.to_string()),
                 "prebuild" => {
                     manifest.prebuild = value.as_array().map_or(vec![], |v| {
                         v.iter()
@@ -353,6 +362,7 @@ impl Manifest {
                 "objects" => manifest.objects_dir = path_or_err(value, "objects")?,
                 "build_dir" => manifest.build_dir = path_or_err(value, "build_dir")?,
                 "static_dir" => manifest.static_dir = path_or_err(value, "static_dir")?,
+                "schemas_dir" => manifest.schemas_dir = path_or_err(value, "schemas_dir")?,
                 "layout_dir" => manifest.layout_dir = path_or_err(value, "layout_dir")?,
                 "object_file" => {
                     manifest.object_definition_file = path_or_err(value, "object_file")?
@@ -379,6 +389,7 @@ impl Manifest {
         match field {
             ManifestField::ArchivalVersion => self.archival_version.to_owned().map(Value::String),
             ManifestField::SiteUrl => self.site_url.to_owned().map(Value::String),
+            ManifestField::SiteName => self.site_name.to_owned().map(Value::String),
             ManifestField::ObjectDefinitionFile => Some(Value::String(
                 self.object_definition_file.to_string_lossy().to_string(),
             )),
@@ -407,6 +418,9 @@ impl Manifest {
             ManifestField::StaticDir => {
                 Some(Value::String(self.static_dir.to_string_lossy().to_string()))
             }
+            ManifestField::SchemasDir => Some(Value::String(
+                self.schemas_dir.to_string_lossy().to_string(),
+            )),
             ManifestField::LayoutDir => {
                 Some(Value::String(self.layout_dir.to_string_lossy().to_string()))
             }
@@ -521,6 +535,7 @@ impl Manifest {
                 self.object_definition_file = PathBuf::from(value)
             }
             ManifestField::SiteUrl => self.site_url = Some(value),
+            ManifestField::SiteName => self.site_name = Some(value),
             ManifestField::CdnUrl => self.uploads_url = Some(value),
             ManifestField::Prebuild => {
                 todo!("Prebuild is not modifiable via events")
@@ -529,6 +544,7 @@ impl Manifest {
             ManifestField::PagesDir => self.pages_dir = PathBuf::from(value),
             ManifestField::BuildDir => self.build_dir = PathBuf::from(value),
             ManifestField::StaticDir => self.static_dir = PathBuf::from(value),
+            ManifestField::SchemasDir => self.schemas_dir = PathBuf::from(value),
             ManifestField::LayoutDir => self.layout_dir = PathBuf::from(value),
             ManifestField::EditorTypes => {
                 todo!("EditorTypes are not modifiable via events")

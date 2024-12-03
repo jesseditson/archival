@@ -93,6 +93,9 @@ pub struct MemoryFileSystem {
 }
 
 impl FileSystemAPI for MemoryFileSystem {
+    fn root_dir(&self) -> &Path {
+        Path::new("<memory>")
+    }
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
         if self.fs.contains_key(&path.to_string_lossy().to_lowercase()) || self.is_dir(path)? {
             Ok(true)

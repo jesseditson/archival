@@ -11,7 +11,7 @@ name = "archival"
 path = "src/lib.rs"
 
 [features]
-default = ["binary", "import-csv"]
+default = ["binary", "import-csv", "json-schema"]
 dhat-heap = ["dep:dhat"]
 gen-traces = ["binary", "dep:tracing-chrome"]
 typescript = ["dep:typescript-type-def"]
@@ -32,6 +32,7 @@ binary = [
     "dep:urlencoding",
 ]
 import-csv = ["dep:csv"]
+json-schema = []
 stdlib-fs = ["dep:notify", "dep:fs_extra", "dep:walkdir"]
 
 [[bin]]
@@ -102,3 +103,4 @@ serde_json = "1.0.113"
 tempfile = "3.5.0"
 tracing-test = "0.2.4"
 wasm-bindgen-test = "0.3.0"
+jsonschema = "0.26.1"
