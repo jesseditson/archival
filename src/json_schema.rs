@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::json;
 
@@ -9,6 +9,7 @@ pub fn generate_root_json_schema(
     title: Option<&str>,
     description: &str,
     objects: &HashMap<String, ObjectDefinition>,
+    root_objects: &HashSet<String>,
     pretty: bool,
 ) -> String {
     let mut schema = serde_json::Map::new();
@@ -24,14 +25,29 @@ pub fn generate_root_json_schema(
     schema.insert("type".into(), "object".into());
     let mut properties = serde_json::Map::new();
     for (name, def) in objects {
-        properties.insert(
-            name.into(),
-            json!({
-                "type": "object",
-                "description": name,
-                "properties": def.to_json_schema_properties()
-            }),
-        );
+        if root_objects.contains(name) {
+            properties.insert(
+                name.into(),
+                json!({
+                    "type": "object",
+                    "$comment": "root object",
+                    "description": name,
+                    "properties": def.to_json_schema_properties()
+                }),
+            );
+        } else {
+            properties.insert(
+                name.into(),
+                json!({
+                    "type": "array",
+                    "description": name,
+                    "items": {
+                        "type": "object",
+                        "properties": def.to_json_schema_properties()
+                    }
+                }),
+            );
+        }
     }
     schema.insert("properties".into(), properties.into());
     if pretty {

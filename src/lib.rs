@@ -116,6 +116,10 @@ impl<F: FileSystemAPI> Archival<F> {
             self.site.manifest.site_name.as_deref(),
             &format!("Object definitions for {}", self.site.site_url()),
             &self.site.object_definitions,
+            &self
+                .fs_mutex
+                .with_fs(|fs| Ok(self.site.root_objects(fs)))
+                .unwrap(),
             pretty,
         )
     }

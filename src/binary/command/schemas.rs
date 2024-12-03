@@ -58,6 +58,7 @@ impl BinaryCommand for Command {
                     site.manifest.site_name.as_deref(),
                     &format!("Object definitions for {}", site.site_url()),
                     &site.object_definitions,
+                    &site.root_objects(&fs),
                     pretty,
                 )
             };

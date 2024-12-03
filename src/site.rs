@@ -130,6 +130,19 @@ impl Site {
     }
 
     #[cfg(feature = "json-schema")]
+    pub fn root_objects(&self, fs: &impl FileSystemAPI) -> HashSet<String> {
+        let mut root_objects = HashSet::new();
+        let objects_dir = &self.manifest.objects_dir;
+        for object_name in self.object_definitions.keys() {
+            let root_object_file_path = objects_dir.join(format!("{}.toml", object_name));
+            if fs.exists(&root_object_file_path).unwrap() {
+                root_objects.insert(object_name.to_string());
+            }
+        }
+        root_objects
+    }
+
+    #[cfg(feature = "json-schema")]
     pub fn dump_schemas(&self, fs: &mut impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
         debug!(
             "dumping schemas for {}",

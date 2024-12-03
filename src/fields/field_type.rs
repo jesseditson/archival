@@ -144,6 +144,12 @@ impl FieldType {
             _ => {
                 if let Some(display_type) = self.maybe_file_type() {
                     File::to_json_schema_property(description, display_type)
+                } else if matches!(self, Self::Date) {
+                    let mut schema = serde_json::Map::new();
+                    schema.insert("description".into(), description.into());
+                    schema.insert("type".into(), "string".into());
+                    schema.insert("format".into(), "date".into());
+                    schema
                 } else {
                     let mut schema = serde_json::Map::new();
                     schema.insert("description".into(), description.into());
@@ -153,7 +159,6 @@ impl FieldType {
                         match self {
                             Self::String => "string".into(),
                             Self::Number => "number".into(),
-                            Self::Date => "string".into(),
                             Self::Markdown => "string".into(),
                             Self::Boolean => "boolean".into(),
                             // At some point, we should support providing a schema for meta types
