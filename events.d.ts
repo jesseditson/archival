@@ -17,6 +17,7 @@ export type DateTime = {
 export type File = {
     "sha": string;
     "name": (string | null);
+    "description": (string | null);
     "filename": string;
     "mime": string;
     "display_type": "image"|"audio"|"video"|"upload";
