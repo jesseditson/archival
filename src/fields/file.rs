@@ -68,6 +68,7 @@ mod typedefs {
 pub struct File {
     pub sha: String,
     pub name: Option<String>,
+    pub description: Option<String>,
     pub filename: String,
     pub mime: String,
     #[cfg_attr(
@@ -82,6 +83,7 @@ impl File {
     pub fn new(
         sha: &str,
         name: Option<&str>,
+        description: Option<&str>,
         filename: &str,
         mime: &str,
         display_type: DisplayType,
@@ -90,6 +92,7 @@ impl File {
             url: Self::_url(sha),
             sha: sha.to_string(),
             name: name.map(|n| n.to_string()),
+            description: description.map(|d| d.to_string()),
             filename: filename.to_string(),
             mime: mime.to_string(),
             display_type: display_type.to_string(),
@@ -121,6 +124,7 @@ impl File {
         match str {
             "sha" => Some(&self.sha),
             "name" => self.name.as_ref(),
+            "description" => self.description.as_ref(),
             "filename" => Some(&self.filename),
             "mime" => Some(&self.mime),
             "display_type" => Some(&self.display_type),
@@ -135,6 +139,7 @@ impl File {
                     self.url = Self::_url(&self.sha);
                 }
                 "name" => self.name = Some(v.as_str().unwrap().into()),
+                "description" => self.description = Some(v.as_str().unwrap().into()),
                 "filename" => self.filename = v.as_str().unwrap().into(),
                 "mime" => self.mime = v.as_str().unwrap().into(),
                 "display_type" => self.display_type = v.as_str().unwrap().into(),
@@ -158,6 +163,7 @@ impl File {
             url: Self::_url(""),
             sha: "".to_string(),
             name: None,
+            description: None,
             filename: "".to_string(),
             mime: mime.to_string(),
             display_type: DisplayType::Image.to_string(),
@@ -169,6 +175,7 @@ impl File {
             url: Self::_url(""),
             sha: "".to_string(),
             name: None,
+            description: None,
             filename: "".to_string(),
             mime: mime.to_string(),
             display_type: DisplayType::Video.to_string(),
@@ -180,6 +187,7 @@ impl File {
             url: Self::_url(""),
             sha: "".to_string(),
             name: None,
+            description: None,
             filename: "".to_string(),
             mime: mime.to_string(),
             display_type: DisplayType::Audio.to_string(),
@@ -191,6 +199,7 @@ impl File {
             url: Self::_url(""),
             sha: "".to_string(),
             name: None,
+            description: None,
             filename: "".to_string(),
             mime: mime.to_string(),
             display_type: DisplayType::Download.to_string(),
@@ -214,6 +223,9 @@ impl File {
         m.insert("sha", &self.sha);
         if let Some(name) = &self.name {
             m.insert("name", name);
+        }
+        if let Some(description) = &self.description {
+            m.insert("description", description);
         }
         m.insert("filename", &self.filename);
         m.insert("mime", &self.mime);
@@ -251,6 +263,13 @@ impl File {
             json!({
                 "type": "string",
                 "description": "the name of the file",
+            }),
+        );
+        properties.insert(
+            "description".into(),
+            json!({
+                "type": "string",
+                "description": "a description of the file",
             }),
         );
         properties.insert(
