@@ -35,7 +35,7 @@ jobs:
     name: Tests
     strategy:
       matrix:
-        os: [macOS-12, windows-2022, ubuntu-22.04]
+        os: [macos-latest, windows-2022, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
