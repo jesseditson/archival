@@ -96,7 +96,7 @@ checksum = "d301b3b94cb4b2f23d7917810addbbaff90738e0ca2be692bd027e70d7e0330c"
 
 [[package]]
 name = "archival"
-version = "0.8.2"
+version = "0.9.0"
 dependencies = [
  "base64 0.22.0",
  "clap",
