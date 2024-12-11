@@ -184,13 +184,16 @@ impl BinaryCommand for Command {
             bar.finish();
         }
         // Now write our file
-        archival.send_event_no_rebuild(ArchivalEvent::EditField(EditFieldEvent {
-            object: object_type.clone(),
-            filename: object_name.clone(),
-            path: ValuePath::empty(),
-            value: Some(field_data.clone()),
-            field: field.to_string(),
-        }))?;
+        archival.send_event(
+            ArchivalEvent::EditField(EditFieldEvent {
+                object: object_type.clone(),
+                filename: object_name.clone(),
+                path: ValuePath::empty(),
+                value: Some(field_data.clone()),
+                field: field.to_string(),
+            }),
+            None,
+        )?;
         if let FieldValue::File(fd) = field_data {
             println!(
                 "Wrote {} {} {}: {:?}",

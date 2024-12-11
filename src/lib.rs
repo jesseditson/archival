@@ -24,11 +24,14 @@ use events::{
 pub use fields::FieldConfig;
 pub use fields::FieldValue;
 use manifest::Manifest;
+use seahash::SeaHasher;
 use sha2::{Digest, Sha256};
 use site::Site;
+use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
+use std::hash::Hasher;
 use std::path::{Path, PathBuf};
 use tracing::{debug, error};
 #[cfg(feature = "binary")]
@@ -54,6 +57,13 @@ pub use file_system::FileSystemAPI;
 pub use file_system_memory::MemoryFileSystem;
 pub use object_definition::ObjectDefinition;
 
+pub type ArchivalBuildId = u64;
+
+#[derive(Debug, Default)]
+pub struct BuildOptions {
+    skip_static: bool,
+}
+
 pub static ARCHIVAL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
@@ -73,6 +83,7 @@ pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
 pub struct Archival<F: FileSystemAPI> {
     fs_mutex: FileSystemMutex<F>,
     pub site: site::Site,
+    last_build_id: Cell<ArchivalBuildId>,
 }
 
 impl<F: FileSystemAPI> Archival<F> {
@@ -92,17 +103,36 @@ impl<F: FileSystemAPI> Archival<F> {
         let site = Site::load(&fs)?;
         FieldConfig::set(site.get_field_config());
         let fs_mutex = FileSystemMutex::init(fs);
-        Ok(Self { fs_mutex, site })
+        Ok(Self {
+            fs_mutex,
+            site,
+            last_build_id: Cell::new(0),
+        })
     }
     pub fn new_with_field_config(fs: F, field_config: FieldConfig) -> Result<Self, Box<dyn Error>> {
         let site = Site::load(&fs)?;
         FieldConfig::set(field_config);
         let fs_mutex = FileSystemMutex::init(fs);
-        Ok(Self { fs_mutex, site })
+        Ok(Self {
+            fs_mutex,
+            site,
+            last_build_id: Cell::new(0),
+        })
     }
-    pub fn build(&self) -> Result<(), Box<dyn Error>> {
-        debug!("build {}", self.site);
-        self.fs_mutex.with_fs(|fs| self.site.build(fs))
+    pub fn build(&self, options: BuildOptions) -> Result<ArchivalBuildId, Box<dyn Error>> {
+        debug!("build {} {:#?}", self.site, options);
+        let build_id = self.fs_mutex.with_fs(|fs| {
+            if !options.skip_static {
+                self.site.sync_static_files(fs)?;
+            }
+            let build_id = self.fs_id(fs)?;
+            if self.last_build_id.get() != build_id {
+                self.site.build(fs)?;
+            }
+            Ok(build_id)
+        })?;
+        self.last_build_id.replace(build_id);
+        Ok(build_id)
     }
     #[cfg(feature = "json-schema")]
     pub fn dump_schemas(&self) -> Result<(), Box<dyn Error>> {
@@ -135,6 +165,36 @@ impl<F: FileSystemAPI> Archival<F> {
         self.fs_mutex
             .with_fs(|fs| Ok(self.object_path_impl(obj_type, filename, fs).unwrap()))
             .unwrap()
+    }
+    fn fs_id(&self, fs: &F) -> Result<u64, Box<dyn Error>> {
+        let Manifest {
+            object_definition_file,
+            pages_dir,
+            layout_dir,
+            objects_dir,
+            ..
+        } = &self.site.manifest;
+        let mut hasher = SeaHasher::new();
+        let mut maybe_hash = |path: &PathBuf| -> Result<(), Box<dyn Error>> {
+            if let Some(file) = fs.read(path)? {
+                hasher.write(&file);
+            } else {
+                debug!("no content found for {}", path.display());
+            }
+            Ok(())
+        };
+        maybe_hash(&Path::new("manifest.toml").into())?;
+        maybe_hash(object_definition_file)?;
+        for page in fs.walk_dir(pages_dir, false)? {
+            maybe_hash(&pages_dir.join(page))?;
+        }
+        for layout in fs.walk_dir(layout_dir, false)? {
+            maybe_hash(&layout_dir.join(layout))?;
+        }
+        for object in fs.walk_dir(objects_dir, false)? {
+            maybe_hash(&objects_dir.join(object))?;
+        }
+        Ok(hasher.finish())
     }
     fn object_path_impl(
         &self,
@@ -222,10 +282,11 @@ impl<F: FileSystemAPI> Archival<F> {
             Err(ArchivalError::new(&format!("no objects of type: {}", obj_type)).into())
         }
     }
-    fn send_event_impl(
+
+    pub fn send_event(
         &self,
         event: ArchivalEvent,
-        rebuild: bool,
+        build_options: Option<BuildOptions>,
     ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let r = match event {
             ArchivalEvent::AddObject(event) => self.add_object(event)?,
@@ -235,22 +296,10 @@ impl<F: FileSystemAPI> Archival<F> {
             ArchivalEvent::AddChild(event) => self.add_child(event)?,
             ArchivalEvent::RemoveChild(event) => self.remove_child(event)?,
         };
-        if rebuild {
-            self.build()?;
+        if let Some(build_options) = build_options {
+            self.build(build_options)?;
         }
         Ok(r)
-    }
-    pub fn send_event_no_rebuild(
-        &self,
-        event: ArchivalEvent,
-    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
-        self.send_event_impl(event, false)
-    }
-    pub fn send_event(
-        &self,
-        event: ArchivalEvent,
-    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
-        self.send_event_impl(event, true)
     }
     // Internal
     fn add_object(&self, event: AddObjectEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
@@ -358,7 +407,7 @@ impl<F: FileSystemAPI> Archival<F> {
         filename: &str,
         obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
     ) -> Result<(), Box<dyn Error>> {
-        debug!("write {}", obj_type);
+        debug!("write object {}: {}", obj_type, filename);
         self.fs_mutex.with_fs(|fs| {
             let path = self.object_path_impl(obj_type, filename, fs)?;
             let contents = self.modify_object_file(obj_type, filename, obj_cb, fs)?;
@@ -441,9 +490,8 @@ mod lib {
             assert_eq!(img.sha, "test-sha");
             assert_eq!(img.url, "test://uploads-url/test-sha");
         }
-        archival.build()?;
-        let dist_files = archival.dist_files();
-        println!("dist_files: \n{}", dist_files.join("\n"));
+        archival.build(BuildOptions::default())?;
+        println!("dist_files: \n{:#?}", archival.dist_files());
         assert!(archival.dist_files().contains(&as_path_str("index.html")));
         assert!(archival.dist_files().contains(&as_path_str("404.html")));
         assert!(archival
@@ -451,7 +499,7 @@ mod lib {
             .contains(&as_path_str("post/a-post.html")));
         assert!(archival.dist_files().contains(&as_path_str("img/guy.webp")));
         assert!(archival.dist_files().contains(&as_path_str("rss.rss")));
-        assert_eq!(dist_files.len(), 20);
+        assert_eq!(archival.dist_files().len(), 20);
         let guy = archival.dist_file(Path::new("img/guy.webp"));
         assert!(guy.is_some());
         let post_html = archival
@@ -472,16 +520,19 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        archival.send_event(ArchivalEvent::AddObject(AddObjectEvent {
-            object: "section".to_string(),
-            filename: "my-section".to_string(),
-            order: 3,
-            // Sections require a name field, so we have to add it or we'll get a build error
-            values: vec![AddObjectValue {
-                path: ValuePath::from_string("name"),
-                value: FieldValue::String("section three".to_string()),
-            }],
-        }))?;
+        archival.send_event(
+            ArchivalEvent::AddObject(AddObjectEvent {
+                object: "section".to_string(),
+                filename: "my-section".to_string(),
+                order: 3,
+                // Sections require a name field, so we have to add it or we'll get a build error
+                values: vec![AddObjectValue {
+                    path: ValuePath::from_string("name"),
+                    value: FieldValue::String("section three".to_string()),
+                }],
+            }),
+            Some(BuildOptions::default()),
+        )?;
         // Sending an event should result in an updated fs
         let sections_dir = archival.site.manifest.objects_dir.join("section");
         let sections = archival.fs_mutex.with_fs(|fs| {
@@ -510,13 +561,16 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        archival.send_event(ArchivalEvent::EditField(EditFieldEvent {
-            object: "section".to_string(),
-            filename: "first".to_string(),
-            path: ValuePath::empty(),
-            field: "name".to_string(),
-            value: Some(FieldValue::String("This is the new name".to_string())),
-        }))?;
+        archival.send_event(
+            ArchivalEvent::EditField(EditFieldEvent {
+                object: "section".to_string(),
+                filename: "first".to_string(),
+                path: ValuePath::empty(),
+                field: "name".to_string(),
+                value: Some(FieldValue::String("This is the new name".to_string())),
+            }),
+            Some(BuildOptions::default()),
+        )?;
         // Sending an event should result in an updated fs
         let index_html = archival
             .fs_mutex
@@ -533,10 +587,13 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        archival.send_event(ArchivalEvent::DeleteObject(DeleteObjectEvent {
-            object: "section".to_string(),
-            filename: "first".to_string(),
-        }))?;
+        archival.send_event(
+            ArchivalEvent::DeleteObject(DeleteObjectEvent {
+                object: "section".to_string(),
+                filename: "first".to_string(),
+            }),
+            Some(BuildOptions::default()),
+        )?;
         // Sending an event should result in an updated fs
         let sections_dir = archival.site.manifest.objects_dir.join("section");
         let sections = archival.fs_mutex.with_fs(|fs| {
@@ -561,7 +618,7 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        archival.build()?;
+        archival.build(BuildOptions::default())?;
         let index_html = archival
             .fs_mutex
             .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
@@ -570,11 +627,14 @@ mod lib {
         let c1 = index_html.find("1 Some Content").unwrap();
         let c2 = index_html.find("2 More Content").unwrap();
         assert!(c1 < c2);
-        archival.send_event(ArchivalEvent::EditOrder(EditOrderEvent {
-            object: "section".to_string(),
-            filename: "first".to_string(),
-            order: 12,
-        }))?;
+        archival.send_event(
+            ArchivalEvent::EditOrder(EditOrderEvent {
+                object: "section".to_string(),
+                filename: "first".to_string(),
+                order: 12,
+            }),
+            Some(BuildOptions::default()),
+        )?;
         // Sending an event should result in an updated fs
         let index_html = archival
             .fs_mutex
@@ -593,7 +653,7 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        archival.build()?;
+        archival.build(BuildOptions::default())?;
         let post_html = archival
             .fs_mutex
             .with_fs(|fs| {
@@ -611,11 +671,14 @@ mod lib {
         // println!("LINKS: {:?}", rendered_links);
         assert_eq!(rendered_links.len(), 1);
         archival
-            .send_event(ArchivalEvent::AddChild(ChildEvent {
-                object: "post".to_string(),
-                filename: "a-post".to_string(),
-                path: ValuePath::default().append(ValuePathComponent::key("links")),
-            }))
+            .send_event(
+                ArchivalEvent::AddChild(ChildEvent {
+                    object: "post".to_string(),
+                    filename: "a-post".to_string(),
+                    path: ValuePath::default().append(ValuePathComponent::key("links")),
+                }),
+                Some(BuildOptions::default()),
+            )
             .unwrap();
         let objects = archival.get_objects()?;
         let posts = objects.get("post").unwrap();
@@ -658,13 +721,16 @@ mod lib {
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
         archival
-            .send_event(ArchivalEvent::RemoveChild(ChildEvent {
-                object: "post".to_string(),
-                filename: "a-post".to_string(),
-                path: ValuePath::default()
-                    .append(ValuePathComponent::key("links"))
-                    .append(ValuePathComponent::Index(0)),
-            }))
+            .send_event(
+                ArchivalEvent::RemoveChild(ChildEvent {
+                    object: "post".to_string(),
+                    filename: "a-post".to_string(),
+                    path: ValuePath::default()
+                        .append(ValuePathComponent::key("links"))
+                        .append(ValuePathComponent::Index(0)),
+                }),
+                Some(BuildOptions::default()),
+            )
             .unwrap();
         // Sending an event should result in an updated fs
         let post_html = archival

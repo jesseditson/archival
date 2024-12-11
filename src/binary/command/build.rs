@@ -1,5 +1,5 @@
 use super::BinaryCommand;
-use crate::{binary::ExitStatus, file_system_stdlib, site::Site};
+use crate::{binary::ExitStatus, file_system_stdlib, site::Site, FileSystemAPI};
 use clap::ArgMatches;
 use std::path::Path;
 
@@ -19,6 +19,8 @@ impl BinaryCommand for Command {
         let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let site = Site::load(&fs)?;
         println!("Building site: {}", &site);
+        let _ = fs.remove_dir_all(&site.manifest.build_dir);
+        site.sync_static_files(&mut fs)?;
         site.build(&mut fs)?;
         Ok(ExitStatus::Ok)
     }

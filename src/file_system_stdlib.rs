@@ -61,13 +61,6 @@ impl FileSystemAPI for NativeFileSystem {
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
         Ok(fs::write(self.get_path(path), contents)?)
     }
-    fn copy_recursive(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>> {
-        let mut options = fs_extra::dir::CopyOptions::new();
-        options.overwrite = true;
-        options.content_only = true;
-        fs_extra::dir::copy(self.get_path(from), self.get_path(to), &options)?;
-        Ok(())
-    }
     fn walk_dir(
         &self,
         path: &Path,

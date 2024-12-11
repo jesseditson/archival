@@ -12,12 +12,14 @@ use crate::{
     tags::layout,
     ArchivalError, FieldConfig, FileSystemAPI,
 };
+use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{RefCell, RefMut},
     cmp::Ordering,
     collections::{HashMap, HashSet},
     error::Error,
+    hash::Hasher,
     path::{Path, PathBuf},
 };
 use thiserror::Error;
@@ -53,6 +55,8 @@ pub struct Site {
 
     #[serde(skip)]
     obj_cache: RefCell<HashMap<PathBuf, Object>>,
+    #[serde(skip)]
+    static_file_cache: RefCell<HashMap<PathBuf, u64>>,
 }
 
 impl std::fmt::Display for Site {
@@ -118,6 +122,7 @@ impl Site {
             manifest,
             object_definitions: objects,
             obj_cache: RefCell::new(HashMap::new()),
+            static_file_cache: RefCell::new(HashMap::new()),
         })
     }
 
@@ -326,12 +331,66 @@ impl Site {
     }
 
     #[instrument(skip(fs))]
+    pub fn sync_static_files<T: FileSystemAPI>(&self, fs: &mut T) -> Result<(), Box<dyn Error>> {
+        let Manifest {
+            static_dir,
+            build_dir,
+            ..
+        } = &self.manifest;
+        if !fs.exists(build_dir)? {
+            fs.create_dir_all(build_dir)?;
+        }
+        let mut hashes = self.static_file_cache.borrow_mut();
+        let last_dist_paths: Vec<PathBuf> = hashes.keys().cloned().collect();
+        let mut copied_paths: HashSet<PathBuf> = HashSet::new();
+        // Copy static files
+        debug!("copying files from {}", static_dir.display());
+        if fs.exists(static_dir)? {
+            for file in fs.walk_dir(static_dir, false)? {
+                let from = static_dir.join(&file);
+                if let Some(content) = fs.read(&from)? {
+                    let current_hash = hash_file(&content);
+                    copied_paths.insert(file.clone());
+                    // If there is an existing hash and it matches the current
+                    // file, leave it there.
+                    if let Some(existing_hash) = hashes.get(&file) {
+                        if *existing_hash == current_hash {
+                            continue;
+                        }
+                    }
+                    // Otherwise, copy the file and store the latest hash.
+                    let dest = build_dir.join(&file);
+                    if let Some(dirname) = dest.parent() {
+                        if dirname != build_dir {
+                            fs.create_dir_all(dirname)?;
+                        }
+                    }
+                    fs.write(&dest, content)?;
+                    hashes.insert(file, current_hash);
+                }
+            }
+            // Remove any files in dest that are no longer in static
+            for path in last_dist_paths {
+                if !copied_paths.contains(&path) {
+                    fs.delete(&path)?;
+                    hashes.remove(&path);
+                }
+            }
+        } else {
+            debug!("static dir {} does not exist.", static_dir.display());
+        }
+        Ok(())
+    }
+
+    #[instrument(skip(fs))]
     pub fn build<T: FileSystemAPI>(&self, fs: &mut T) -> Result<(), Box<dyn Error>> {
-        let objects_dir = &self.manifest.objects_dir;
-        let layout_dir = &self.manifest.layout_dir;
-        let pages_dir = &self.manifest.pages_dir;
-        let build_dir = &self.manifest.build_dir;
-        let static_dir = &self.manifest.static_dir;
+        let Manifest {
+            objects_dir,
+            layout_dir,
+            pages_dir,
+            build_dir,
+            ..
+        } = &self.manifest;
 
         // Validate paths
         if !fs.exists(objects_dir)? {
@@ -350,14 +409,6 @@ impl Site {
         }
         if !fs.exists(build_dir)? {
             fs.create_dir_all(build_dir)?;
-        }
-
-        // Copy static files
-        debug!("copying files from {}", static_dir.display());
-        if fs.exists(static_dir)? {
-            fs.copy_recursive(static_dir, build_dir)?;
-        } else {
-            debug!("static dir {} does not exist.", static_dir.display());
         }
 
         let all_objects = self.get_objects(fs)?;
@@ -542,4 +593,10 @@ impl Site {
         }
         Ok(())
     }
+}
+
+fn hash_file(file: &[u8]) -> u64 {
+    let mut hasher = SeaHasher::new();
+    hasher.write(file);
+    hasher.finish()
 }

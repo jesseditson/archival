@@ -16,7 +16,6 @@ pub trait FileSystemAPI {
     fn delete(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
     fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>>;
     fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>>;
-    fn copy_recursive(&mut self, from: &Path, to: &Path) -> Result<(), Box<dyn Error>>;
     fn walk_dir(
         &self,
         path: &Path,

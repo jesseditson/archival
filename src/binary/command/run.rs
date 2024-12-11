@@ -1,4 +1,5 @@
 use super::BinaryCommand;
+use crate::FileSystemAPI;
 use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, server, site::Site};
 use clap::{arg, value_parser, ArgMatches};
 use std::time::Duration;
@@ -32,8 +33,13 @@ impl BinaryCommand for Command {
         build_dir: &Path,
         args: &ArgMatches,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
-        let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
+        let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let site = Site::load(&fs)?;
+        let _ = fs.remove_dir_all(&site.manifest.build_dir);
+        site.sync_static_files(&mut fs)?;
+        if let Err(e) = site.build(&mut fs) {
+            println!("Initial build failed: {}", e);
+        }
         println!("Watching site: {}", &site);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         // This won't leak because the process is ended when we
@@ -80,6 +86,7 @@ impl BinaryCommand for Command {
                 let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
                 println!("Rebuilding");
                 site.invalidate_file(path.strip_prefix(build_dir)?);
+                site.sync_static_files(&mut fs)?;
                 if let Err(e) = site.build(&mut fs) {
                     println!("Build failed: {}", e);
                 } else {

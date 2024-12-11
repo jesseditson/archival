@@ -340,12 +340,15 @@ impl Command {
         if let ImportName::Field(f) = &import_name {
             progress("creating object...", 0, 0);
             archival
-                .send_event_no_rebuild(ArchivalEvent::AddObject(AddObjectEvent {
-                    object: object.to_string(),
-                    filename: f.to_string(),
-                    order: 0,
-                    values: vec![],
-                }))
+                .send_event(
+                    ArchivalEvent::AddObject(AddObjectEvent {
+                        object: object.to_string(),
+                        filename: f.to_string(),
+                        order: 0,
+                        values: vec![],
+                    }),
+                    None,
+                )
                 .map_err(|e| ImportError::WriteError(e.to_string()))?;
         }
         let mut idx = 0;
@@ -361,11 +364,14 @@ impl Command {
             let filename = match &import_name {
                 ImportName::File(f) => {
                     let r = archival
-                        .send_event_no_rebuild(ArchivalEvent::AddChild(ChildEvent {
-                            object: object.to_string(),
-                            filename: f.to_string(),
-                            path: current_path.to_owned(),
-                        }))
+                        .send_event(
+                            ArchivalEvent::AddChild(ChildEvent {
+                                object: object.to_string(),
+                                filename: f.to_string(),
+                                path: current_path.to_owned(),
+                            }),
+                            None,
+                        )
                         .map_err(|e| ImportError::WriteError(e.to_string()))?;
                     if let ArchivalEventResponse::Index(i) = r {
                         current_path = current_path.append(ValuePathComponent::Index(i));
@@ -380,12 +386,15 @@ impl Command {
                         .ok_or(ImportError::MissingName(f.to_owned(), row.clone()))
                         .map(|s| s.split_whitespace().collect::<Vec<_>>().join("-"))?;
                     archival
-                        .send_event_no_rebuild(ArchivalEvent::AddObject(AddObjectEvent {
-                            object: object.to_string(),
-                            filename: file_name.to_string(),
-                            order: 0,
-                            values: vec![],
-                        }))
+                        .send_event(
+                            ArchivalEvent::AddObject(AddObjectEvent {
+                                object: object.to_string(),
+                                filename: file_name.to_string(),
+                                order: 0,
+                                values: vec![],
+                            }),
+                            None,
+                        )
                         .map_err(|e| ImportError::WriteError(e.to_string()))?;
                     file_name
                 }
@@ -402,13 +411,16 @@ impl Command {
                     let value = FieldValue::from_string(name, field_type, value.to_string())
                         .map_err(|e| ImportError::ParseError(e.to_string()))?;
                     archival
-                        .send_event_no_rebuild(ArchivalEvent::EditField(EditFieldEvent {
-                            object: object.to_string(),
-                            filename: filename.to_string(),
-                            path: current_path.clone(),
-                            value: Some(value),
-                            field: name.to_string(),
-                        }))
+                        .send_event(
+                            ArchivalEvent::EditField(EditFieldEvent {
+                                object: object.to_string(),
+                                filename: filename.to_string(),
+                                path: current_path.clone(),
+                                value: Some(value),
+                                field: name.to_string(),
+                            }),
+                            None,
+                        )
                         .map_err(|e| ImportError::WriteError(e.to_string()))?;
                     unused_cols.remove(from_name);
                 } else {
@@ -436,13 +448,16 @@ impl Command {
                         let value = FieldValue::from_string(&name, field_type, value.to_string())
                             .map_err(|e| ImportError::ParseError(e.to_string()))?;
                         archival
-                            .send_event_no_rebuild(ArchivalEvent::EditField(EditFieldEvent {
-                                object: object.to_string(),
-                                filename: filename.to_string(),
-                                path: current_path.clone().concat(col_path),
-                                value: Some(value),
-                                field: col_field,
-                            }))
+                            .send_event(
+                                ArchivalEvent::EditField(EditFieldEvent {
+                                    object: object.to_string(),
+                                    filename: filename.to_string(),
+                                    path: current_path.clone().concat(col_path),
+                                    value: Some(value),
+                                    field: col_field,
+                                }),
+                                None,
+                            )
                             .map_err(|e| ImportError::WriteError(e.to_string()))?;
                     }
                 }
