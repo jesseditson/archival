@@ -224,14 +224,14 @@ impl<'a> Page<'a> {
 mod tests {
 
     use crate::{
-        fields::{meta::Meta, DateTime, FieldType, FieldValue, MetaValue},
+        fields::{meta::Meta, DateTime, FieldType, FieldValue, MetaValue, ObjectValues},
         liquid_parser, MemoryFileSystem,
     };
 
     use super::*;
 
     fn get_objects_map() -> HashMap<String, ObjectEntry> {
-        let tour_dates_objects = vec![HashMap::from([
+        let tour_dates_objects = vec![ObjectValues::from([
             (
                 "date".to_string(),
                 FieldValue::Date(DateTime::from("12/22/2022 00:00:00").unwrap()),
@@ -241,11 +241,11 @@ mod tests {
                 FieldValue::String("foo.com".to_string()),
             ),
         ])];
-        let numbers_objects = vec![HashMap::from([(
+        let numbers_objects = vec![ObjectValues::from([(
             "number".to_string(),
             FieldValue::Number(2.57),
         )])];
-        let artist_values = HashMap::from([
+        let artist_values = ObjectValues::from([
             (
                 "name".to_string(),
                 FieldValue::String("Tormenta Rey".to_string()),
@@ -276,11 +276,11 @@ mod tests {
             order: 1,
             values: artist_values,
         };
-        let links_objects = vec![HashMap::from([(
+        let links_objects = vec![ObjectValues::from([(
             "url".to_string(),
             FieldValue::String("foo.com".to_string()),
         )])];
-        let c_values = HashMap::from([
+        let c_values = ObjectValues::from([
             (
                 "content".to_string(),
                 FieldValue::Markdown("# hello".to_string()),

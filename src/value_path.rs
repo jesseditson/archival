@@ -5,7 +5,7 @@ use crate::{
 };
 use liquid::ValueView;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -511,7 +511,7 @@ impl ValuePath {
                         while children.len() <= index {
                             // No child yet - since we're setting, insert one
                             // here.
-                            children.push(HashMap::new());
+                            children.push(ObjectValues::new());
                         }
                         let child = children.get_mut(index).unwrap();
                         if let Some(ValuePathComponent::Key(k)) = i_path.next() {
@@ -542,7 +542,7 @@ impl From<&str> for ValuePath {
 #[cfg(test)]
 pub mod tests {
 
-    use std::{collections::HashMap, error::Error};
+    use std::error::Error;
 
     use super::*;
 
@@ -552,16 +552,16 @@ pub mod tests {
             object_name: "test_object_name".to_string(),
             order: -1,
             path: "".to_string(),
-            values: HashMap::from([
+            values: ObjectValues::from([
                 ("title".to_string(), FieldValue::String("title".to_string())),
                 (
                     "children".to_string(),
                     FieldValue::Objects(vec![
-                        HashMap::from([(
+                        ObjectValues::from([(
                             "name".to_string(),
                             FieldValue::String("NAME ONE!".to_string()),
                         )]),
-                        HashMap::from([(
+                        ObjectValues::from([(
                             "name".to_string(),
                             FieldValue::String("NAME TWO!".to_string()),
                         )]),

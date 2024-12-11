@@ -98,7 +98,7 @@ impl ObjectDefinition {
 
     #[instrument(skip(self))]
     pub fn empty_object(&self) -> ObjectValues {
-        let mut values: ObjectValues = HashMap::new();
+        let mut values: ObjectValues = ObjectValues::new();
         for def in self.children.values() {
             values.insert(def.name.to_owned(), FieldValue::Objects(vec![]));
         }
