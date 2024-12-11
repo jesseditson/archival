@@ -242,7 +242,7 @@ impl File {
     pub fn to_json_schema_property(
         description: &str,
         display_type: DisplayType,
-    ) -> serde_json::Map<String, serde_json::Value> {
+    ) -> crate::json_schema::ObjectSchema {
         use serde_json::json;
 
         let mut property = serde_json::Map::new();
@@ -290,6 +290,7 @@ impl File {
             "display_type".into(),
             json!({
                 "const": display_type.to_str(),
+                "type": "string",
                 "description": "the display type of this content",
             }),
         );

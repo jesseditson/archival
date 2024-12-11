@@ -2,7 +2,7 @@ use super::BinaryCommand;
 use crate::{
     binary::ExitStatus,
     file_system_stdlib,
-    json_schema::{generate_json_schema, generate_root_json_schema},
+    json_schema::{generate_json_schema, generate_root_json_schema, ObjectSchemaOptions},
     site::Site,
 };
 use clap::{arg, value_parser, ArgMatches};
@@ -51,7 +51,11 @@ impl BinaryCommand for Command {
                     .get(object)
                     .ok_or_else(|| SchemaError::NoObject(object.clone()))?;
                 let site_url = site.site_url();
-                generate_json_schema(&format!("{}/{}.schema.json", site_url, object), def, pretty)
+                generate_json_schema(
+                    &format!("{}/{}.schema.json", site_url, object),
+                    def,
+                    ObjectSchemaOptions::default(),
+                )
             } else {
                 generate_root_json_schema(
                     &format!("{}/root.schema.json", site.site_url()),
@@ -59,10 +63,17 @@ impl BinaryCommand for Command {
                     &format!("Object definitions for {}", site.site_url()),
                     &site.object_definitions,
                     &site.root_objects(&fs),
-                    pretty,
+                    ObjectSchemaOptions::default(),
                 )
             };
-            println!("{}", schema);
+            println!(
+                "{}",
+                if pretty {
+                    serde_json::to_string_pretty(&schema).unwrap()
+                } else {
+                    serde_json::to_string(&schema).unwrap()
+                }
+            );
         } else if let Some(object) = object {
             site.dump_schema(object, &mut fs)?;
         } else {

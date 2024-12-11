@@ -30,6 +30,7 @@ binary = [
     "dep:rand",
     "dep:base64",
     "dep:urlencoding",
+    "json-schema",
 ]
 import-csv = ["dep:csv"]
 json-schema = []

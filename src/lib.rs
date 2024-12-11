@@ -55,6 +55,8 @@ pub use archival_error::ArchivalError;
 pub use file_system::unpack_zip;
 pub use file_system::FileSystemAPI;
 pub use file_system_memory::MemoryFileSystem;
+#[cfg(feature = "json-schema")]
+pub use json_schema::{ObjectSchema, ObjectSchemaOptions};
 pub use object_definition::ObjectDefinition;
 
 pub type ArchivalBuildId = u64;
@@ -140,7 +142,7 @@ impl<F: FileSystemAPI> Archival<F> {
         self.fs_mutex.with_fs(|fs| self.site.dump_schemas(fs))
     }
     #[cfg(feature = "json-schema")]
-    pub fn generate_root_json_schema(&self, pretty: bool) -> String {
+    pub fn generate_root_json_schema(&self, options: ObjectSchemaOptions) -> ObjectSchema {
         json_schema::generate_root_json_schema(
             &format!("{}/root.schema.json", self.site.site_url()),
             self.site.manifest.site_name.as_deref(),
@@ -150,7 +152,7 @@ impl<F: FileSystemAPI> Archival<F> {
                 .fs_mutex
                 .with_fs(|fs| Ok(self.site.root_objects(fs)))
                 .unwrap(),
-            pretty,
+            options,
         )
     }
     pub fn dist_file(&self, path: &Path) -> Option<Vec<u8>> {

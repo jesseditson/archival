@@ -149,6 +149,8 @@ impl Site {
 
     #[cfg(feature = "json-schema")]
     pub fn dump_schemas(&self, fs: &mut impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
+        use crate::ObjectSchemaOptions;
+
         debug!(
             "dumping schemas for {}",
             self.manifest.object_definition_file.display()
@@ -160,14 +162,14 @@ impl Site {
             let schema = json_schema::generate_json_schema(
                 &format!("{}/{}.schema.json", site_url, name),
                 def,
-                true,
+                ObjectSchemaOptions::default(),
             );
             fs.write_str(
                 &self
                     .manifest
                     .schemas_dir
                     .join(format!("{}.schema.json", name)),
-                schema,
+                serde_json::to_string_pretty(&schema).unwrap(),
             )?;
         }
         Ok(())
@@ -178,6 +180,8 @@ impl Site {
         object: &String,
         fs: &mut impl FileSystemAPI,
     ) -> Result<(), Box<dyn Error>> {
+        use crate::ObjectSchemaOptions;
+
         debug!("dumping schema for {}", object);
         let def = self
             .object_definitions
@@ -187,14 +191,14 @@ impl Site {
         let schema = json_schema::generate_json_schema(
             &format!("{}/{}.schema.json", site_url, object),
             def,
-            true,
+            ObjectSchemaOptions::default(),
         );
         fs.write_str(
             &self
                 .manifest
                 .schemas_dir
                 .join(format!("{}.schema.json", object)),
-            schema,
+            serde_json::to_string_pretty(&schema).unwrap(),
         )?;
         Ok(())
     }

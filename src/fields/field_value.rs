@@ -462,6 +462,19 @@ impl FieldValue {
     }
 }
 
+impl From<&serde_json::Value> for FieldValue {
+    fn from(value: &serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::String(s) => FieldValue::String(s.to_string()),
+            serde_json::Value::Bool(b) => FieldValue::Boolean(*b),
+            serde_json::Value::Number(n) => FieldValue::Number(n.as_f64().unwrap()),
+            serde_json::Value::Null => FieldValue::String("".into()),
+            serde_json::Value::Object(_) => panic!("cannot convert from json object to FieldValue"),
+            serde_json::Value::Array(_) => panic!("cannot convert from json array to FieldValue"),
+        }
+    }
+}
+
 fn default_val(f_type: &FieldType) -> FieldValue {
     match f_type {
         FieldType::String => FieldValue::String("".to_string()),

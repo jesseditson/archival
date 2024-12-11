@@ -115,6 +115,13 @@ impl FieldType {
             }
         }
     }
+
+    pub fn is_file_type(&self) -> bool {
+        matches!(
+            self,
+            FieldType::Image | FieldType::Audio | FieldType::Video | FieldType::Upload
+        )
+    }
 }
 
 impl Display for FieldType {
@@ -135,10 +142,7 @@ impl FieldType {
         }
     }
 
-    pub fn to_json_schema_property(
-        &self,
-        description: &str,
-    ) -> serde_json::Map<String, serde_json::Value> {
+    pub fn to_json_schema_property(&self, description: &str) -> crate::json_schema::ObjectSchema {
         match self {
             Self::Alias(a) => a.0.to_json_schema_property(description),
             _ => {

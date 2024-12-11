@@ -4,14 +4,31 @@ use serde_json::json;
 
 use crate::ObjectDefinition;
 
+pub type ObjectSchema = serde_json::Map<String, serde_json::Value>;
+
+#[derive(Debug, Default)]
+pub struct ObjectSchemaOptions {
+    pub omit_file_types: bool,
+    pub all_fields_required: bool,
+}
+
+impl ObjectSchemaOptions {
+    pub fn open_ai_compatible() -> Self {
+        Self {
+            omit_file_types: true,
+            all_fields_required: true,
+        }
+    }
+}
+
 pub fn generate_root_json_schema(
     id: &str,
     title: Option<&str>,
     description: &str,
     objects: &HashMap<String, ObjectDefinition>,
     root_objects: &HashSet<String>,
-    pretty: bool,
-) -> String {
+    options: ObjectSchemaOptions,
+) -> ObjectSchema {
     let mut schema = serde_json::Map::new();
     schema.insert(
         "$schema".into(),
@@ -23,8 +40,15 @@ pub fn generate_root_json_schema(
     }
     schema.insert("description".into(), description.into());
     schema.insert("type".into(), "object".into());
+    schema.insert("additionalProperties".into(), false.into());
     let mut properties = serde_json::Map::new();
     for (name, def) in objects {
+        let obj_properties = def.to_json_schema_properties(false, &options);
+        let required: Vec<String> = if options.all_fields_required {
+            obj_properties.keys().map(|k| k.to_string()).collect()
+        } else {
+            vec![]
+        };
         if root_objects.contains(name) {
             properties.insert(
                 name.into(),
@@ -32,7 +56,9 @@ pub fn generate_root_json_schema(
                     "type": "object",
                     "$comment": "root object",
                     "description": name,
-                    "properties": def.to_json_schema_properties()
+                    "properties": obj_properties,
+                    "required": required,
+                    "additionalProperties": false,
                 }),
             );
         } else {
@@ -43,18 +69,20 @@ pub fn generate_root_json_schema(
                     "description": name,
                     "items": {
                         "type": "object",
-                        "properties": def.to_json_schema_properties()
+                        "properties": obj_properties,
+                        "required": required,
+                        "additionalProperties": false,
                     }
                 }),
             );
         }
     }
-    schema.insert("properties".into(), properties.into());
-    if pretty {
-        serde_json::to_string_pretty(&schema).unwrap()
-    } else {
-        serde_json::to_string(&schema).unwrap()
+    if options.all_fields_required {
+        let keys: Vec<String> = properties.keys().map(|k| k.to_string()).collect();
+        schema.insert("required".into(), keys.into());
     }
+    schema.insert("properties".into(), properties.into());
+    schema
 }
 
 pub fn generate_json_schema(
@@ -62,8 +90,8 @@ pub fn generate_json_schema(
     // title: &str,
     // description: &str,
     definition: &ObjectDefinition,
-    pretty: bool,
-) -> String {
+    options: crate::json_schema::ObjectSchemaOptions,
+) -> ObjectSchema {
     let mut schema = serde_json::Map::new();
     schema.insert(
         "$schema".into(),
@@ -73,15 +101,13 @@ pub fn generate_json_schema(
     // schema.insert("title".into(), title.into());
     // schema.insert("description".into(), description.into());
     schema.insert("type".into(), "object".into());
-    schema.insert(
-        "properties".into(),
-        definition.to_json_schema_properties().into(),
-    );
-    if pretty {
-        serde_json::to_string_pretty(&schema).unwrap()
-    } else {
-        serde_json::to_string(&schema).unwrap()
+    let properties = definition.to_json_schema_properties(false, &options);
+    if options.all_fields_required {
+        let keys: Vec<String> = properties.keys().map(|k| k.to_string()).collect();
+        schema.insert("required".into(), keys.into());
     }
+    schema.insert("properties".into(), properties.into());
+    schema
 }
 
 #[cfg(test)]
@@ -91,7 +117,10 @@ pub mod tests {
     use std::{collections::HashMap, error::Error};
     use toml::Table;
 
-    use crate::{json_schema::generate_json_schema, ObjectDefinition};
+    use crate::{
+        json_schema::{generate_json_schema, ObjectSchemaOptions},
+        ObjectDefinition,
+    };
 
     pub fn artist_and_example_definition_str() -> &'static str {
         "[artist]
@@ -117,8 +146,12 @@ pub mod tests {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
         let defs = ObjectDefinition::from_table(&table, &HashMap::new())?;
 
-        let schema_str = generate_json_schema("artist", defs.get("artist").unwrap(), false);
-        println!("SCHEMA: {}", schema_str);
+        let schema = generate_json_schema(
+            "artist",
+            defs.get("artist").unwrap(),
+            ObjectSchemaOptions::default(),
+        );
+        println!("SCHEMA: {:#?}", schema);
         let instance = json!({
             "tour_dates": [{
                 "date": "2021-01-26 00:01:22",
@@ -134,11 +167,11 @@ pub mod tests {
             ],
             "numbers": [{"number": 44}, {"number": 7.2}],
         });
-        let schema = serde_json::from_str(&schema_str)?;
 
-        assert!(jsonschema::is_valid(&schema, &instance));
-        assert!(jsonschema::validate(&schema, &json!("Hello, world!")).is_err());
-        assert!(jsonschema::validate(&schema, &instance).is_ok());
+        let schema_value = &schema.into();
+        assert!(jsonschema::is_valid(schema_value, &instance));
+        assert!(jsonschema::validate(schema_value, &json!("Hello, world!")).is_err());
+        assert!(jsonschema::validate(schema_value, &instance).is_ok());
 
         Ok(())
     }

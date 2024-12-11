@@ -5,6 +5,8 @@ use crate::{
     FieldValue,
 };
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "json-schema")]
+use serde_json::json;
 use std::{collections::HashMap, error::Error, fmt::Debug};
 use toml::Table;
 use tracing::instrument;
@@ -108,25 +110,41 @@ impl ObjectDefinition {
 
 #[cfg(feature = "json-schema")]
 impl ObjectDefinition {
-    pub fn to_json_schema_properties(&self) -> serde_json::Map<String, serde_json::Value> {
-        let mut schema = serde_json::Map::new();
+    pub fn to_json_schema_properties(
+        &self,
+        is_child: bool,
+        options: &crate::json_schema::ObjectSchemaOptions,
+    ) -> crate::json_schema::ObjectSchema {
+        let mut properties = serde_json::Map::new();
         for (field, field_type) in &self.fields {
-            schema.insert(
+            if options.omit_file_types && field_type.is_file_type() {
+                continue;
+            }
+            properties.insert(
                 field.into(),
                 field_type.to_json_schema_property(field).into(),
             );
+        }
+        if !is_child {
+            properties.insert("order".into(), json!({"type": "number"}));
         }
         for (name, definition) in &self.children {
             let mut child = serde_json::Map::new();
             child.insert("description".into(), name.to_string().into());
             child.insert("type".into(), "array".into());
-            child.insert(
-                "items".into(),
-                serde_json::json!({ "type": "object", "properties": definition.to_json_schema_properties()}),
-            );
-            schema.insert(name.into(), child.into());
+            let child_properties = definition.to_json_schema_properties(true, options);
+            let mut child_items_type = serde_json::Map::new();
+            child_items_type.insert("type".into(), "object".into());
+            child_items_type.insert("additionalProperties".into(), false.into());
+            if options.all_fields_required {
+                let keys: Vec<String> = child_properties.keys().map(|k| k.to_string()).collect();
+                child_items_type.insert("required".into(), keys.into());
+            }
+            child_items_type.insert("properties".into(), child_properties.into());
+            child.insert("items".into(), child_items_type.into());
+            properties.insert(name.into(), child.into());
         }
-        schema
+        properties
     }
 }
 
