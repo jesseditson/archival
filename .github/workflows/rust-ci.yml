@@ -66,7 +66,7 @@ jobs:
 
   build-aarch64-apple-darwin:
     name: Build aarch64-apple-darwin
-    runs-on: macOS-12
+    runs-on: macos-latest
     env:
       TRIPLE: aarch64-apple-darwin
     steps:
