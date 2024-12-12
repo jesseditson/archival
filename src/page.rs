@@ -7,7 +7,7 @@ use liquid_core::Value;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     error::Error,
     fmt,
     path::{Path, PathBuf},
@@ -165,10 +165,10 @@ impl<'a> Page<'a> {
     pub fn render(
         &self,
         parser: &liquid::Parser,
-        objects_map: &HashMap<String, ObjectEntry>,
+        objects_map: &BTreeMap<String, ObjectEntry>,
     ) -> Result<String, Box<dyn Error>> {
         tracing::debug!("rendering {}", self.name);
-        let mut objects: HashMap<String, liquid::model::Value> = HashMap::new();
+        let mut objects: BTreeMap<String, liquid::model::Value> = BTreeMap::new();
         for (name, obj_entry) in objects_map {
             let values = match obj_entry {
                 ObjectEntry::List(l) => Value::array(l.iter().map(|o| o.liquid_object())),
@@ -230,7 +230,7 @@ mod tests {
 
     use super::*;
 
-    fn get_objects_map() -> HashMap<String, ObjectEntry> {
+    fn get_objects_map() -> BTreeMap<String, ObjectEntry> {
         let tour_dates_objects = vec![ObjectValues::from([
             (
                 "date".to_string(),
@@ -252,11 +252,11 @@ mod tests {
             ),
             (
                 "meta".to_string(),
-                FieldValue::Meta(Meta(HashMap::from([
+                FieldValue::Meta(Meta(BTreeMap::from([
                     ("number".to_string(), MetaValue::Number(42.26)),
                     (
                         "deep".to_string(),
-                        MetaValue::Map(Meta(HashMap::from([(
+                        MetaValue::Map(Meta(BTreeMap::from([(
                             "deep".to_string(),
                             MetaValue::Array(vec![MetaValue::String("HELLO!".to_string())]),
                         )]))),
@@ -297,20 +297,20 @@ mod tests {
             values: c_values,
         };
 
-        HashMap::from([
+        BTreeMap::from([
             ("artist".to_string(), ObjectEntry::from_vec(vec![artist])),
             ("c".to_string(), ObjectEntry::from_vec(vec![c])),
         ])
     }
 
     fn artist_definition() -> ObjectDefinition {
-        let artist_def_fields = HashMap::from([("name".to_string(), FieldType::String)]);
-        let tour_dates_fields = HashMap::from([
+        let artist_def_fields = BTreeMap::from([("name".to_string(), FieldType::String)]);
+        let tour_dates_fields = BTreeMap::from([
             ("date".to_string(), FieldType::Date),
             ("ticket_link".to_string(), FieldType::String),
         ]);
-        let numbers_fields = HashMap::from([("number".to_string(), FieldType::Number)]);
-        let artist_children = HashMap::from([
+        let numbers_fields = BTreeMap::from([("number".to_string(), FieldType::Number)]);
+        let artist_children = BTreeMap::from([
             (
                 "tour_dates".to_string(),
                 ObjectDefinition {
@@ -318,7 +318,7 @@ mod tests {
                     field_order: vec!["date".to_string(), "ticket_link".to_string()],
                     fields: tour_dates_fields,
                     template: None,
-                    children: HashMap::new(),
+                    children: BTreeMap::new(),
                 },
             ),
             (
@@ -328,7 +328,7 @@ mod tests {
                     field_order: vec![],
                     fields: numbers_fields,
                     template: None,
-                    children: HashMap::new(),
+                    children: BTreeMap::new(),
                 },
             ),
         ]);

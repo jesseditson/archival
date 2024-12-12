@@ -7,7 +7,11 @@ use crate::{
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "json-schema")]
 use serde_json::json;
-use std::{collections::HashMap, error::Error, fmt::Debug};
+use std::{
+    collections::{BTreeMap, HashMap},
+    error::Error,
+    fmt::Debug,
+};
 use toml::Table;
 use tracing::instrument;
 
@@ -31,14 +35,14 @@ mod typedefs {
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ObjectDefinition {
     pub name: String,
-    pub fields: HashMap<String, FieldType>,
+    pub fields: BTreeMap<String, FieldType>,
     pub field_order: Vec<String>,
     pub template: Option<String>,
     #[cfg_attr(
         feature = "typescript",
         type_def(type_of = "typedefs::ObjectDefinitionChildrenDef")
     )]
-    pub children: HashMap<String, ObjectDefinition>,
+    pub children: BTreeMap<String, ObjectDefinition>,
 }
 
 impl ObjectDefinition {
@@ -52,10 +56,10 @@ impl ObjectDefinition {
         }
         let mut obj_def = ObjectDefinition {
             name: name.to_string(),
-            fields: HashMap::new(),
+            fields: BTreeMap::new(),
             field_order: vec![],
             template: None,
-            children: HashMap::new(),
+            children: BTreeMap::new(),
         };
         for (key, m_value) in definition {
             if !is_reserved_field(key) {

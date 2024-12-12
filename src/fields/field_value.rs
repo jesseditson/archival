@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::{
-    collections::HashMap,
     error::Error,
     fmt::{self, Debug},
 };
@@ -490,7 +489,7 @@ fn default_val(f_type: &FieldType) -> FieldValue {
         FieldType::Alias(a) => default_val(&a.0),
     }
 }
-pub fn def_to_values(def: &HashMap<String, FieldType>) -> BTreeMap<String, FieldValue> {
+pub fn def_to_values(def: &BTreeMap<String, FieldType>) -> BTreeMap<String, FieldValue> {
     let mut vals = ObjectValues::new();
     for (key, f_type) in def {
         vals.insert(key.to_string(), default_val(f_type));

@@ -29,7 +29,7 @@ use sha2::{Digest, Sha256};
 use site::Site;
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hasher;
@@ -350,14 +350,14 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         self.fs_mutex.with_fs(|fs| self.site.manifest_content(fs))
     }
 
-    pub fn get_objects(&self) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
+    pub fn get_objects(&self) -> Result<BTreeMap<String, ObjectEntry>, Box<dyn Error>> {
         self.fs_mutex.with_fs(|fs| self.site.get_objects(fs))
     }
 
     pub fn get_objects_sorted(
         &self,
         sort: impl Fn(&Object, &Object) -> Ordering,
-    ) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
+    ) -> Result<BTreeMap<String, ObjectEntry>, Box<dyn Error>> {
         self.fs_mutex
             .with_fs(|fs| self.site.get_objects_sorted(fs, Some(sort)))
     }

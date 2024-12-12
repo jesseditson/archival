@@ -1,6 +1,6 @@
 use liquid_core::model;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::BTreeMap, fmt::Display};
 
 use super::DateTime;
 
@@ -27,7 +27,7 @@ mod typedefs {
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
-pub struct Meta(pub HashMap<String, MetaValue>);
+pub struct Meta(pub BTreeMap<String, MetaValue>);
 
 impl Display for Meta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -166,7 +166,7 @@ impl From<&toml::Value> for MetaValue {
 
 impl From<&toml::map::Map<String, toml::Value>> for Meta {
     fn from(value: &toml::map::Map<String, toml::Value>) -> Self {
-        let mut meta = HashMap::new();
+        let mut meta = BTreeMap::new();
         for (k, v) in value {
             meta.insert(k.to_string(), MetaValue::from(v));
         }

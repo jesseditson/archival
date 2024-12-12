@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     cell::{RefCell, RefMut},
     cmp::Ordering,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     error::Error,
     hash::Hasher,
     path::{Path, PathBuf},
@@ -211,7 +211,7 @@ impl Site {
     pub fn get_objects<T: FileSystemAPI>(
         &self,
         fs: &T,
-    ) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
+    ) -> Result<BTreeMap<String, ObjectEntry>, Box<dyn Error>> {
         self.get_objects_sorted(
             fs,
             Some(|a: &_, b: &_| get_order(a).partial_cmp(&get_order(b)).unwrap()),
@@ -244,8 +244,8 @@ impl Site {
         &self,
         fs: &T,
         sort: Option<impl Fn(&Object, &Object) -> Ordering>,
-    ) -> Result<HashMap<String, ObjectEntry>, Box<dyn Error>> {
-        let mut all_objects: HashMap<String, ObjectEntry> = HashMap::new();
+    ) -> Result<BTreeMap<String, ObjectEntry>, Box<dyn Error>> {
+        let mut all_objects: BTreeMap<String, ObjectEntry> = BTreeMap::new();
         let objects_dir = &self.manifest.objects_dir;
         for (object_name, object_def) in self.object_definitions.iter() {
             let object_files_path = objects_dir.join(object_name);
@@ -534,7 +534,7 @@ impl Site {
         template_str: &String,
         template_path: &PathBuf,
         build_dir: &PathBuf,
-        all_objects: &HashMap<String, ObjectEntry>,
+        all_objects: &BTreeMap<String, ObjectEntry>,
         fs: &mut T,
         liquid_parser: &liquid::Parser,
     ) -> Result<(), Box<dyn Error>> {
@@ -568,7 +568,7 @@ impl Site {
         page_name: &str,
         page_type: TemplateType,
         build_dir: &PathBuf,
-        all_objects: &HashMap<String, ObjectEntry>,
+        all_objects: &BTreeMap<String, ObjectEntry>,
         fs: &mut T,
         liquid_parser: &liquid::Parser,
     ) -> Result<(), Box<dyn Error>> {
