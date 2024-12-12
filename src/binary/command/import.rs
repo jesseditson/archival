@@ -12,6 +12,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use liquid::model::ArrayView;
 use std::{
     collections::HashMap,
+    fmt::Debug,
     fs::{self, File},
     io::{self, BufReader, Read},
     path::{Path, PathBuf},
@@ -321,7 +322,7 @@ enum ImportName {
 
 impl Command {
     #[allow(clippy::too_many_arguments)]
-    fn parse<R: Read, F: FileSystemAPI>(
+    fn parse<R: Read, F: FileSystemAPI + Debug + Clone>(
         reader: &mut BufReader<R>,
         object: &str,
         field_map: HashMap<String, String>,

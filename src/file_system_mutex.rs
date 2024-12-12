@@ -14,6 +14,7 @@ pub enum FileSystemMutexError {
     LockFailed,
 }
 
+#[derive(Clone, Debug)]
 pub struct FileSystemMutex<F: FileSystemAPI>(Arc<Mutex<F>>);
 
 impl<F> FileSystemMutex<F>

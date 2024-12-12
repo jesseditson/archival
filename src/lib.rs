@@ -31,6 +31,7 @@ use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt::Debug;
 use std::hash::Hasher;
 use std::path::{Path, PathBuf};
 use tracing::{debug, error};
@@ -82,13 +83,14 @@ pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
     }
 }
 
-pub struct Archival<F: FileSystemAPI> {
+#[derive(Clone, Debug)]
+pub struct Archival<F: FileSystemAPI + Clone + Debug> {
     fs_mutex: FileSystemMutex<F>,
     pub site: site::Site,
     last_build_id: Cell<ArchivalBuildId>,
 }
 
-impl<F: FileSystemAPI> Archival<F> {
+impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn is_compatible(fs: &F) -> Result<bool, Box<dyn Error>> {
         let site = Site::load(fs)?;
         if let Some(version_str) = &site.manifest.archival_version {

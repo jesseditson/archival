@@ -12,7 +12,7 @@ use crate::ArchivalError;
 
 use super::FileSystemAPI;
 
-#[derive(Debug, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct DirEntry {
     path: PathBuf,
     is_file: bool,
@@ -52,7 +52,7 @@ impl Deref for DirEntry {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileGraphNode {
     path: PathBuf,
     pub(crate) files: HashSet<DirEntry>,
@@ -86,7 +86,7 @@ impl FileGraphNode {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct MemoryFileSystem {
     fs: HashMap<String, Vec<u8>>,
     tree: HashMap<String, FileGraphNode>,

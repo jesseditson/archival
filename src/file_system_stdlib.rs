@@ -11,6 +11,7 @@ use std::{
 use tracing::{debug, warn};
 use walkdir::WalkDir;
 
+#[derive(Debug, Clone)]
 pub struct NativeFileSystem {
     pub root: PathBuf,
 }

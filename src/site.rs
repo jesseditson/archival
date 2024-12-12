@@ -48,7 +48,7 @@ pub enum BuildError {
     PageRenderError(String, String),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Site {
     pub object_definitions: ObjectDefinitions,
     pub manifest: Manifest,
