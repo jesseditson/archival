@@ -146,9 +146,21 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     #[cfg(feature = "json-schema")]
     pub fn generate_root_json_schema(&self, options: ObjectSchemaOptions) -> ObjectSchema {
         json_schema::generate_root_json_schema(
-            &format!("{}/root.schema.json", self.site.site_url()),
+            &format!("{}/root.schema.json", self.site.schema_prefix()),
             self.site.manifest.site_name.as_deref(),
-            &format!("Object definitions for {}", self.site.site_url()),
+            &format!(
+                "Object definitions{}",
+                if let Some(name) = options
+                    .name
+                    .as_ref()
+                    .and(self.site.manifest.site_name.as_ref())
+                    .to_owned()
+                {
+                    format!(" for {}", name)
+                } else {
+                    "".to_string()
+                }
+            ),
             &self.site.object_definitions,
             &self
                 .fs_mutex

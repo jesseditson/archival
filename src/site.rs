@@ -163,12 +163,11 @@ impl Site {
             "dumping schemas for {}",
             self.manifest.object_definition_file.display()
         );
-        let site_url = self.site_url();
         let _ = fs.remove_dir_all(&self.manifest.schemas_dir);
         fs.create_dir_all(&self.manifest.schemas_dir)?;
         for (name, def) in &self.object_definitions {
             let schema = json_schema::generate_json_schema(
-                &format!("{}/{}.schema.json", site_url, name),
+                &format!("{}/{}.schema.json", self.schema_prefix(), name),
                 def,
                 ObjectSchemaOptions::default(),
             );
@@ -195,9 +194,8 @@ impl Site {
             .object_definitions
             .get(object)
             .ok_or_else(|| InvalidFileError::UnknownObject(object.clone()))?;
-        let site_url = self.site_url();
         let schema = json_schema::generate_json_schema(
-            &format!("{}/{}.schema.json", site_url, object),
+            &format!("{}/{}.schema.json", self.schema_prefix(), object),
             def,
             ObjectSchemaOptions::default(),
         );

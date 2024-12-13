@@ -10,13 +10,15 @@ pub type ObjectSchema = serde_json::Map<String, serde_json::Value>;
 pub struct ObjectSchemaOptions {
     pub omit_file_types: bool,
     pub all_fields_required: bool,
+    pub name: Option<String>,
 }
 
 impl ObjectSchemaOptions {
-    pub fn open_ai_compatible() -> Self {
+    pub fn open_ai_compatible(name: Option<String>) -> Self {
         Self {
             omit_file_types: true,
             all_fields_required: true,
+            name,
         }
     }
 }

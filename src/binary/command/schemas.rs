@@ -50,17 +50,23 @@ impl BinaryCommand for Command {
                     .object_definitions
                     .get(object)
                     .ok_or_else(|| SchemaError::NoObject(object.clone()))?;
-                let site_url = site.site_url();
                 generate_json_schema(
-                    &format!("{}/{}.schema.json", site_url, object),
+                    &format!("{}/{}.schema.json", site.schema_prefix(), object),
                     def,
                     ObjectSchemaOptions::default(),
                 )
             } else {
                 generate_root_json_schema(
-                    &format!("{}/root.schema.json", site.site_url()),
+                    &format!("{}/root.schema.json", site.schema_prefix()),
                     site.manifest.site_name.as_deref(),
-                    &format!("Object definitions for {}", site.site_url()),
+                    &format!(
+                        "Object definitions{}",
+                        if let Some(site_name) = &site.manifest.site_name {
+                            format!(" for {}", site_name)
+                        } else {
+                            "".to_string()
+                        }
+                    ),
                     &site.object_definitions,
                     &site.root_objects(&fs),
                     ObjectSchemaOptions::default(),
