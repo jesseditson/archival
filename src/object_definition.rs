@@ -7,15 +7,11 @@ use crate::{
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "json-schema")]
 use serde_json::json;
-use std::{
-    collections::{BTreeMap, HashMap},
-    error::Error,
-    fmt::Debug,
-};
+use std::{collections::BTreeMap, error::Error, fmt::Debug};
 use toml::Table;
 use tracing::instrument;
 
-pub type ObjectDefinitions = HashMap<String, ObjectDefinition>;
+pub type ObjectDefinitions = BTreeMap<String, ObjectDefinition>;
 
 #[cfg(feature = "typescript")]
 mod typedefs {
@@ -89,8 +85,8 @@ impl ObjectDefinition {
     pub fn from_table(
         table: &Table,
         editor_types: &EditorTypes,
-    ) -> Result<HashMap<String, ObjectDefinition>, Box<dyn Error>> {
-        let mut objects: HashMap<String, ObjectDefinition> = HashMap::new();
+    ) -> Result<ObjectDefinitions, Box<dyn Error>> {
+        let mut objects: ObjectDefinitions = BTreeMap::new();
         for (name, m_def) in table.into_iter() {
             if let Some(def) = m_def.as_table() {
                 objects.insert(
@@ -154,6 +150,8 @@ impl ObjectDefinition {
 
 #[cfg(test)]
 pub mod tests {
+
+    use std::collections::HashMap;
 
     use super::*;
 

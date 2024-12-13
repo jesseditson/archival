@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use serde_json::json;
 
@@ -25,7 +25,7 @@ pub fn generate_root_json_schema(
     id: &str,
     title: Option<&str>,
     description: &str,
-    objects: &HashMap<String, ObjectDefinition>,
+    objects: &BTreeMap<String, ObjectDefinition>,
     root_objects: &HashSet<String>,
     options: ObjectSchemaOptions,
 ) -> ObjectSchema {

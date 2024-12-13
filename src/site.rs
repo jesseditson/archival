@@ -126,12 +126,20 @@ impl Site {
         })
     }
 
-    pub fn site_url(&self) -> &str {
-        self.manifest
-            .site_url
-            .as_ref()
-            // TODO: probably should actually be the hash of the objects.toml file
-            .map_or("unknown", |s| &s[..])
+    pub fn schema_prefix(&self) -> String {
+        self.manifest.site_url.as_ref().map_or_else(
+            || {
+                format!(
+                    "{}",
+                    hash_file(
+                        serde_json::to_string(&self.object_definitions)
+                            .unwrap_or_default()
+                            .as_bytes()
+                    )
+                )
+            },
+            |s| s.to_owned(),
+        )
     }
 
     #[cfg(feature = "json-schema")]
