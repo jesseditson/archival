@@ -1,8 +1,8 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde_json::json;
 
-use crate::ObjectDefinition;
+use crate::{fields::FieldType, ObjectDefinition};
 
 pub type ObjectSchema = serde_json::Map<String, serde_json::Value>;
 
@@ -11,15 +11,32 @@ pub struct ObjectSchemaOptions {
     pub omit_file_types: bool,
     pub all_fields_required: bool,
     pub name: Option<String>,
+    pub property_overrides: HashMap<FieldType, serde_json::Map<String, serde_json::Value>>,
 }
 
 impl ObjectSchemaOptions {
-    pub fn open_ai_compatible(name: Option<String>) -> Self {
-        Self {
-            omit_file_types: true,
-            all_fields_required: true,
-            name,
+    pub fn with_overrides(
+        mut self,
+        field_type: FieldType,
+        props: serde_json::Map<String, serde_json::Value>,
+    ) -> Self {
+        let existing = self.property_overrides.entry(field_type).or_default();
+        for (k, v) in props {
+            existing.insert(k, v);
         }
+        self
+    }
+    pub fn without_file_types(mut self) -> Self {
+        self.omit_file_types = true;
+        self
+    }
+    pub fn with_all_fields_required(mut self) -> Self {
+        self.all_fields_required = true;
+        self
+    }
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
     }
 }
 

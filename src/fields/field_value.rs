@@ -119,19 +119,19 @@ impl FieldValue {
             )?),
             FieldType::Image => {
                 let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
-                Self::File(File::image().fill_from_map(f_info))
+                Self::File(File::image().fill_from_toml_map(f_info).unwrap())
             }
             FieldType::Video => {
                 let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
-                Self::File(File::video().fill_from_map(f_info))
+                Self::File(File::video().fill_from_toml_map(f_info).unwrap())
             }
             FieldType::Audio => {
                 let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
-                Self::File(File::audio().fill_from_map(f_info))
+                Self::File(File::audio().fill_from_toml_map(f_info).unwrap())
             }
             FieldType::Upload => {
                 let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
-                Self::File(File::download().fill_from_map(f_info))
+                Self::File(File::download().fill_from_toml_map(f_info).unwrap())
             }
             FieldType::Meta => {
                 let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
@@ -401,40 +401,40 @@ impl FieldValue {
                 Ok(FieldValue::Date(DateTime::from(&date_str)?))
             }
             FieldType::Audio => Ok(FieldValue::File(
-                File::audio().fill_from_map(value.as_table().ok_or_else(|| {
+                File::audio().fill_from_toml_map(value.as_table().ok_or_else(|| {
                     InvalidFieldError::TypeMismatch {
                         field: key.to_owned(),
                         field_type: field_type.to_string(),
                         value: value.to_string(),
                     }
-                })?),
+                })?)?,
             )),
             FieldType::Video => Ok(FieldValue::File(
-                File::video().fill_from_map(value.as_table().ok_or_else(|| {
+                File::video().fill_from_toml_map(value.as_table().ok_or_else(|| {
                     InvalidFieldError::TypeMismatch {
                         field: key.to_owned(),
                         field_type: field_type.to_string(),
                         value: value.to_string(),
                     }
-                })?),
+                })?)?,
             )),
             FieldType::Upload => Ok(FieldValue::File(
-                File::download().fill_from_map(value.as_table().ok_or_else(|| {
+                File::download().fill_from_toml_map(value.as_table().ok_or_else(|| {
                     InvalidFieldError::TypeMismatch {
                         field: key.to_owned(),
                         field_type: field_type.to_string(),
                         value: value.to_string(),
                     }
-                })?),
+                })?)?,
             )),
             FieldType::Image => Ok(FieldValue::File(
-                File::image().fill_from_map(value.as_table().ok_or_else(|| {
+                File::image().fill_from_toml_map(value.as_table().ok_or_else(|| {
                     InvalidFieldError::TypeMismatch {
                         field: key.to_owned(),
                         field_type: field_type.to_string(),
                         value: value.to_string(),
                     }
-                })?),
+                })?)?,
             )),
             FieldType::Meta => Ok(FieldValue::Meta(Meta::from(value.as_table().ok_or_else(
                 || InvalidFieldError::TypeMismatch {
@@ -468,7 +468,16 @@ impl From<&serde_json::Value> for FieldValue {
             serde_json::Value::Bool(b) => FieldValue::Boolean(*b),
             serde_json::Value::Number(n) => FieldValue::Number(n.as_f64().unwrap()),
             serde_json::Value::Null => FieldValue::String("".into()),
-            serde_json::Value::Object(_) => panic!("cannot convert from json object to FieldValue"),
+            serde_json::Value::Object(o) => {
+                // fill_from_json_map fails when a file field is missing, so we
+                // may incorrectly map to meta if the source data is not
+                // structured correctly, which will likely cause a serialization
+                // error downstream.
+                match File::download().fill_from_json_map(o) {
+                    Ok(file) => FieldValue::File(file),
+                    Err(_) => FieldValue::Meta(Meta::from(o)),
+                }
+            }
             serde_json::Value::Array(_) => panic!("cannot convert from json array to FieldValue"),
         }
     }

@@ -48,6 +48,31 @@ impl Meta {
     }
 }
 
+impl From<&serde_json::Value> for MetaValue {
+    fn from(value: &serde_json::Value) -> Self {
+        match value {
+            serde_json::Value::Bool(b) => MetaValue::Boolean(*b),
+            serde_json::Value::Number(n) => MetaValue::Number(n.as_f64().unwrap()),
+            serde_json::Value::String(s) => MetaValue::String(s.into()),
+            serde_json::Value::Array(a) => MetaValue::Array(a.iter().map(|i| i.into()).collect()),
+            serde_json::Value::Object(o) => MetaValue::Map(o.into()),
+            serde_json::Value::Null => {
+                todo!("null values unsupported when converting from json to MetaValue")
+            }
+        }
+    }
+}
+
+impl From<&serde_json::Map<String, serde_json::Value>> for Meta {
+    fn from(value: &serde_json::Map<String, serde_json::Value>) -> Self {
+        let mut meta = Self::default();
+        for (k, v) in value {
+            meta.0.insert(k.to_string(), v.into());
+        }
+        meta
+    }
+}
+
 impl From<&MetaValue> for model::Value {
     fn from(value: &MetaValue) -> Self {
         match value {

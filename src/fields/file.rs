@@ -3,7 +3,14 @@ use liquid::{ObjectView, ValueView};
 use mime_guess::{mime::FromStrError, Mime, MimeGuess};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display, str::FromStr};
+use thiserror::Error;
 use tracing::warn;
+
+#[derive(Error, Debug)]
+pub enum FileError {
+    #[error("Missing field {0}")]
+    MissingField(String),
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DisplayType {
@@ -131,24 +138,52 @@ impl File {
             _ => None,
         }
     }
-    pub fn fill_from_map(mut self, map: &toml::map::Map<String, toml::Value>) -> Self {
+    pub fn fill_from_toml_map(
+        mut self,
+        map: &toml::map::Map<String, toml::Value>,
+    ) -> Result<Self, FileError> {
         for (k, v) in map {
-            match &k[..] {
-                "sha" => {
-                    self.sha = v.as_str().unwrap().into();
-                    self.url = Self::_url(&self.sha);
-                }
-                "name" => self.name = Some(v.as_str().unwrap().into()),
-                "description" => self.description = Some(v.as_str().unwrap().into()),
-                "filename" => self.filename = v.as_str().unwrap().into(),
-                "mime" => self.mime = v.as_str().unwrap().into(),
-                "display_type" => self.display_type = v.as_str().unwrap().into(),
-                _ => {
-                    warn!("unknown file field {}", k);
-                }
+            self.fill_field(k, || {
+                v.as_str()
+                    .map(|v| v.to_string())
+                    .ok_or_else(|| FileError::MissingField(k.into()))
+            })?;
+        }
+        Ok(self)
+    }
+    pub fn fill_from_json_map(
+        mut self,
+        map: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<Self, FileError> {
+        for (k, v) in map {
+            self.fill_field(k, || {
+                v.as_str()
+                    .map(|v| v.to_string())
+                    .ok_or_else(|| FileError::MissingField(k.into()))
+            })?;
+        }
+        Ok(self)
+    }
+    fn fill_field(
+        &mut self,
+        k: &String,
+        get_val: impl Fn() -> Result<String, FileError>,
+    ) -> Result<(), FileError> {
+        match &k[..] {
+            "sha" => {
+                self.sha = get_val()?;
+                self.url = Self::_url(&self.sha);
+            }
+            "name" => self.name = Some(get_val()?),
+            "description" => self.description = Some(get_val()?),
+            "filename" => self.filename = get_val()?,
+            "mime" => self.mime = get_val()?,
+            "display_type" => self.display_type = get_val()?,
+            _ => {
+                warn!("unknown file field {}", k);
             }
         }
-        self
+        Ok(())
     }
     pub fn to_toml(&self) -> toml::map::Map<std::string::String, toml::Value> {
         let mut m = toml::map::Map::new();
@@ -242,9 +277,9 @@ impl File {
     pub fn to_json_schema_property(
         description: &str,
         display_type: DisplayType,
+        options: &crate::json_schema::ObjectSchemaOptions,
     ) -> crate::json_schema::ObjectSchema {
         use serde_json::json;
-
         let mut property = serde_json::Map::new();
         property.insert("type".to_string(), "object".into());
         property.insert("description".to_string(), description.to_string().into());
@@ -253,9 +288,10 @@ impl File {
             "sha".into(),
             json!({
                 "type": "string",
-                "description": "a unique sha representing the hashed content of this file",
-                "minLength": 64,
-                "maxLength": 64,
+                "description": "a string representing the hex-encoded sha256 hash content of this file",
+                // Causes failures when submitting to openAI, so omit for now
+                // "minLength": 64,
+                // "maxLength": 64,
             }),
         );
         properties.insert(
@@ -283,7 +319,7 @@ impl File {
             "mime".into(),
             json!({
                 "type": "string",
-                "description": "the mime type of this content",
+                "description": "the mime type of this file",
             }),
         );
         properties.insert(
@@ -291,14 +327,17 @@ impl File {
             json!({
                 "const": display_type.to_str(),
                 "type": "string",
-                "description": "the display type of this content",
+                "description": "the display type of this file",
             }),
         );
         property.insert("properties".into(), properties.into());
-        property.insert(
-            "required".into(),
-            json!(["sha", "filename", "mime", "display_type"]),
-        );
+        let mut required_fields = vec!["sha", "filename", "mime", "display_type"];
+        if options.all_fields_required {
+            required_fields.push("name");
+            required_fields.push("description");
+        }
+        property.insert("required".into(), required_fields.into());
+        property.insert("additionalProperties".into(), false.into());
         property
     }
 }

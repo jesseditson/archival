@@ -53,7 +53,7 @@ mod typedefs {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldType {
     String,
@@ -142,12 +142,16 @@ impl FieldType {
         }
     }
 
-    pub fn to_json_schema_property(&self, description: &str) -> crate::json_schema::ObjectSchema {
+    pub fn to_json_schema_property(
+        &self,
+        description: &str,
+        options: &crate::json_schema::ObjectSchemaOptions,
+    ) -> crate::json_schema::ObjectSchema {
         match self {
-            Self::Alias(a) => a.0.to_json_schema_property(description),
+            Self::Alias(a) => a.0.to_json_schema_property(description, options),
             _ => {
                 if let Some(display_type) = self.maybe_file_type() {
-                    File::to_json_schema_property(description, display_type)
+                    File::to_json_schema_property(description, display_type, options)
                 } else if matches!(self, Self::Date) {
                     let mut schema = serde_json::Map::new();
                     schema.insert("description".into(), description.into());

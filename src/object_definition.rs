@@ -120,10 +120,13 @@ impl ObjectDefinition {
             if options.omit_file_types && field_type.is_file_type() {
                 continue;
             }
-            properties.insert(
-                field.into(),
-                field_type.to_json_schema_property(field).into(),
-            );
+            let mut field_props = field_type.to_json_schema_property(field, options);
+            if let Some(overrides) = options.property_overrides.get(field_type) {
+                for (k, v) in overrides {
+                    field_props.insert(k.to_string(), v.clone());
+                }
+            }
+            properties.insert(field.into(), field_props.into());
         }
         if !is_child {
             properties.insert("order".into(), json!({"type": "number"}));
