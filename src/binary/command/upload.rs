@@ -191,6 +191,7 @@ impl BinaryCommand for Command {
                 path: ValuePath::empty(),
                 value: Some(field_data.clone()),
                 field: field.to_string(),
+                source: None,
             }),
             None,
         )?;

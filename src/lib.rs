@@ -317,6 +317,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         }
         Ok(r)
     }
+
     // Internal
     fn add_object(&self, event: AddObjectEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let obj_def = self
@@ -584,6 +585,7 @@ mod lib {
                 path: ValuePath::empty(),
                 field: "name".to_string(),
                 value: Some(FieldValue::String("This is the new name".to_string())),
+                source: None,
             }),
             Some(BuildOptions::default()),
         )?;
@@ -607,6 +609,7 @@ mod lib {
             ArchivalEvent::DeleteObject(DeleteObjectEvent {
                 object: "section".to_string(),
                 filename: "first".to_string(),
+                source: None,
             }),
             Some(BuildOptions::default()),
         )?;
@@ -648,6 +651,7 @@ mod lib {
                 object: "section".to_string(),
                 filename: "first".to_string(),
                 order: 12,
+                source: None,
             }),
             Some(BuildOptions::default()),
         )?;
@@ -692,6 +696,7 @@ mod lib {
                     object: "post".to_string(),
                     filename: "a-post".to_string(),
                     path: ValuePath::default().append(ValuePathComponent::key("links")),
+                    source: None,
                 }),
                 Some(BuildOptions::default()),
             )
@@ -744,6 +749,7 @@ mod lib {
                     path: ValuePath::default()
                         .append(ValuePathComponent::key("links"))
                         .append(ValuePathComponent::Index(0)),
+                    source: None,
                 }),
                 Some(BuildOptions::default()),
             )

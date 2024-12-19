@@ -370,6 +370,7 @@ impl Command {
                                 object: object.to_string(),
                                 filename: f.to_string(),
                                 path: current_path.to_owned(),
+                                source: None,
                             }),
                             None,
                         )
@@ -419,6 +420,7 @@ impl Command {
                                 path: current_path.clone(),
                                 value: Some(value),
                                 field: name.to_string(),
+                                source: None,
                             }),
                             None,
                         )
@@ -456,6 +458,7 @@ impl Command {
                                     path: current_path.clone().concat(col_path),
                                     value: Some(value),
                                     field: col_field,
+                                    source: None,
                                 }),
                                 None,
                             )

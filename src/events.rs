@@ -29,6 +29,7 @@ pub struct EditFieldEvent {
     pub path: ValuePath,
     pub field: String,
     pub value: Option<FieldValue>,
+    pub source: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
@@ -36,6 +37,7 @@ pub struct EditOrderEvent {
     pub object: String,
     pub filename: String,
     pub order: i32,
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +45,7 @@ pub struct EditOrderEvent {
 pub struct DeleteObjectEvent {
     pub object: String,
     pub filename: String,
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +70,7 @@ pub struct ChildEvent {
     pub object: String,
     pub filename: String,
     pub path: ValuePath,
+    pub source: Option<String>,
 }
 
 #[cfg(test)]
