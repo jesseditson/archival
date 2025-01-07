@@ -67,6 +67,7 @@ export type AddObjectEvent = {
 export type DeleteObjectEvent = {
     "object": string;
     "filename": string;
+    "source": (string | null);
 };
 export type EditFieldEvent = {
     "object": string;
@@ -74,16 +75,19 @@ export type EditFieldEvent = {
     "path": ValuePath;
     "field": string;
     "value": (FieldValue | null);
+    "source": (string | null);
 };
 export type EditOrderEvent = {
     "object": string;
     "filename": string;
     "order": I32;
+    "source": (string | null);
 };
 export type ChildEvent = {
     "object": string;
     "filename": string;
     "path": ValuePath;
+    "source": (string | null);
 };
 export type ArchivalEvent = ({
     "AddObject": AddObjectEvent;
