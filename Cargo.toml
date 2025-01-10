@@ -35,6 +35,7 @@ binary = [
 import-csv = ["dep:csv"]
 json-schema = []
 stdlib-fs = ["dep:notify", "dep:walkdir"]
+verbose-fs-logging = []
 
 [[bin]]
 name = "archival"
