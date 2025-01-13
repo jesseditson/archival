@@ -114,6 +114,7 @@ impl Site {
         }
 
         // Load our object definitions
+        #[cfg(feature = "verbose-logging")]
         debug!("loading definition {}", odf.display());
         let objects_table = read_toml(odf, fs)?;
         let objects = ObjectDefinition::from_table(&objects_table, &manifest.editor_types)?;
@@ -226,6 +227,7 @@ impl Site {
 
     #[instrument]
     pub fn invalidate_file(&self, file: &Path) {
+        #[cfg(feature = "verbose-logging")]
         debug!("invalidate {}", file.display());
         self.obj_cache.borrow_mut().remove(file);
     }
@@ -324,6 +326,7 @@ impl Site {
         if let Some(o) = cache.get(path) {
             Ok(o.clone())
         } else {
+            #[cfg(feature = "verbose-logging")]
             debug!("parsing {}", path.display());
             let obj_table = read_toml(path, fs)?;
             let o = Object::from_table(
@@ -354,6 +357,7 @@ impl Site {
         let last_dist_paths: Vec<PathBuf> = hashes.keys().cloned().collect();
         let mut copied_paths: HashSet<PathBuf> = HashSet::new();
         // Copy static files
+        #[cfg(feature = "verbose-logging")]
         debug!("copying files from {}", static_dir.display());
         if fs.exists(static_dir)? {
             for file in fs.walk_dir(static_dir, false)? {
@@ -461,6 +465,7 @@ impl Site {
                 if let Some(template_str) = template_str {
                     if let Some(t_objects) = all_objects.get(name) {
                         for object in t_objects.into_iter() {
+                            #[cfg(feature = "verbose-logging")]
                             debug!("rendering {}", object.filename);
                             if let Err(error) = Self::render_template_page(
                                 object,
@@ -505,6 +510,7 @@ impl Site {
                         // template pages are not rendered as pages
                         continue;
                     }
+                    #[cfg(feature = "verbose-logging")]
                     debug!(
                         "rendering {} ({})",
                         file_path.display(),
@@ -561,6 +567,7 @@ impl Site {
         let t_dir = build_dir.join(&object_def.name);
         fs.create_dir_all(&t_dir)?;
         let build_path = t_dir.join(render_name);
+        #[cfg(feature = "verbose-logging")]
         debug!("write {}", build_path.display());
         fs.write_str(&build_path, rendered)?;
         Ok(())
@@ -596,6 +603,7 @@ impl Site {
                 fs.create_dir_all(&render_dir)?;
             }
             let render_path = render_dir.join(format!("{}.{}", page_name, page_type.extension()));
+            #[cfg(feature = "verbose-logging")]
             debug!("write {}", render_path.display());
             fs.write_str(&render_path, rendered)?;
         } else {

@@ -8,7 +8,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-#[cfg(feature = "verbose-fs-logging")]
+#[cfg(feature = "verbose-logging")]
 use tracing::debug;
 use tracing::warn;
 use walkdir::WalkDir;
@@ -107,7 +107,7 @@ impl WatchableFileSystemAPI for NativeFileSystem {
                             let p = if let Ok(f) = fs::canonicalize(p) {
                                 f
                             } else {
-                                #[cfg(feature = "verbose-fs-logging")]
+                                #[cfg(feature = "verbose-logging")]
                                 debug!("Invalid path {}", p.display());
                                 return false;
                             };

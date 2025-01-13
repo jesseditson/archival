@@ -6,7 +6,7 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
 };
-#[cfg(feature = "verbose-fs-logging")]
+#[cfg(feature = "verbose-logging")]
 use tracing::debug;
 
 use crate::ArchivalError;
@@ -171,7 +171,7 @@ impl FileSystemAPI for MemoryFileSystem {
 
 impl MemoryFileSystem {
     fn write_file(&mut self, path: &Path, data: Vec<u8>) {
-        #[cfg(feature = "verbose-fs-logging")]
+        #[cfg(feature = "verbose-logging")]
         debug!("write: {}", path.display());
         self.fs.insert(path.to_string_lossy().to_lowercase(), data);
         self.write_to_graph(path, true);
@@ -256,7 +256,7 @@ impl MemoryFileSystem {
     }
 
     fn read_file(&self, path: &Path) -> Option<Vec<u8>> {
-        #[cfg(feature = "verbose-fs-logging")]
+        #[cfg(feature = "verbose-logging")]
         debug!("read {}", path.display());
         self.fs
             .get(&path.to_string_lossy().to_lowercase())

@@ -167,6 +167,7 @@ impl<'a> Page<'a> {
         parser: &liquid::Parser,
         objects_map: &BTreeMap<String, ObjectEntry>,
     ) -> Result<String, Box<dyn Error>> {
+        #[cfg(feature = "verbose-logging")]
         tracing::debug!("rendering {}", self.name);
         let mut objects: BTreeMap<String, liquid::model::Value> = BTreeMap::new();
         for (name, obj_entry) in objects_map {

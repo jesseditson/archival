@@ -3,6 +3,7 @@ use std::{
     io::{Cursor, Read, Seek},
     path::{Path, PathBuf},
 };
+#[cfg(feature = "verbose-logging")]
 use tracing::debug;
 
 pub trait FileSystemAPI {
@@ -84,6 +85,7 @@ pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<(), B
         let mut outpath = PathBuf::new();
         outpath.push(relative_path);
 
+        #[cfg(feature = "verbose-logging")]
         debug!("create {}", outpath.display());
 
         if file.name().ends_with('/') {
@@ -91,12 +93,14 @@ pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<(), B
         } else {
             if let Some(p) = outpath.parent() {
                 if !fs.exists(p)? {
+                    #[cfg(feature = "verbose-logging")]
                     debug!("create {}", p.display());
                     fs.create_dir_all(p)?;
                 }
             }
             let mut buffer = vec![];
             file.read_to_end(&mut buffer)?;
+            #[cfg(feature = "verbose-logging")]
             debug!("writing file: {}", outpath.display());
             fs.write(&outpath, buffer)?;
         }
