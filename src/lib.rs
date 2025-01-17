@@ -444,6 +444,35 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         })
     }
 
+    /// Deletes all the object files for the given object types.
+    /// This only deletes the files, and does not generate events or rebuild the archival site.
+    pub fn delete_objects(
+        &self,
+        object_names: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> Result<(), Box<dyn Error>> {
+        let objects = self.get_objects()?;
+        self.fs_mutex.with_fs(|fs| {
+            for on in object_names {
+                let object_name = on.as_ref();
+                let entry = objects.get(object_name).ok_or_else(|| {
+                    ArchivalError::new(&format!("object {} does not exist", object_name))
+                })?;
+                let filenames = match entry {
+                    ObjectEntry::Object(object) => {
+                        vec![&object.filename]
+                    }
+                    ObjectEntry::List(objects) => objects.iter().map(|o| &o.filename).collect(),
+                };
+                for filename in filenames {
+                    let path = self.object_path_impl(object_name, filename, fs)?;
+                    fs.delete(&path)?;
+                    self.site.invalidate_file(&path);
+                }
+            }
+            Ok(())
+        })
+    }
+
     pub fn take_fs(self) -> F {
         self.fs_mutex.take_fs()
     }
@@ -792,6 +821,28 @@ mod lib {
         assert!(!output.contains("objects"));
         // Does show non-defaults
         assert!(output.contains("prebuild = [\"test\"]"));
+        Ok(())
+    }
+
+    #[test]
+    fn bulk_delete_objects() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        archival.delete_objects(vec!["section", "site"].into_iter())?;
+        // This should result in the relevant files being missing
+        let sections_dir = archival.site.manifest.objects_dir.join("section");
+        let sections = archival.fs_mutex.with_fs(|fs| {
+            fs.walk_dir(&sections_dir, false)
+                .map(|d| d.collect::<Vec<PathBuf>>())
+        })?;
+        println!("SECTIONS: {:?}", sections);
+        assert_eq!(sections.len(), 0);
+        let site_file_exists = archival
+            .fs_mutex
+            .with_fs(|fs| fs.exists(&archival.site.manifest.objects_dir.join("site.toml")))?;
+        assert!(!site_file_exists);
         Ok(())
     }
 }
