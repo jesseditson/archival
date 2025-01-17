@@ -451,6 +451,7 @@ impl Site {
         for (name, object_def) in self.object_definitions.iter() {
             if let Some(template) = &object_def.template {
                 let template_path = pages_dir.join(format!("{}.liquid", template));
+                #[cfg(feature = "verbose-logging")]
                 debug!("rendering template objects for {}", template_path.display());
                 if !fs.exists(&template_path)? {
                     return Err(
@@ -491,6 +492,7 @@ impl Site {
         }
 
         // Render regular pages
+        #[cfg(feature = "verbose-logging")]
         debug!("building pages in {}", pages_dir.display());
         let template_pages: HashSet<&str> = self
             .object_definitions

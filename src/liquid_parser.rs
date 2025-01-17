@@ -7,7 +7,9 @@ use liquid_core::partials::{EagerCompiler, PartialSource};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::{borrow::Cow, collections::HashMap, error::Error, path::Path};
-use tracing::{debug, error};
+#[cfg(feature = "verbose-logging")]
+use tracing::debug;
+use tracing::error;
 
 pub static PARTIAL_FILE_NAME_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^_(.+)\.liquid").unwrap());
 
@@ -27,8 +29,9 @@ impl ArchivalPartialSource {
         if let Some(path) = layout_path {
             for file in fs.walk_dir(path, false)? {
                 if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
-                    if let Some((template_name, t)) = TemplateType::parse_path(name) {
-                        debug!("adding layout {} ({})", template_name, t.extension());
+                    if let Some((template_name, _t)) = TemplateType::parse_path(name) {
+                        #[cfg(feature = "verbose-logging")]
+                        debug!("adding layout {} ({})", template_name, _t.extension());
                         if let Some(contents) = fs.read_to_string(&path.join(&file))? {
                             partials.insert(template_name.to_string(), contents);
                         } else {
@@ -42,8 +45,9 @@ impl ArchivalPartialSource {
             for file in fs.walk_dir(path, false)? {
                 if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
                     if PARTIAL_FILE_NAME_RE.is_match(name) {
+                        #[cfg(feature = "verbose-logging")]
                         debug!("partial at path {:?}", file);
-                        let (partial_name, t) = TemplateType::parse_path(name).unwrap();
+                        let (partial_name, _t) = TemplateType::parse_path(name).unwrap();
                         // Remove underscore from beginning of name
                         let partial_name = &partial_name[1..];
                         // Prepend path to this file if needed
@@ -52,7 +56,8 @@ impl ArchivalPartialSource {
                         } else {
                             partial_name.to_string()
                         };
-                        debug!("adding partial {} ({})", partial_name, t.extension());
+                        #[cfg(feature = "verbose-logging")]
+                        debug!("adding partial {} ({})", partial_name, _t.extension());
                         if let Some(contents) = fs.read_to_string(&path.join(&file))? {
                             partials.insert(partial_name.to_string(), contents);
                         } else {
