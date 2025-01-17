@@ -136,6 +136,24 @@ impl ValuePath {
         self.path.len()
     }
 
+    pub fn child_name(&self) -> Option<&str> {
+        let len = self.len();
+        if len < 2 {
+            None
+        } else {
+            let last_components = &self.path.as_slice()[len - 2..];
+            if let ValuePathComponent::Key(child_name) = &last_components[0] {
+                if matches!(last_components[1], ValuePathComponent::Index(_)) {
+                    Some(child_name)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+    }
+
     pub fn append(mut self, component: ValuePathComponent) -> Self {
         self.path.push(component);
         self
@@ -151,7 +169,7 @@ impl ValuePath {
         let first = self
             .path
             .first()
-            .expect("called .first on an empty value_path");
+            .expect("called .first on an empty ValuePath");
         ValuePath {
             path: vec![first.clone()],
         }

@@ -16,7 +16,7 @@ mod tags;
 #[cfg(test)]
 mod test_utils;
 mod value_path;
-use constants::MIN_COMPAT_VERSION;
+pub use constants::{MANIFEST_FILE_NAME, MIN_COMPAT_VERSION};
 use events::ArchivalEventResponse;
 use events::{
     AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
@@ -199,7 +199,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             }
             Ok(())
         };
-        maybe_hash(&Path::new("manifest.toml").into())?;
+        maybe_hash(&Path::new(MANIFEST_FILE_NAME).into())?;
         maybe_hash(object_definition_file)?;
         for page in fs.walk_dir(pages_dir, false)? {
             maybe_hash(&pages_dir.join(page))?;

@@ -1,4 +1,6 @@
+use indefinite::indefinite;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 #[cfg(feature = "typescript")]
 use typescript_type_def::TypeDef;
 
@@ -14,6 +16,69 @@ pub enum ArchivalEvent {
     AddChild(ChildEvent),
     RemoveChild(ChildEvent),
 }
+
+impl ArchivalEvent {
+    pub fn object_name(&self) -> &str {
+        match self {
+            ArchivalEvent::AddObject(evt) => &evt.object,
+            ArchivalEvent::DeleteObject(evt) => &evt.object,
+            ArchivalEvent::EditField(evt) => &evt.object,
+            ArchivalEvent::EditOrder(evt) => &evt.object,
+            ArchivalEvent::AddChild(evt) => &evt.object,
+            ArchivalEvent::RemoveChild(evt) => &evt.object,
+        }
+    }
+    pub fn filename(&self) -> &str {
+        match self {
+            ArchivalEvent::AddObject(evt) => &evt.filename,
+            ArchivalEvent::DeleteObject(evt) => &evt.filename,
+            ArchivalEvent::EditField(evt) => &evt.filename,
+            ArchivalEvent::EditOrder(evt) => &evt.filename,
+            ArchivalEvent::AddChild(evt) => &evt.filename,
+            ArchivalEvent::RemoveChild(evt) => &evt.filename,
+        }
+    }
+}
+
+impl Display for ArchivalEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ArchivalEvent::AddObject(evt) =>
+                    format!("Add {} '{}'", indefinite(&evt.object), evt.filename),
+                ArchivalEvent::DeleteObject(evt) =>
+                    format!("Delete {} '{}'", evt.object, evt.filename),
+                ArchivalEvent::EditField(evt) => format!(
+                    "Change field {} in {} '{}'",
+                    evt.field, evt.object, evt.filename
+                ),
+                ArchivalEvent::EditOrder(evt) =>
+                    format!("Update order of {} '{}'", evt.object, evt.filename),
+                ArchivalEvent::AddChild(evt) => {
+                    let child_name = evt.path.child_name().unwrap();
+                    format!(
+                        "Add {} child to {} '{}'",
+                        indefinite(child_name),
+                        evt.object,
+                        evt.filename
+                    )
+                }
+                ArchivalEvent::RemoveChild(evt) => {
+                    let child_name = evt.path.child_name().unwrap();
+                    format!(
+                        "Remove {} child from {} '{}'",
+                        indefinite(child_name),
+                        evt.object,
+                        evt.filename
+                    )
+                }
+            }
+        )
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub enum ArchivalEventResponse {
