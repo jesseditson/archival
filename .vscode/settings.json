@@ -1,3 +1,11 @@
 {
-  "rust-analyzer.cargo.features": "all"
+  "editor.formatOnSave": true,
+  "rust-analyzer.cargo.features": "all",
+  "rust-analyzer.check.overrideCommand": [
+    "cargo",
+    "clippy",
+    "--all-features",
+    "--all-targets",
+    "--message-format=json"
+  ]
 }
