@@ -10,6 +10,7 @@ use crate::{value_path::ValuePath, FieldValue};
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub enum ArchivalEvent {
     AddObject(AddObjectEvent),
+    AddRootObject(AddRootObjectEvent),
     DeleteObject(DeleteObjectEvent),
     EditField(EditFieldEvent),
     EditOrder(EditOrderEvent),
@@ -21,6 +22,7 @@ impl ArchivalEvent {
     pub fn object_name(&self) -> &str {
         match self {
             ArchivalEvent::AddObject(evt) => &evt.object,
+            ArchivalEvent::AddRootObject(evt) => &evt.object,
             ArchivalEvent::DeleteObject(evt) => &evt.object,
             ArchivalEvent::EditField(evt) => &evt.object,
             ArchivalEvent::EditOrder(evt) => &evt.object,
@@ -31,6 +33,7 @@ impl ArchivalEvent {
     pub fn filename(&self) -> &str {
         match self {
             ArchivalEvent::AddObject(evt) => &evt.filename,
+            ArchivalEvent::AddRootObject(evt) => &evt.object,
             ArchivalEvent::DeleteObject(evt) => &evt.filename,
             ArchivalEvent::EditField(evt) => &evt.filename,
             ArchivalEvent::EditOrder(evt) => &evt.filename,
@@ -46,16 +49,21 @@ impl Display for ArchivalEvent {
             f,
             "{}",
             match self {
-                ArchivalEvent::AddObject(evt) =>
-                    format!("Add {} '{}'", indefinite(&evt.object), evt.filename),
+                ArchivalEvent::AddObject(evt) => {
+                    format!("Add {} '{}'", indefinite(&evt.object), evt.filename)
+                }
+                ArchivalEvent::AddRootObject(evt) => {
+                    format!("Add {}", evt.object)
+                }
                 ArchivalEvent::DeleteObject(evt) =>
                     format!("Delete {} '{}'", evt.object, evt.filename),
                 ArchivalEvent::EditField(evt) => format!(
                     "Change field {} in {} '{}'",
                     evt.field, evt.object, evt.filename
                 ),
-                ArchivalEvent::EditOrder(evt) =>
-                    format!("Update order of {} '{}'", evt.object, evt.filename),
+                ArchivalEvent::EditOrder(evt) => {
+                    format!("Update order of {} '{}'", evt.object, evt.filename)
+                }
                 ArchivalEvent::AddChild(evt) => {
                     let child_name = evt.path.child_name().unwrap();
                     format!(
@@ -126,6 +134,13 @@ pub struct AddObjectEvent {
     pub object: String,
     pub filename: String,
     pub order: i32,
+    pub values: Vec<AddObjectValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(TypeDef))]
+pub struct AddRootObjectEvent {
+    pub object: String,
     pub values: Vec<AddObjectValue>,
 }
 

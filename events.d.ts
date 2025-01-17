@@ -64,6 +64,10 @@ export type AddObjectEvent = {
     "order": I32;
     "values": (AddObjectValue)[];
 };
+export type AddRootObjectEvent = {
+    "object": string;
+    "values": (AddObjectValue)[];
+};
 export type DeleteObjectEvent = {
     "object": string;
     "filename": string;
@@ -91,6 +95,8 @@ export type ChildEvent = {
 };
 export type ArchivalEvent = ({
     "AddObject": AddObjectEvent;
+} | {
+    "AddRootObject": AddRootObjectEvent;
 } | {
     "DeleteObject": DeleteObjectEvent;
 } | {

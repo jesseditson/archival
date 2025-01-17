@@ -17,10 +17,10 @@ mod tags;
 mod test_utils;
 mod value_path;
 pub use constants::{MANIFEST_FILE_NAME, MIN_COMPAT_VERSION};
-use events::ArchivalEventResponse;
 use events::{
     AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
 };
+use events::{AddRootObjectEvent, ArchivalEventResponse};
 pub use fields::FieldConfig;
 pub use fields::FieldValue;
 use manifest::Manifest;
@@ -64,7 +64,13 @@ pub type ArchivalBuildId = u64;
 
 #[derive(Debug, Default)]
 pub struct BuildOptions {
-    skip_static: bool,
+    pub skip_static: bool,
+}
+
+impl BuildOptions {
+    pub fn no_static() -> Self {
+        Self { skip_static: true }
+    }
 }
 
 pub static ARCHIVAL_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -306,6 +312,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let r = match event {
             ArchivalEvent::AddObject(event) => self.add_object(event)?,
+            ArchivalEvent::AddRootObject(event) => self.add_root_object(event)?,
             ArchivalEvent::DeleteObject(event) => self.delete_object(event)?,
             ArchivalEvent::EditField(event) => self.edit_field(event)?,
             ArchivalEvent::EditOrder(event) => self.edit_order(event)?,
@@ -319,6 +326,51 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     }
 
     // Internal
+    fn add_root_object(
+        &self,
+        event: AddRootObjectEvent,
+    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+        let obj_def = self
+            .site
+            .object_definitions
+            .get(&event.object)
+            .ok_or(ArchivalError::new(&format!(
+                "object not found: {}",
+                event.object
+            )))?;
+        self.fs_mutex.with_fs(|fs| {
+            let dir_path = self
+                .site
+                .manifest
+                .objects_dir
+                .join(Path::new(&event.object));
+            if fs.is_dir(&dir_path)? && fs.walk_dir(&dir_path, false)?.next().is_some() {
+                return Err(ArchivalError::new(&format!(
+                    "cannod add root {} object, found existing non-roots.",
+                    event.object
+                ))
+                .into());
+            }
+            let path = self
+                .site
+                .manifest
+                .objects_dir
+                .join(Path::new(&format!("{}.toml", event.object)));
+            if fs.exists(&path)? {
+                return Err(ArchivalError::new(&format!(
+                    "cannod add root {}, file already exists.",
+                    event.object
+                ))
+                .into());
+            }
+            let object = Object::from_def(obj_def, &event.object, -1, event.values)?;
+            fs.write_str(&path, object.to_toml()?)?;
+            self.site.invalidate_file(&path);
+            Ok(())
+        })?;
+        Ok(ArchivalEventResponse::None)
+    }
+
     fn add_object(&self, event: AddObjectEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let obj_def = self
             .site
@@ -329,7 +381,31 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 event.object
             )))?;
         self.fs_mutex.with_fs(|fs| {
-            let path = self.object_path_impl(&obj_def.name, &event.filename, fs)?;
+            let path = self
+                .site
+                .manifest
+                .objects_dir
+                .join(Path::new(&event.object))
+                .join(Path::new(&format!("{}.toml", event.filename)));
+            if fs.exists(&path)? {
+                return Err(ArchivalError::new(&format!(
+                    "cannod add {} named {}, file already exists.",
+                    event.object, event.filename
+                ))
+                .into());
+            }
+            let root_path = self
+                .site
+                .manifest
+                .objects_dir
+                .join(Path::new(&format!("{}.toml", event.object)));
+            if fs.exists(&root_path)? {
+                return Err(ArchivalError::new(&format!(
+                    "cannod add {} named {}, there's already a root {}.",
+                    event.object, event.filename, event.object
+                ))
+                .into());
+            }
             let object = Object::from_def(obj_def, &event.filename, event.order, event.values)?;
             fs.write_str(&path, object.to_toml()?)?;
             self.site.invalidate_file(&path);
