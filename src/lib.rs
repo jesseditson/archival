@@ -188,6 +188,9 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             .with_fs(|fs| Ok(self.object_path_impl(obj_type, filename, fs).unwrap()))
             .unwrap()
     }
+    pub fn build_id(&self) -> Result<u64, Box<dyn Error>> {
+        self.fs_mutex.with_fs(|fs| self.fs_id(fs))
+    }
     fn fs_id(&self, fs: &F) -> Result<u64, Box<dyn Error>> {
         let Manifest {
             object_definition_file,
@@ -921,11 +924,37 @@ mod lib {
         assert!(!site_file_exists);
         Ok(())
     }
+
+    #[test]
+    fn build_ids() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        let initial_build_id = archival.build_id()?;
+        debug!("INITIAL BUILD ID: {:?}", initial_build_id);
+        // Build ID should not change if we didn't make changes to the fs
+        assert_eq!(archival.build_id()?, initial_build_id);
+        archival.send_event(
+            ArchivalEvent::EditField(EditFieldEvent {
+                object: "section".to_string(),
+                filename: "first".to_string(),
+                path: ValuePath::empty(),
+                field: "name".to_string(),
+                value: Some(FieldValue::String("This is the new name".to_string())),
+                source: None,
+            }),
+            Some(BuildOptions::default()),
+        )?;
+        // But it should change after rebuilding
+        assert_ne!(archival.build_id()?, initial_build_id);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 #[cfg(feature = "typescript")]
-mod typescript_tests {
+mod typescript_definitions {
     use typescript_type_def::{write_definition_file, DefinitionFileOptions};
     use value_path::ValuePath;
 

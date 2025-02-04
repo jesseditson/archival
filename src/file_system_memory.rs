@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     error::Error,
     hash::Hash,
     ops::Deref,
@@ -17,6 +17,18 @@ use super::FileSystemAPI;
 pub struct DirEntry {
     path: PathBuf,
     is_file: bool,
+}
+
+impl PartialOrd for DirEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.path.cmp(&other.path))
+    }
+}
+
+impl Ord for DirEntry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.path.cmp(&other.path)
+    }
 }
 
 impl PartialEq for DirEntry {
@@ -56,14 +68,14 @@ impl Deref for DirEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileGraphNode {
     path: PathBuf,
-    pub(crate) files: HashSet<DirEntry>,
+    pub(crate) files: BTreeSet<DirEntry>,
 }
 
 impl FileGraphNode {
     pub fn new(path: &Path) -> Self {
         Self {
             path: path.to_path_buf(),
-            files: HashSet::new(),
+            files: BTreeSet::new(),
         }
     }
     pub fn key(path: &Path) -> String {
@@ -76,7 +88,8 @@ impl FileGraphNode {
         self.files.insert(DirEntry::new(path, is_file));
     }
     pub fn remove(&mut self, path: &Path) {
-        // Since we impl PartialEq, is_file doesn't matter for comparison
+        // Since we impl Ord (which is what BTreeSet uses for comparison),
+        // is_file doesn't matter for comparison
         self.files.remove(&DirEntry::new(path, false));
     }
     pub fn copy(&self) -> Self {
@@ -89,8 +102,8 @@ impl FileGraphNode {
 
 #[derive(Default, Debug, Clone)]
 pub struct MemoryFileSystem {
-    fs: HashMap<String, Vec<u8>>,
-    tree: HashMap<String, FileGraphNode>,
+    fs: BTreeMap<String, Vec<u8>>,
+    tree: BTreeMap<String, FileGraphNode>,
 }
 
 impl FileSystemAPI for MemoryFileSystem {
