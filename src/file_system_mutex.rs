@@ -1,8 +1,4 @@
-use std::{
-    error::Error,
-    ops::DerefMut,
-    sync::{Arc, Mutex},
-};
+use std::{error::Error, ops::DerefMut, sync::Mutex};
 use thiserror::Error;
 
 use crate::FileSystemAPI;
@@ -14,15 +10,15 @@ pub enum FileSystemMutexError {
     LockFailed,
 }
 
-#[derive(Clone, Debug)]
-pub struct FileSystemMutex<F: FileSystemAPI>(Arc<Mutex<F>>);
+#[derive(Debug)]
+pub struct FileSystemMutex<F: FileSystemAPI>(Mutex<F>);
 
 impl<F> FileSystemMutex<F>
 where
     F: FileSystemAPI,
 {
     pub fn init(fs: F) -> Self {
-        Self(Arc::new(Mutex::new(fs)))
+        Self(Mutex::new(fs))
     }
     pub fn with_fs<R>(
         &self,
@@ -39,10 +35,8 @@ where
         }
     }
     pub fn take_fs(self) -> F {
-        let lock = match Arc::try_unwrap(self.0) {
-            Ok(l) => l,
-            Err(_) => panic!("attempt to take fs while borrowed."),
-        };
-        lock.into_inner().expect("attempt to take fs while locked.")
+        self.0
+            .into_inner()
+            .expect("attempt to take fs while locked.")
     }
 }

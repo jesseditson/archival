@@ -89,7 +89,7 @@ pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Archival<F: FileSystemAPI + Clone + Debug> {
     fs_mutex: FileSystemMutex<F>,
     pub site: site::Site,
@@ -554,6 +554,9 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
 
     pub fn take_fs(self) -> F {
         self.fs_mutex.take_fs()
+    }
+    pub fn clone_fs(&self) -> Result<F, Box<dyn Error>> {
+        self.fs_mutex.with_fs(|fs| Ok(fs.clone()))
     }
 
     #[cfg(test)]
