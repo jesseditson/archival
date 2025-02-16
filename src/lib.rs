@@ -384,12 +384,13 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 event.object
             )))?;
         self.fs_mutex.with_fs(|fs| {
-            let path = self
+            let obj_dir = self
                 .site
                 .manifest
                 .objects_dir
-                .join(Path::new(&event.object))
-                .join(Path::new(&format!("{}.toml", event.filename)));
+                .join(Path::new(&event.object));
+            fs.create_dir_all(&obj_dir)?;
+            let path = obj_dir.join(Path::new(&format!("{}.toml", event.filename)));
             if fs.exists(&path)? {
                 return Err(ArchivalError::new(&format!(
                     "cannod add {} named {}, file already exists.",
@@ -410,7 +411,9 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 .into());
             }
             let object = Object::from_def(obj_def, &event.filename, event.order, event.values)?;
-            fs.write_str(&path, object.to_toml()?)?;
+            fs.write_str(&path, object.to_toml()?).map_err(|error| {
+                ArchivalError::new(&format!("failed writing to {}: {}", path.display(), error))
+            })?;
             self.site.invalidate_file(&path);
             Ok(())
         })?;
