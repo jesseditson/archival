@@ -45,8 +45,8 @@ pub enum ImportError {
     MissingNameField,
     #[error("failed parsing file {0}")]
     ParseError(String),
-    #[error("failed writing: {0}")]
-    WriteError(String),
+    #[error("failed writing {0}/{1}: {2}")]
+    WriteError(String, String, String),
     #[error("couldn't find specified name field {0} in {1:?}")]
     MissingName(String, HashMap<String, String>),
 }
@@ -350,7 +350,9 @@ impl Command {
                     }),
                     None,
                 )
-                .map_err(|e| ImportError::WriteError(e.to_string()))?;
+                .map_err(|e| {
+                    ImportError::WriteError(object.to_string(), f.to_string(), e.to_string())
+                })?;
         }
         let mut idx = 0;
         let total = parsed.size();
@@ -374,7 +376,13 @@ impl Command {
                             }),
                             None,
                         )
-                        .map_err(|e| ImportError::WriteError(e.to_string()))?;
+                        .map_err(|e| {
+                            ImportError::WriteError(
+                                object.to_string(),
+                                f.to_string(),
+                                e.to_string(),
+                            )
+                        })?;
                     if let ArchivalEventResponse::Index(i) = r {
                         current_path = current_path.append(ValuePathComponent::Index(i));
                     } else {
@@ -397,7 +405,13 @@ impl Command {
                             }),
                             None,
                         )
-                        .map_err(|e| ImportError::WriteError(e.to_string()))?;
+                        .map_err(|e| {
+                            ImportError::WriteError(
+                                object.to_string(),
+                                f.to_string(),
+                                e.to_string(),
+                            )
+                        })?;
                     file_name
                 }
             };
@@ -424,7 +438,13 @@ impl Command {
                             }),
                             None,
                         )
-                        .map_err(|e| ImportError::WriteError(e.to_string()))?;
+                        .map_err(|e| {
+                            ImportError::WriteError(
+                                object.to_string(),
+                                filename.to_string(),
+                                e.to_string(),
+                            )
+                        })?;
                     unused_cols.remove(from_name);
                 } else {
                     println!("field '{}' not found in row: {:?}", from_name, row);
@@ -462,7 +482,13 @@ impl Command {
                                 }),
                                 None,
                             )
-                            .map_err(|e| ImportError::WriteError(e.to_string()))?;
+                            .map_err(|e| {
+                                ImportError::WriteError(
+                                    object.to_string(),
+                                    filename.to_string(),
+                                    e.to_string(),
+                                )
+                            })?;
                     }
                 }
             }
