@@ -141,7 +141,7 @@ impl BinaryCommand for Command {
         let mut headers = HeaderMap::new();
         headers.append(
             AUTHORIZATION,
-            format!("token {}", access_token).parse().unwrap(),
+            format!("Bearer {}", access_token).parse().unwrap(),
         );
         let client = reqwest::blocking::Client::builder()
             .default_headers(headers)
