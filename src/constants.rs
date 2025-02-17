@@ -23,7 +23,7 @@ pub const API_URL: &str = "https://api.archival.dev";
 pub const AUTH_URL: &str = "http://localhost:8788/cli-login";
 #[cfg(not(debug_assertions))]
 #[cfg(feature = "binary")]
-pub const AUTH_URL: &str = "https://archival.dev/cli-login";
+pub const AUTH_URL: &str = "https://editor.archival.dev/cli-login";
 #[cfg(debug_assertions)]
 #[cfg(feature = "binary")]
 pub const CLI_TOKEN_PUBLIC_KEY: &str = r#"-----BEGIN PUBLIC KEY-----
