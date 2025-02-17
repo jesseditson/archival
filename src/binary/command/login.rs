@@ -1,7 +1,7 @@
 use super::BinaryCommand;
 use crate::{
     binary::{ArchivalConfig, ExitStatus},
-    constants::{AUTH_URL, CLI_TOKEN_PUBLIC_KEY},
+    constants::{API_URL, AUTH_URL, CLI_TOKEN_PUBLIC_KEY},
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::ArgMatches;
@@ -29,13 +29,13 @@ impl BinaryCommand for Command {
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let config_file_path = ArchivalConfig::location();
         let secret_client_id = nanoid!(21);
-        let public_key = RsaPublicKey::from_public_key_pem(CLI_TOKEN_PUBLIC_KEY)?;
+        let public_key = RsaPublicKey::from_public_key_pem(CLI_TOKEN_PUBLIC_KEY).unwrap();
         let mut rng = rand::thread_rng();
         let padding = Oaep::new::<Sha256>();
         let enc_data = public_key.encrypt(&mut rng, padding, secret_client_id.as_bytes())?;
         let b64_encoded = STANDARD.encode(enc_data);
         let auth_url = format!("{}?code={}", AUTH_URL, urlencoding::encode(&b64_encoded));
-        let token_url = format!("{}/token", AUTH_URL);
+        let token_url = format!("{}/cli-token", API_URL);
         println!("To log in, open this URL in your browser\n{}", auth_url);
         let bar = ProgressBar::new_spinner();
         bar.set_style(ProgressStyle::with_template("{msg} {spinner}").unwrap());
