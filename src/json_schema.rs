@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde_json::json;
+use time::Date;
 
 use crate::{fields::FieldType, ObjectDefinition};
 
@@ -10,6 +11,9 @@ pub type ObjectSchema = serde_json::Map<String, serde_json::Value>;
 pub struct ObjectSchemaOptions {
     pub omit_file_types: bool,
     pub all_fields_required: bool,
+    // If a "date" format isn't supported, this option allows setting them to a
+    // static value.
+    pub set_dates_to: Option<Date>,
     pub name: Option<String>,
     pub property_overrides: HashMap<FieldType, serde_json::Map<String, serde_json::Value>>,
 }
@@ -36,6 +40,10 @@ impl ObjectSchemaOptions {
     }
     pub fn with_name(mut self, name: String) -> Self {
         self.name = Some(name);
+        self
+    }
+    pub fn with_date(mut self, date: Date) -> Self {
+        self.set_dates_to = Some(date);
         self
     }
 }

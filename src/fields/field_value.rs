@@ -478,7 +478,21 @@ impl From<&serde_json::Value> for FieldValue {
                     Err(_) => FieldValue::Meta(Meta::from(o)),
                 }
             }
-            serde_json::Value::Array(_) => panic!("cannot convert from json array to FieldValue"),
+            serde_json::Value::Array(v) => FieldValue::Objects(
+                v.iter()
+                    .map(|val| {
+                        let mut map = BTreeMap::new();
+                        if let Some(obj) = val.as_object() {
+                            for (k, v) in obj.iter() {
+                                map.insert(k.to_string(), FieldValue::from(v));
+                            }
+                        } else {
+                            panic!("Invalid value {} for child", val);
+                        }
+                        map
+                    })
+                    .collect(),
+            ),
         }
     }
 }

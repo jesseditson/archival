@@ -156,12 +156,24 @@ impl FieldType {
                     let mut schema = serde_json::Map::new();
                     schema.insert("description".into(), description.into());
                     schema.insert("type".into(), "string".into());
-                    schema.insert("format".into(), "date".into());
+                    if let Some(date) = options.set_dates_to {
+                        schema.insert(
+                            "const".into(),
+                            date.format(
+                                &time::format_description::parse("YYYY-MM-DD HH:MM:SS").unwrap(),
+                            )
+                            .unwrap()
+                            .into(),
+                        );
+                    } else {
+                        schema.insert("format".into(), "date".into());
+                    }
                     schema
                 } else {
                     let mut schema = serde_json::Map::new();
                     schema.insert("description".into(), description.into());
                     // Simple types
+                    let mut is_object = false;
                     schema.insert(
                         "type".into(),
                         match self {
@@ -169,11 +181,23 @@ impl FieldType {
                             Self::Number => "number".into(),
                             Self::Markdown => "string".into(),
                             Self::Boolean => "boolean".into(),
-                            // At some point, we should support providing a schema for meta types
-                            Self::Meta => "object".into(),
+                            // At some point, we should support providing a
+                            // schema for meta types, which would require
+                            // either inferring types based on validation or
+                            // allowing the template to directly provide a
+                            // schema for a given type.
+                            Self::Meta => {
+                                is_object = true;
+                                "object".into()
+                            }
                             _ => panic!("don't know how to parse a schema from {:?}", self),
                         },
                     );
+                    if is_object {
+                        schema.insert("additionalProperties".into(), false.into());
+                        schema.insert("properties".into(), serde_json::json!({}));
+                        schema.insert("required".into(), serde_json::json!([]));
+                    }
                     schema
                 }
             }
