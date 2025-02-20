@@ -34,7 +34,11 @@ impl BinaryCommand for Command {
         let padding = Oaep::new::<Sha256>();
         let enc_data = public_key.encrypt(&mut rng, padding, secret_client_id.as_bytes())?;
         let b64_encoded = STANDARD.encode(enc_data);
-        let auth_url = format!("{}?code={}", AUTH_URL, urlencoding::encode(&b64_encoded));
+        let auth_url = format!(
+            "{}?cli-code={}",
+            AUTH_URL,
+            urlencoding::encode(&b64_encoded)
+        );
         let token_url = format!("{}/cli-token", API_URL);
         println!("To log in, open this URL in your browser\n{}", auth_url);
         let bar = ProgressBar::new_spinner();
