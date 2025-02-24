@@ -157,14 +157,12 @@ impl FieldType {
                     schema.insert("description".into(), description.into());
                     schema.insert("type".into(), "string".into());
                     if let Some(date) = options.set_dates_to {
-                        schema.insert(
-                            "const".into(),
-                            date.format(
-                                &time::format_description::parse("YYYY-MM-DD HH:MM:SS").unwrap(),
-                            )
-                            .unwrap()
-                            .into(),
-                        );
+                        let fmt = time::format_description::parse(
+                            "[year]-[month]-[day] [hour]:[minute]:[second]",
+                        )
+                        .unwrap();
+                        let date_str = date.with_time(time::Time::MIDNIGHT).format(&fmt).unwrap();
+                        schema.insert("const".into(), date_str.into());
                     } else {
                         schema.insert("format".into(), "date".into());
                     }
