@@ -24,7 +24,9 @@ use events::{AddRootObjectEvent, ArchivalEventResponse};
 pub use fields::FieldConfig;
 pub use fields::FieldValue;
 use manifest::Manifest;
+use mime_guess::MimeGuess;
 use seahash::SeaHasher;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use site::Site;
 use std::cell::Cell;
@@ -70,6 +72,25 @@ pub struct BuildOptions {
 impl BuildOptions {
     pub fn no_static() -> Self {
         Self { skip_static: true }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DistFile {
+    pub path: PathBuf,
+    pub mime: String,
+    pub data: Vec<u8>,
+}
+impl DistFile {
+    fn new(path: PathBuf, data: Vec<u8>) -> Self {
+        Self {
+            mime: MimeGuess::from_path(&path)
+                .first_or_octet_stream()
+                .essence_str()
+                .to_string(),
+            data,
+            path,
+        }
     }
 }
 
@@ -178,6 +199,21 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn dist_file(&self, path: &Path) -> Option<Vec<u8>> {
         let path = self.site.manifest.build_dir.join(path);
         self.fs_mutex.with_fs(|fs| fs.read(&path)).unwrap_or(None)
+    }
+    pub fn dist_files(&self) -> Vec<DistFile> {
+        let mut files = vec![];
+        self.fs_mutex
+            .with_fs(|fs| {
+                let build_dir = &self.site.manifest.build_dir;
+                for file in fs.walk_dir(build_dir, true)? {
+                    if let Some(data) = fs.read(&build_dir.join(&file)).unwrap_or(None) {
+                        files.push(DistFile::new(file, data));
+                    }
+                }
+                Ok(())
+            })
+            .unwrap();
+        files
     }
     pub fn object_exists(&self, obj_type: &str, filename: &str) -> Result<bool, Box<dyn Error>> {
         self.fs_mutex
@@ -561,20 +597,6 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn clone_fs(&self) -> Result<F, Box<dyn Error>> {
         self.fs_mutex.with_fs(|fs| Ok(fs.clone()))
     }
-
-    #[cfg(test)]
-    pub fn dist_files(&self) -> Vec<String> {
-        let mut files = vec![];
-        self.fs_mutex
-            .with_fs(|fs| {
-                for file in fs.walk_dir(&self.site.manifest.build_dir, true)? {
-                    files.push(file.display().to_string());
-                }
-                Ok(())
-            })
-            .unwrap();
-        files
-    }
 }
 
 #[cfg(test)]
@@ -622,15 +644,18 @@ mod lib {
             assert_eq!(img.url, "test://uploads-url/test-sha");
         }
         archival.build(BuildOptions::default())?;
-        println!("dist_files: \n{:#?}", archival.dist_files());
-        assert!(archival.dist_files().contains(&as_path_str("index.html")));
-        assert!(archival.dist_files().contains(&as_path_str("404.html")));
-        assert!(archival
+        let dist_files = archival
             .dist_files()
-            .contains(&as_path_str("post/a-post.html")));
-        assert!(archival.dist_files().contains(&as_path_str("img/guy.webp")));
-        assert!(archival.dist_files().contains(&as_path_str("rss.rss")));
-        assert_eq!(archival.dist_files().len(), 20);
+            .into_iter()
+            .map(|f| f.path.display().to_string())
+            .collect::<Vec<String>>();
+        println!("dist_files: \n{:#?}", dist_files);
+        assert!(dist_files.contains(&as_path_str("index.html")));
+        assert!(dist_files.contains(&as_path_str("404.html")));
+        assert!(dist_files.contains(&as_path_str("post/a-post.html")));
+        assert!(dist_files.contains(&as_path_str("img/guy.webp")));
+        assert!(dist_files.contains(&as_path_str("rss.rss")));
+        assert_eq!(dist_files.len(), 17);
         let guy = archival.dist_file(Path::new("img/guy.webp"));
         assert!(guy.is_some());
         let post_html = archival
