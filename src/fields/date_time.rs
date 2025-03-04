@@ -7,7 +7,9 @@ use std::{
     error::Error,
     fmt::{self, Debug, Display},
 };
-use time::{format_description, OffsetDateTime as DateTimeImpl, UtcOffset};
+use time::{
+    format_description, macros::format_description, OffsetDateTime as DateTimeImpl, UtcOffset,
+};
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
@@ -19,6 +21,9 @@ pub struct DateTime {
 
 static YEAR_FIRST_FMT_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?<year>\d{4})[\/-](?<month>\d{2})[\/-](?<day>\d{2})").unwrap());
+static SHORT_DATE_FMT_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?<month>\d{1,2})\/(?<day>\d{1,2})\/(?<year>\d{2,4})(?<rest>.*)$").unwrap()
+});
 
 impl DateTime {
     pub fn from(str: &str) -> Result<Self, InvalidFieldError> {
@@ -169,34 +174,46 @@ impl Display for DateTime {
 ///
 /// * `dow_mon` format with an offset: "Tue Feb 16 10:00:00 2016 +0100"
 fn parse_date_time(s: &str) -> Option<DateTimeImpl> {
-    use regex::Regex;
-    use time::macros::format_description;
-
-    const USER_FORMATS: &[&[time::format_description::FormatItem<'_>]] = &[
-        DATE_TIME_FORMAT,
-        DATE_TIME_FORMAT_SUBSEC,
-        format_description!("[day] [month repr:long] [year] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"),
-        format_description!("[day] [month repr:short] [year] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"),
-        format_description!("[month]/[day]/[year] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"),
-        format_description!("[month padding:none]/[day padding:none]/[year repr:last_two] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"),
-        format_description!("[weekday repr:short] [month repr:short] [day padding:none] [hour]:[minute]:[second] [year] [offset_hour sign:mandatory][offset_minute]"),
-    ];
-
     if s.is_empty() {
         None
     } else if let "now" | "today" = s.to_lowercase().trim() {
         Some(DateTimeImpl::now_utc())
     } else {
+        let mut s = s.to_string();
+        if let Some(matches) = SHORT_DATE_FMT_RE.captures(&s) {
+            let mut year = matches["year"].to_string();
+            if year.len() == 2 {
+                let current_year = format!("{}", time::OffsetDateTime::now_utc().year());
+                year = format!("{}{}", &current_year[..2], year);
+            }
+            s = format!(
+                "{:0>2}/{:0>2}/{}{}",
+                &matches["month"], &matches["day"], year, &matches["rest"]
+            );
+        }
+
         let offset_re = Regex::new(r"[+-][01][0-9]{3}$").unwrap();
 
-        let offset = if offset_re.is_match(s) { "" } else { " +0000" };
-        let s = s.to_owned() + offset;
+        let offset = if offset_re.is_match(&s) { "" } else { " +0000" };
+        let s = s + offset;
 
         USER_FORMATS
             .iter()
             .find_map(|f| DateTimeImpl::parse(s.as_str(), f).ok())
     }
 }
+
+const USER_FORMATS: &[&[time::format_description::FormatItem<'_>]] = &[
+        DATE_TIME_FORMAT,
+        DATE_TIME_FORMAT_SUBSEC,
+        format_description!("[day] [month repr:long] [year] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"),
+        format_description!("[day] [month repr:short] [year] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"),
+        format_description!("[month]/[day]/[year] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"),
+        // This doesn't work - last_two appears to only work as a format, and
+        // always fails when parsing.
+        // format_description!("[month padding:none]/[day padding:none]/[year padding:none repr:last_two] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"),
+        format_description!("[weekday repr:short] [month repr:short] [day padding:none] [hour]:[minute]:[second] [year] [offset_hour sign:mandatory][offset_minute]"),
+    ];
 
 const DATE_TIME_FORMAT: &[time::format_description::FormatItem<'static>] = time::macros::format_description!(
     "[year]-[month]-[day] [hour]:[minute]:[second] [offset_hour sign:mandatory][offset_minute]"
@@ -251,7 +268,6 @@ mod test {
     fn parse_date_time_serialized_format() {
         let input = "2016-02-16 10:00:00 +0100"; // default format with offset
         let actual = DateTime::from(input);
-        println!("{:#?}", actual);
         assert_eq!(actual.unwrap().unix_timestamp(), 1455613200);
 
         let input = "2016-02-16 10:00:00 +0000"; // default format UTC
@@ -309,15 +325,15 @@ mod test {
     }
     #[test]
     fn parse_date_time_short_mdy_format() {
-        let input = "02/16/2016 10:00:00 +0100"; // mdy format with offset
+        let input = "2/16/16 10:00:00 +0100"; // mdy format with offset
         let actual = DateTime::from(input);
         assert_eq!(actual.unwrap().unix_timestamp(), 1455613200);
 
-        let input = "02/16/2016 10:00:00 +0000"; // mdy format UTC
+        let input = "2/16/16 10:00:00 +0000"; // mdy format UTC
         let actual = DateTime::from(input);
         assert_eq!(actual.unwrap().unix_timestamp(), 1455616800);
 
-        let input = "02/16/2016 10:00:00"; // mdy format no offset
+        let input = "2/16/16 10:00:00"; // mdy format no offset
         let actual = DateTime::from(input);
         assert_eq!(actual.unwrap().unix_timestamp(), 1455616800);
     }
