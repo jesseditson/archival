@@ -6,7 +6,7 @@ use typescript_type_def::TypeDef;
 
 use crate::{value_path::ValuePath, FieldValue};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub enum ArchivalEvent {
     AddObject(AddObjectEvent),
@@ -94,7 +94,7 @@ pub enum ArchivalEventResponse {
     Index(usize),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct EditFieldEvent {
     pub object: String,
@@ -104,7 +104,7 @@ pub struct EditFieldEvent {
     pub value: Option<FieldValue>,
     pub source: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct EditOrderEvent {
     pub object: String,
@@ -113,7 +113,7 @@ pub struct EditOrderEvent {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct DeleteObjectEvent {
     pub object: String,
@@ -121,14 +121,14 @@ pub struct DeleteObjectEvent {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct AddObjectValue {
     pub path: ValuePath,
     pub value: FieldValue,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct AddObjectEvent {
     pub object: String,
@@ -137,14 +137,14 @@ pub struct AddObjectEvent {
     pub values: Vec<AddObjectValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct AddRootObjectEvent {
     pub object: String,
     pub values: Vec<AddObjectValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct ChildEvent {
     pub object: String,

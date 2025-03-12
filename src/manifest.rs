@@ -46,6 +46,12 @@ pub enum InvalidManifestError {
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Validator(#[cfg_attr(feature = "typescript", type_def(type_of = "String"))] Regex);
 
+impl PartialEq for Validator {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
 impl Validator {
     pub fn new(regex: &str, name: &str) -> Result<Self, InvalidManifestError> {
         Ok(Self(Regex::new(regex).map_err(|e| {
@@ -97,14 +103,14 @@ impl<'de> Deserialize<'de> for Validator {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ManifestEditorTypePathValidator {
     pub path: ValuePath,
     pub validate: Validator,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ManifestEditorTypeValidator {
     Value(Validator),
@@ -142,7 +148,7 @@ impl From<&ManifestEditorTypeValidator> for toml::Value {
         }
     }
 }
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ManifestEditorType {
     pub alias_of: String,
@@ -164,7 +170,7 @@ impl From<&ManifestEditorType> for toml::Value {
 
 pub type EditorTypes = HashMap<String, ManifestEditorType>;
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Manifest {
     #[serde(skip)]

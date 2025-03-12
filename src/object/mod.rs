@@ -17,7 +17,7 @@ use tracing::{instrument, warn};
 mod object_entry;
 pub use object_entry::ObjectEntry;
 
-#[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone)]
+#[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Object {
     pub filename: String,

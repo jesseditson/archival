@@ -27,7 +27,7 @@ mod typedefs {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ObjectDefinition {
     pub name: String,
