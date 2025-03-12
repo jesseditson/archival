@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://archival.dev/archival_template.schema.json",
+  "type": "object",
+  "properties": {
+    "name": {
+      "description": "The name of this template, to be shown to users and in the editor UI",
+      "type": "string"
+    },
+    "description": {
+      "description": "A (markdown-compatible) description of this template, to be shown to users and in the editor UI.",
+      "type": "string"
+    },
+    "assets": {
+      "description": "A list of assets that the template itself uses. These assets will not be copied when cloning the template, so this field also serves as an 'ignore' list. Items in this list follow the same conventions as a .gitignore line.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tags": {
+      "description": "A list of strings, which are arbitrary but can be used by the editor to generate context about this template.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "topics": {
+      "description": "A list of strings, which will be added as the topics of any github repos generated from this template.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "context": {
+      "description": "This field defines human-readable context about this template that is used to help LLMs understand when it is appropriate to suggest this template, and may contain helpful meta-context about the schema provided by this template. For instance, this may contain text like 'the site.file field is displayed as the primary download for the site, and should be a zip file'.",
+      "type": "string"
+    },
+    "tlds": {
+      "description": "This field is a list of strings, which should all be valid tlds (including the leading dot) that might be a good match for this template. For instance, an app template might list '.app'.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "required": ["name", "description"]
+  }
+}
