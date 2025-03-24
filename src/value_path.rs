@@ -16,8 +16,8 @@ pub enum ValuePathError {
     NotChildren(String, String),
     #[error("Path {0} was not found in {1}")]
     NotFound(String, String),
-    #[error("Cannot remove {0}")]
-    InvalidRemovePath(String),
+    #[error("Child path was missing an index {0}")]
+    ChildPathMissingIndex(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
@@ -437,12 +437,17 @@ impl ValuePath {
     }
 
     pub fn remove_child(&mut self, object: &mut Object) -> Result<(), ValuePathError> {
-        if let Some(ValuePathComponent::Index(index)) = self.pop() {
-            self.modify_children(object, |children| {
-                children.remove(index);
-            })
+        if let Some(component) = self.pop() {
+            match component {
+                ValuePathComponent::Index(index) => self.modify_children(object, |children| {
+                    children.remove(index);
+                }),
+                ValuePathComponent::Key(_) => Err(ValuePathError::ChildPathMissingIndex(
+                    self.clone().append(component).to_string(),
+                )),
+            }
         } else {
-            Err(ValuePathError::InvalidRemovePath(self.to_string()))
+            Err(ValuePathError::ChildPathMissingIndex(self.to_string()))
         }
     }
     fn modify_children<R>(
