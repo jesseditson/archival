@@ -27,8 +27,10 @@ use tracing::{debug, error, instrument, trace_span, warn};
 
 #[derive(Error, Debug, Clone)]
 pub enum InvalidFileError {
-    #[error("unrecognized file type ({0})")]
-    UnrecognizedType(String),
+    #[error("missing extension in path ({0})")]
+    MissingFileExtension(PathBuf),
+    #[error("unrecognized file type '{0}' in path {0}")]
+    UnrecognizedType(String, PathBuf),
     #[error("cannot define both {0} and {1}")]
     DuplicateObjectDefinition(String, String),
     #[error("invalid root object {0}: {1}")]
@@ -265,7 +267,9 @@ impl Site {
     fn path_for_object(&self, object_name: &str, filename: Option<&str>) -> PathBuf {
         let objects_dir = &self.manifest.objects_dir;
         if let Some(filename) = filename {
-            objects_dir.join(object_name).join(filename)
+            objects_dir
+                .join(object_name)
+                .join(format!("{}.toml", filename))
         } else {
             objects_dir.join(format!("{}.toml", object_name))
         }
@@ -341,12 +345,15 @@ impl Site {
         cache: &mut RefMut<HashMap<PathBuf, Object>>,
         fs: &T,
     ) -> Result<Object, Box<dyn Error>> {
-        if path
+        let ext = path
             .extension()
-            .map_or("", |e| e.to_str().map_or("", |o| o))
-            != "toml"
-        {
-            return Err(InvalidFileError::UnrecognizedType(format!("{:?}", path)).into());
+            .ok_or_else(|| InvalidFileError::MissingFileExtension(path.to_path_buf()))?;
+        if ext != "toml" {
+            return Err(InvalidFileError::UnrecognizedType(
+                ext.to_string_lossy().to_string(),
+                path.to_path_buf(),
+            )
+            .into());
         }
         if let Some(o) = cache.get(path) {
             Ok(o.clone())
