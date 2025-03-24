@@ -31,22 +31,16 @@ impl ValuePathComponent {
     pub fn key(name: &str) -> Self {
         Self::Key(name.to_string())
     }
-    pub fn as_key(vp: Option<Self>) -> Option<String> {
-        match vp {
-            Some(vp) => match vp {
-                ValuePathComponent::Key(k) => Some(k),
-                ValuePathComponent::Index(_) => None,
-            },
-            None => None,
+    pub fn as_key(self) -> Option<String> {
+        match self {
+            ValuePathComponent::Key(k) => Some(k),
+            ValuePathComponent::Index(_) => None,
         }
     }
-    pub fn as_index(vp: Option<Self>) -> Option<usize> {
-        match vp {
-            Some(vp) => match vp {
-                ValuePathComponent::Key(_) => None,
-                ValuePathComponent::Index(i) => Some(i),
-            },
-            None => None,
+    pub fn as_index(self) -> Option<usize> {
+        match self {
+            ValuePathComponent::Key(_) => None,
+            ValuePathComponent::Index(i) => Some(i),
         }
     }
 }

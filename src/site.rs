@@ -33,7 +33,6 @@ pub enum InvalidFileError {
     DuplicateObjectDefinition(String, String),
     #[error("invalid root object {0}: {1}")]
     InvalidRootObject(String, String),
-    #[cfg(feature = "json-schema")]
     #[error("unknown object {0}")]
     UnknownObject(String),
 }
@@ -245,6 +244,31 @@ impl Site {
     pub fn manifest_content<T: FileSystemAPI>(&self, fs: &T) -> Result<String, Box<dyn Error>> {
         fs.read_to_string(Path::new(MANIFEST_FILE_NAME))
             .map(|m| m.unwrap_or_default())
+    }
+
+    #[instrument(skip(fs))]
+    pub fn get_object<T: FileSystemAPI>(
+        &self,
+        object_name: &str,
+        filename: Option<&str>,
+        fs: &T,
+    ) -> Result<Object, Box<dyn Error>> {
+        let object_def = self
+            .object_definitions
+            .get(object_name)
+            .ok_or_else(|| InvalidFileError::UnknownObject(object_name.to_string()))?;
+        let path = self.path_for_object(object_name, filename);
+        let mut cache = self.obj_cache.borrow_mut();
+        self.object_for_path(&path, object_def, &mut cache, fs)
+    }
+
+    fn path_for_object(&self, object_name: &str, filename: Option<&str>) -> PathBuf {
+        let objects_dir = &self.manifest.objects_dir;
+        if let Some(filename) = filename {
+            objects_dir.join(object_name).join(filename)
+        } else {
+            objects_dir.join(format!("{}.toml", object_name))
+        }
     }
 
     #[instrument(skip(fs, sort))]

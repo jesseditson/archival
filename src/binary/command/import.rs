@@ -1,7 +1,7 @@
 use super::BinaryCommand;
 use crate::{
     binary::ExitStatus,
-    events::{AddObjectEvent, ArchivalEvent, ArchivalEventResponse, ChildEvent, EditFieldEvent},
+    events::{AddChildEvent, AddObjectEvent, ArchivalEvent, ArchivalEventResponse, EditFieldEvent},
     file_system_stdlib,
     object::{ObjectEntry, ValuePath},
     value_path::ValuePathComponent,
@@ -368,11 +368,11 @@ impl Command {
                 ImportName::File(f) => {
                     let r = archival
                         .send_event(
-                            ArchivalEvent::AddChild(ChildEvent {
+                            ArchivalEvent::AddChild(AddChildEvent {
                                 object: object.to_string(),
                                 filename: f.to_string(),
                                 path: current_path.to_owned(),
-                                source: None,
+                                values: vec![],
                             }),
                             None,
                         )

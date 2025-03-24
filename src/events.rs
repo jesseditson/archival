@@ -14,8 +14,8 @@ pub enum ArchivalEvent {
     DeleteObject(DeleteObjectEvent),
     EditField(EditFieldEvent),
     EditOrder(EditOrderEvent),
-    AddChild(ChildEvent),
-    RemoveChild(ChildEvent),
+    AddChild(AddChildEvent),
+    RemoveChild(RemoveChildEvent),
 }
 
 impl ArchivalEvent {
@@ -146,7 +146,16 @@ pub struct AddRootObjectEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
-pub struct ChildEvent {
+pub struct AddChildEvent {
+    pub object: String,
+    pub filename: String,
+    pub path: ValuePath,
+    pub values: Vec<AddObjectValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "typescript", derive(TypeDef))]
+pub struct RemoveChildEvent {
     pub object: String,
     pub filename: String,
     pub path: ValuePath,

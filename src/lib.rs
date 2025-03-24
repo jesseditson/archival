@@ -18,7 +18,8 @@ mod test_utils;
 mod value_path;
 pub use constants::{MANIFEST_FILE_NAME, MIN_COMPAT_VERSION};
 use events::{
-    AddObjectEvent, ArchivalEvent, ChildEvent, DeleteObjectEvent, EditFieldEvent, EditOrderEvent,
+    AddChildEvent, AddObjectEvent, ArchivalEvent, DeleteObjectEvent, EditFieldEvent,
+    EditOrderEvent, RemoveChildEvent,
 };
 use events::{AddRootObjectEvent, ArchivalEventResponse};
 pub use fields::FieldConfig;
@@ -485,6 +486,11 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         self.fs_mutex.with_fs(|fs| self.site.get_objects(fs))
     }
 
+    pub fn get_object(&self, name: &str, filename: Option<&str>) -> Result<Object, Box<dyn Error>> {
+        self.fs_mutex
+            .with_fs(|fs| self.site.get_object(name, filename, fs))
+    }
+
     pub fn get_objects_sorted(
         &self,
         sort: impl Fn(&Object, &Object) -> Ordering,
@@ -511,7 +517,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(ArchivalEventResponse::None)
     }
 
-    fn add_child(&self, event: ChildEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    fn add_child(&self, event: AddChildEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let obj_def = self
             .site
             .object_definitions
@@ -527,7 +533,10 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         })?;
         Ok(ArchivalEventResponse::Index(added_idx))
     }
-    fn remove_child(&self, event: ChildEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    fn remove_child(
+        &self,
+        event: RemoveChildEvent,
+    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         self.write_object(&event.object, &event.filename, move |existing| {
             let mut path = event.path;
             path.remove_child(existing)?;
@@ -831,11 +840,11 @@ mod lib {
         assert_eq!(rendered_links.len(), 1);
         archival
             .send_event(
-                ArchivalEvent::AddChild(ChildEvent {
+                ArchivalEvent::AddChild(AddChildEvent {
                     object: "post".to_string(),
                     filename: "a-post".to_string(),
                     path: ValuePath::default().append(ValuePathComponent::key("links")),
-                    source: None,
+                    values: vec![],
                 }),
                 Some(BuildOptions::default()),
             )
@@ -882,7 +891,7 @@ mod lib {
         let archival = Archival::new(fs)?;
         archival
             .send_event(
-                ArchivalEvent::RemoveChild(ChildEvent {
+                ArchivalEvent::RemoveChild(RemoveChildEvent {
                     object: "post".to_string(),
                     filename: "a-post".to_string(),
                     path: ValuePath::default()

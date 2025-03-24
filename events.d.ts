@@ -87,7 +87,13 @@ export type EditOrderEvent = {
     "order": I32;
     "source": (string | null);
 };
-export type ChildEvent = {
+export type AddChildEvent = {
+    "object": string;
+    "filename": string;
+    "path": ValuePath;
+    "values": (AddObjectValue)[];
+};
+export type RemoveChildEvent = {
     "object": string;
     "filename": string;
     "path": ValuePath;
@@ -104,7 +110,7 @@ export type ArchivalEvent = ({
 } | {
     "EditOrder": EditOrderEvent;
 } | {
-    "AddChild": ChildEvent;
+    "AddChild": AddChildEvent;
 } | {
-    "RemoveChild": ChildEvent;
+    "RemoveChild": RemoveChildEvent;
 });
