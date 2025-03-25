@@ -5,17 +5,17 @@ use crate::{
 };
 use liquid::ValueView;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{collections::BTreeMap, fmt::Display};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ValuePathError {
     #[error("Child definition not found for path {0} in {1}")]
-    ChildDefNotFound(String, String),
+    ChildDefNotFound(ValuePath, String),
     #[error("Path {0} was not a children type in {1}")]
-    NotChildren(String, String),
+    NotChildren(ValuePath, String),
     #[error("Path {0} was not found in {1}")]
-    NotFound(String, String),
+    NotFound(ValuePath, String),
     #[error("Child path was missing an index {0}")]
     ChildPathMissingIndex(String),
 }
@@ -177,6 +177,12 @@ impl ValuePath {
         }
     }
 
+    pub fn without_first(&self) -> ValuePath {
+        ValuePath {
+            path: self.path[1..].to_vec(),
+        }
+    }
+
     pub fn pop(&mut self) -> Option<ValuePathComponent> {
         self.path.pop()
     }
@@ -238,10 +244,7 @@ impl ValuePath {
                             }
                         }
                     }
-                    return Err(ValuePathError::NotFound(
-                        self.to_string(),
-                        field.to_string(),
-                    ));
+                    return Err(ValuePathError::NotFound(self.clone(), field.to_string()));
                 }
                 ValuePathComponent::Key(k) => match last_val {
                     FieldValue::Meta(m) => {
@@ -250,27 +253,19 @@ impl ValuePath {
                             .get_in_meta(m)
                             .map(FoundValue::Meta)
                             .ok_or_else(|| {
-                                ValuePathError::NotFound(self.to_string(), field.to_string())
+                                ValuePathError::NotFound(self.clone(), field.to_string())
                             });
                     }
                     FieldValue::File(f) => {
                         return f.get_key(k).map(FoundValue::String).ok_or_else(|| {
-                            ValuePathError::NotFound(self.to_string(), field.to_string())
+                            ValuePathError::NotFound(self.clone(), field.to_string())
                         })
                     }
-                    _ => {
-                        return Err(ValuePathError::NotFound(
-                            self.to_string(),
-                            field.to_string(),
-                        ))
-                    }
+                    _ => return Err(ValuePathError::NotFound(self.clone(), field.to_string())),
                 },
             }
         }
-        Err(ValuePathError::NotFound(
-            self.to_string(),
-            field.to_string(),
-        ))
+        Err(ValuePathError::NotFound(self.clone(), field.to_string()))
     }
 
     pub fn get_in_object<'a>(&self, object: &'a Object) -> Option<&'a FieldValue> {
@@ -379,7 +374,7 @@ impl ValuePath {
                         continue;
                     } else {
                         return Err(ValuePathError::NotFound(
-                            self.to_string(),
+                            self.clone(),
                             format!("{:?}", &def),
                         ));
                     }
@@ -392,7 +387,7 @@ impl ValuePath {
             }
         }
         Err(ValuePathError::NotFound(
-            self.to_string(),
+            self.clone(),
             format!("{:?}", &def),
         ))
     }
@@ -416,7 +411,7 @@ impl ValuePath {
                 }
             }
             return Err(ValuePathError::ChildDefNotFound(
-                self.to_string(),
+                self.clone(),
                 format!("{:?}", def),
             ));
         }
@@ -427,9 +422,11 @@ impl ValuePath {
         &self,
         object: &mut Object,
         obj_def: &ObjectDefinition,
+        modify: impl FnOnce(&mut BTreeMap<String, FieldValue>) -> Result<(), ValuePathError>,
     ) -> Result<usize, ValuePathError> {
         let child_def = self.get_definition(obj_def)?;
-        let new_child = field_value::def_to_values(&child_def.fields);
+        let mut new_child = field_value::def_to_values(&child_def.fields);
+        modify(&mut new_child)?;
         self.modify_children(object, |children| {
             children.push(new_child);
             children.len() - 1
@@ -450,7 +447,7 @@ impl ValuePath {
             Err(ValuePathError::ChildPathMissingIndex(self.to_string()))
         }
     }
-    fn modify_children<R>(
+    pub fn modify_children<R>(
         &self,
         object: &mut Object,
         modify: impl FnOnce(&mut Vec<ObjectValues>) -> R,
@@ -484,7 +481,7 @@ impl ValuePath {
                 }
             }
             return Err(ValuePathError::NotChildren(
-                self.to_string(),
+                self.clone(),
                 format!("{:?}", object),
             ));
         }
@@ -492,13 +489,46 @@ impl ValuePath {
             Ok(modify(children))
         } else {
             Err(ValuePathError::NotChildren(
-                self.to_string(),
+                self.clone(),
                 format!("{:?}", object),
             ))
         }
     }
 
-    pub fn set_in_object(&self, object: &mut Object, value: Option<FieldValue>) {
+    pub fn set_in_tree(
+        &self,
+        child: &mut BTreeMap<String, FieldValue>,
+        value: Option<FieldValue>,
+    ) -> Result<(), ValuePathError> {
+        let mut path = self.path.clone();
+        if let ValuePathComponent::Key(key) = path.remove(0) {
+            if self.path.len() == 1 {
+                // On the last node, either remove or set the value
+                if let Some(value) = value {
+                    child.insert(key, value);
+                } else {
+                    child.remove(&key);
+                }
+                return Ok(());
+            } else if let Some(FieldValue::Objects(children)) = child.get_mut(&key) {
+                if let ValuePathComponent::Index(idx) = path.remove(0) {
+                    if let Some(child) = children.get_mut(idx) {
+                        return ValuePath::from(path).set_in_tree(child, value);
+                    }
+                }
+            }
+        }
+        Err(ValuePathError::NotFound(
+            self.clone(),
+            format!("{:?}", child),
+        ))
+    }
+
+    pub fn set_in_object(
+        &self,
+        object: &mut Object,
+        value: Option<FieldValue>,
+    ) -> Result<(), ValuePathError> {
         let mut i_path = self.path.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
@@ -531,22 +561,14 @@ impl ValuePath {
                             children.push(ObjectValues::new());
                         }
                         let child = children.get_mut(index).unwrap();
-                        if let Some(ValuePathComponent::Key(k)) = i_path.next() {
-                            if i_path.len() > 0 {
-                                last_val = child.get_mut(&k);
-                                continue;
-                            } else {
-                                match value {
-                                    Some(value) => child.insert(k, value),
-                                    None => child.remove(&k),
-                                };
-                            }
-                        }
+                        ValuePath::from(i_path.collect::<Vec<ValuePathComponent>>())
+                            .set_in_tree(child, value)?;
                     }
                 }
             }
             break;
         }
+        Ok(())
     }
 }
 
@@ -556,12 +578,43 @@ impl From<&str> for ValuePath {
     }
 }
 
+impl From<Vec<ValuePathComponent>> for ValuePath {
+    fn from(value: Vec<ValuePathComponent>) -> Self {
+        Self { path: value }
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
 
+    use super::*;
     use std::error::Error;
 
-    use super::*;
+    fn child_def() -> ObjectDefinition {
+        let mut fields = BTreeMap::new();
+        fields.insert("name".to_string(), FieldType::String);
+        ObjectDefinition {
+            name: "child".to_string(),
+            fields,
+            field_order: vec!["name".to_string()],
+            template: None,
+            children: BTreeMap::new(),
+        }
+    }
+
+    fn obj_def() -> ObjectDefinition {
+        let mut fields = BTreeMap::new();
+        fields.insert("title".to_string(), FieldType::String);
+        let mut children = BTreeMap::new();
+        children.insert("children".to_string(), child_def());
+        ObjectDefinition {
+            name: "object".to_string(),
+            fields,
+            field_order: vec!["title".to_string()],
+            template: None,
+            children,
+        }
+    }
 
     fn object() -> Object {
         Object {
@@ -571,21 +624,28 @@ pub mod tests {
             path: "".to_string(),
             values: ObjectValues::from([
                 ("title".to_string(), FieldValue::String("title".to_string())),
-                (
-                    "children".to_string(),
-                    FieldValue::Objects(vec![
-                        ObjectValues::from([(
-                            "name".to_string(),
-                            FieldValue::String("NAME ONE!".to_string()),
-                        )]),
-                        ObjectValues::from([(
-                            "name".to_string(),
-                            FieldValue::String("NAME TWO!".to_string()),
-                        )]),
-                    ]),
-                ),
+                ("children".to_string(), tree().remove("children").unwrap()),
             ]),
         }
+    }
+
+    fn tree() -> BTreeMap<String, FieldValue> {
+        let mut tree = BTreeMap::new();
+        tree.insert("foo".to_string(), FieldValue::String("bar".to_string()));
+        tree.insert(
+            "children".to_string(),
+            FieldValue::Objects(vec![
+                ObjectValues::from([(
+                    "name".to_string(),
+                    FieldValue::String("NAME ONE!".to_string()),
+                )]),
+                ObjectValues::from([(
+                    "name".to_string(),
+                    FieldValue::String("NAME TWO!".to_string()),
+                )]),
+            ]),
+        );
+        tree
     }
 
     #[test]
@@ -598,5 +658,61 @@ pub mod tests {
         assert!(children.is_some());
 
         Ok(())
+    }
+
+    #[test]
+    fn set_in_tree_with_new_value() {
+        let mut tree = tree();
+
+        let vp = ValuePath::from_string("children.1.name");
+        let new_val = FieldValue::String("NEW NAME".to_string());
+        vp.set_in_tree(&mut tree, Some(new_val.clone())).unwrap();
+
+        let children = tree.get("children").unwrap();
+        assert!(matches!(children, FieldValue::Objects(_)));
+        if let FieldValue::Objects(o) = children {
+            let val = o[1].get("name");
+            assert_eq!(val.unwrap(), &new_val);
+        }
+    }
+
+    #[test]
+    fn set_in_tree_with_none() {
+        let mut tree = tree();
+
+        let vp = ValuePath::from_string("children.1.name");
+        vp.set_in_tree(&mut tree, None).unwrap();
+        let children = tree.get("children").unwrap();
+        assert!(matches!(children, FieldValue::Objects(_)));
+        if let FieldValue::Objects(o) = children {
+            assert!(!o[1].contains_key("name"));
+        }
+    }
+
+    #[test]
+    fn add_child() {
+        let mut obj = object();
+
+        let new_val = FieldValue::String("NEW NAME".to_string());
+        let vp = ValuePath::from_string("children");
+        let children = obj.values.get("children").unwrap();
+        assert!(matches!(children, FieldValue::Objects(_)));
+        let prev_len = if let FieldValue::Objects(o) = children {
+            o.len()
+        } else {
+            panic!("not objects");
+        };
+        vp.add_child(&mut obj, &obj_def(), |existing| {
+            ValuePath::from_string("name").set_in_tree(existing, Some(new_val.clone()))
+        })
+        .unwrap();
+
+        let children = obj.values.get("children").unwrap();
+        assert!(matches!(children, FieldValue::Objects(_)));
+        if let FieldValue::Objects(o) = children {
+            assert_eq!(o.len(), prev_len + 1);
+            let val = o.last().unwrap().get("name");
+            assert_eq!(val.unwrap(), &new_val);
+        }
     }
 }

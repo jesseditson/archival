@@ -504,7 +504,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             event
                 .path
                 .append((&event.field).into())
-                .set_in_object(existing, event.value);
+                .set_in_object(existing, event.value)?;
             Ok(existing)
         })?;
         Ok(ArchivalEventResponse::None)
@@ -528,7 +528,12 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             )))?;
         let mut added_idx = usize::MAX;
         self.write_object(&event.object, &event.filename, |existing| {
-            added_idx = event.path.add_child(existing, obj_def)?;
+            added_idx = event.path.add_child(existing, obj_def, |child| {
+                for value in event.values {
+                    value.path.set_in_tree(child, Some(value.value))?;
+                }
+                Ok(())
+            })?;
             Ok(existing)
         })?;
         Ok(ArchivalEventResponse::Index(added_idx))

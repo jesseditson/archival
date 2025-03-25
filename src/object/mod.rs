@@ -185,7 +185,9 @@ impl Object {
             values,
         };
         for default in defaults {
-            default.path.set_in_object(&mut object, Some(default.value));
+            default
+                .path
+                .set_in_object(&mut object, Some(default.value))?;
         }
         Ok(object)
     }
