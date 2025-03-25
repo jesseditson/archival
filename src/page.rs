@@ -5,6 +5,7 @@ use crate::{
 use liquid::{model::ScalarCow, ValueView};
 use liquid_core::Value;
 use once_cell::sync::Lazy;
+use pluralizer::pluralize;
 use regex::Regex;
 use std::{
     collections::BTreeMap,
@@ -169,15 +170,20 @@ impl<'a> Page<'a> {
     ) -> Result<String, Box<dyn Error>> {
         #[cfg(feature = "verbose-logging")]
         tracing::debug!("rendering {}", self.name);
-        let mut objects: BTreeMap<String, liquid::model::Value> = BTreeMap::new();
+        let mut globals = liquid::object!({ "page": self.name });
+        let mut objects = liquid::object!({});
         for (name, obj_entry) in objects_map {
             let values = match obj_entry {
                 ObjectEntry::List(l) => Value::array(l.iter().map(|o| o.liquid_object())),
                 ObjectEntry::Object(o) => o.liquid_object(),
             };
-            objects.insert(name.to_string(), values);
+            objects.insert(name.into(), values.clone());
+            globals.insert(
+                pluralize(name, obj_entry.count().try_into().unwrap(), false).into(),
+                values,
+            );
         }
-        let globals = liquid::object!({ "objects": objects, "page": self.name });
+        globals.insert("objects".into(), objects.into());
         if let Some(template_info) = &self.template {
             let template = parser.parse(&template_info.content)?;
             let mut object_vals = match template_info.object.values.to_value() {
@@ -189,10 +195,10 @@ impl<'a> Page<'a> {
                 "order": template_info.object.order,
                 "path": template_info.object.path,
             }));
-            let mut context = liquid::object!({
+            let mut context = globals.clone();
+            context.extend(liquid::object!({
               template_info.definition.name.to_owned(): object_vals
-            });
-            context.extend(globals);
+            }));
             return match template.render(&context) {
                 Ok(v) => Ok(v),
                 Err(error) => Err(error
@@ -299,7 +305,10 @@ mod tests {
         };
 
         BTreeMap::from([
-            ("artist".to_string(), ObjectEntry::from_vec(vec![artist])),
+            (
+                "artist".to_string(),
+                ObjectEntry::from_vec(vec![artist.clone(), artist]),
+            ),
             ("c".to_string(), ObjectEntry::from_vec(vec![c])),
         ])
     }
@@ -354,7 +363,7 @@ mod tests {
         {% for link in c.links %}
           link: {{link.url}}
         {% endfor %}
-        {% for artist in objects.artist %}
+        {% for artist in artists %}
           artist: {{artist.name}}
           path: {{artist.path}}
         {% endfor %}
@@ -407,7 +416,7 @@ mod tests {
         let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
         let object = objects_map["artist"].into_iter().next().unwrap();
-        println!("OBJ: {:?}", object);
+        println!("OBJ: {:#?}", object);
         let artist_def = artist_definition();
         let page = Page::new_with_template(
             "tormenta-rey".to_string(),

@@ -18,6 +18,18 @@ impl ObjectEntry {
     pub fn from_object(object: Object) -> Self {
         Self::Object(object)
     }
+    pub fn is_list(&self) -> bool {
+        matches!(self, ObjectEntry::List(_))
+    }
+    pub fn is_object(&self) -> bool {
+        matches!(self, ObjectEntry::Object(_))
+    }
+    pub fn count(&self) -> usize {
+        match self {
+            ObjectEntry::List(l) => l.len(),
+            ObjectEntry::Object(_) => 1,
+        }
+    }
 }
 
 pub struct ObjectEntryIterator<'a> {
