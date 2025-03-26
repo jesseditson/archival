@@ -373,6 +373,7 @@ impl Command {
                                 filename: f.to_string(),
                                 path: current_path.to_owned(),
                                 values: vec![],
+                                index: None,
                             }),
                             None,
                         )

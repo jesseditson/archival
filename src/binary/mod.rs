@@ -1,5 +1,5 @@
 pub mod command;
-mod config;
+pub mod config;
 use self::command::{ExitStatus, COMMANDS};
 use clap::{arg, command, value_parser, Command};
 pub use config::ArchivalConfig;

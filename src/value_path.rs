@@ -1,5 +1,5 @@
 use crate::{
-    fields::{field_value, meta::Meta, FieldType, FieldValue, MetaValue, ObjectValues},
+    fields::{meta::Meta, FieldType, FieldValue, MetaValue, ObjectValues},
     object::Object,
     ObjectDefinition,
 };
@@ -180,6 +180,11 @@ impl ValuePath {
     pub fn without_first(&self) -> ValuePath {
         ValuePath {
             path: self.path[1..].to_vec(),
+        }
+    }
+    pub fn without_last(&self) -> ValuePath {
+        ValuePath {
+            path: self.path[..1].to_vec(),
         }
     }
 
@@ -421,15 +426,19 @@ impl ValuePath {
     pub fn add_child(
         &self,
         object: &mut Object,
-        obj_def: &ObjectDefinition,
+        index: Option<usize>,
         modify: impl FnOnce(&mut BTreeMap<String, FieldValue>) -> Result<(), ValuePathError>,
     ) -> Result<usize, ValuePathError> {
-        let child_def = self.get_definition(obj_def)?;
-        let mut new_child = field_value::def_to_values(&child_def.fields);
+        let mut new_child = BTreeMap::new();
         modify(&mut new_child)?;
         self.modify_children(object, |children| {
-            children.push(new_child);
-            children.len() - 1
+            if let Some(index) = index {
+                children.insert(index, new_child);
+                index
+            } else {
+                children.push(new_child);
+                children.len() - 1
+            }
         })
     }
 
@@ -590,32 +599,6 @@ pub mod tests {
     use super::*;
     use std::error::Error;
 
-    fn child_def() -> ObjectDefinition {
-        let mut fields = BTreeMap::new();
-        fields.insert("name".to_string(), FieldType::String);
-        ObjectDefinition {
-            name: "child".to_string(),
-            fields,
-            field_order: vec!["name".to_string()],
-            template: None,
-            children: BTreeMap::new(),
-        }
-    }
-
-    fn obj_def() -> ObjectDefinition {
-        let mut fields = BTreeMap::new();
-        fields.insert("title".to_string(), FieldType::String);
-        let mut children = BTreeMap::new();
-        children.insert("children".to_string(), child_def());
-        ObjectDefinition {
-            name: "object".to_string(),
-            fields,
-            field_order: vec!["title".to_string()],
-            template: None,
-            children,
-        }
-    }
-
     fn object() -> Object {
         Object {
             filename: "test_filename".to_string(),
@@ -702,7 +685,7 @@ pub mod tests {
         } else {
             panic!("not objects");
         };
-        vp.add_child(&mut obj, &obj_def(), |existing| {
+        vp.add_child(&mut obj, None, |existing| {
             ValuePath::from_string("name").set_in_tree(existing, Some(new_val.clone()))
         })
         .unwrap();

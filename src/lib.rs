@@ -518,17 +518,9 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     }
 
     fn add_child(&self, event: AddChildEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
-        let obj_def = self
-            .site
-            .object_definitions
-            .get(&event.object)
-            .ok_or(ArchivalError::new(&format!(
-                "object not found: {}",
-                event.object
-            )))?;
         let mut added_idx = usize::MAX;
         self.write_object(&event.object, &event.filename, |existing| {
-            added_idx = event.path.add_child(existing, obj_def, |child| {
+            added_idx = event.path.add_child(existing, event.index, |child| {
                 for value in event.values {
                     value.path.set_in_tree(child, Some(value.value))?;
                 }
@@ -850,6 +842,7 @@ mod lib {
                     filename: "a-post".to_string(),
                     path: ValuePath::default().append(ValuePathComponent::key("links")),
                     values: vec![],
+                    index: None,
                 }),
                 Some(BuildOptions::default()),
             )

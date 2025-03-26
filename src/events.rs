@@ -151,6 +151,8 @@ pub struct AddChildEvent {
     pub filename: String,
     pub path: ValuePath,
     pub values: Vec<AddObjectValue>,
+    /// If not provided, this will just append to the end of the child list.
+    pub index: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
