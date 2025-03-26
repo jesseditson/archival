@@ -259,8 +259,14 @@ impl Site {
             .object_definitions
             .get(object_name)
             .ok_or_else(|| InvalidFileError::UnknownObject(object_name.to_string()))?;
-        let path = self.path_for_object(object_name, filename);
         let mut cache = self.obj_cache.borrow_mut();
+        if let Some(filename) = filename {
+            let root_path = self.path_for_object(object_name, None);
+            if filename == object_name && fs.exists(&root_path)? {
+                return self.object_for_path(&root_path, object_def, &mut cache, fs);
+            }
+        }
+        let path = self.path_for_object(object_name, filename);
         self.object_for_path(&path, object_def, &mut cache, fs)
     }
 

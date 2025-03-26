@@ -194,7 +194,9 @@ impl Object {
 
     pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
         let mut write_obj = Table::new();
-        write_obj.insert("order".to_string(), toml::Value::Integer(self.order as i64));
+        if self.order != -1 {
+            write_obj.insert("order".to_string(), toml::Value::Integer(self.order as i64));
+        }
         for (key, val) in &self.values {
             if let Some(val) = val.into() {
                 write_obj.insert(key.to_string(), val);

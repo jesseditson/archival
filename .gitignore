@@ -9,3 +9,6 @@ flamegraph.svg
 dhat-heap.json
 trace-*.json
 profile.json
+
+# editors
+.idea
