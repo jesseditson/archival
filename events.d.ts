@@ -92,6 +92,11 @@ export type AddChildEvent = {
     "filename": string;
     "path": ValuePath;
     "values": (AddObjectValue)[];
+
+    /**
+     * If not provided, this will just append to the end of the child list.
+     */
+    "index": (Usize | null);
 };
 export type RemoveChildEvent = {
     "object": string;
