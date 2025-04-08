@@ -148,7 +148,10 @@ impl BinaryCommand for Command {
             .build()?;
         let r = client
             .post(&upload_url)
-            .query(&[("action", "mpu-create")])
+            .query(&[
+                ("action", "mpu-create"),
+                ("content-type", mime.first_or_octet_stream().as_ref()),
+            ])
             .send()?;
         if !r.status().is_success() {
             return Err(UploadError::UploadFailed(r.text()?).into());
