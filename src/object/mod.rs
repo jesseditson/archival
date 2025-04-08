@@ -315,7 +315,7 @@ mod tests {
                 assert_eq!(vf.mime, "video/mpeg4");
                 assert_eq!(
                     vf.url,
-                    format!("{}/fake-sha", FieldConfig::get().uploads_url)
+                    format!("{}/fake-sha/video.mp4", FieldConfig::get().uploads_url)
                 );
             }
         }

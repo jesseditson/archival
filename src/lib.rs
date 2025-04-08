@@ -647,7 +647,7 @@ mod lib {
             assert_eq!(img.mime, "image/jpg");
             assert_eq!(img.name, Some("Test".to_string()));
             assert_eq!(img.sha, "test-sha");
-            assert_eq!(img.url, "test://uploads-url/test-sha");
+            assert_eq!(img.url, "test://uploads-url/test-sha/test.jpg");
         }
         archival.build(BuildOptions::default())?;
         let dist_files = archival
@@ -671,7 +671,7 @@ mod lib {
             })?
             .unwrap();
         println!("{}", post_html);
-        assert!(post_html.contains("test://uploads-url/test-sha"));
+        assert!(post_html.contains("test://uploads-url/test-sha/test.jpg"));
         assert!(post_html.contains("title=\"Test\""));
         Ok(())
     }

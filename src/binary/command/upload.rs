@@ -127,13 +127,13 @@ impl BinaryCommand for Command {
         }
         // Ok, this looks legit. Upload the file
         let sha = archival.sha_for_file(file_path)?;
-        let upload_url = format!("{}/upload/{}", API_URL, sha);
         let mime = mime_guess::from_path(file_path);
         let mut file = File::from_mime_guess(mime);
         file.sha = sha;
         file.filename = file_path
             .file_name()
             .map_or("".to_string(), |f| f.to_string_lossy().to_string());
+        let upload_url = format!("{}/upload/{}/{}", API_URL, file.sha, file.filename);
         let field_data = FieldValue::File(file);
         let bar = ProgressBar::new_spinner();
         bar.set_style(ProgressStyle::with_template("{msg} {spinner}").unwrap());

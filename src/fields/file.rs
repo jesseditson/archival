@@ -96,7 +96,7 @@ impl File {
         display_type: DisplayType,
     ) -> Self {
         Self {
-            url: Self::_url(sha),
+            url: Self::_url(sha, filename),
             sha: sha.to_string(),
             name: name.map(|n| n.to_string()),
             description: description.map(|d| d.to_string()),
@@ -172,11 +172,14 @@ impl File {
         match &k[..] {
             "sha" => {
                 self.sha = get_val()?;
-                self.url = Self::_url(&self.sha);
+                self.url = Self::_url(&self.sha, &self.filename);
             }
             "name" => self.name = Some(get_val()?),
             "description" => self.description = Some(get_val()?),
-            "filename" => self.filename = get_val()?,
+            "filename" => {
+                self.filename = get_val()?;
+                self.url = Self::_url(&self.sha, &self.filename);
+            }
             "mime" => self.mime = get_val()?,
             "display_type" => self.display_type = get_val()?,
             _ => {
@@ -195,7 +198,7 @@ impl File {
     pub fn image() -> Self {
         let mime = "image/*";
         Self {
-            url: Self::_url(""),
+            url: Self::_url("", ""),
             sha: "".to_string(),
             name: None,
             description: None,
@@ -207,7 +210,7 @@ impl File {
     pub fn video() -> Self {
         let mime = "video/*";
         Self {
-            url: Self::_url(""),
+            url: Self::_url("", ""),
             sha: "".to_string(),
             name: None,
             description: None,
@@ -219,7 +222,7 @@ impl File {
     pub fn audio() -> Self {
         let mime = "audio/*";
         Self {
-            url: Self::_url(""),
+            url: Self::_url("", ""),
             sha: "".to_string(),
             name: None,
             description: None,
@@ -231,7 +234,7 @@ impl File {
     pub fn download() -> Self {
         let mime = "*/*";
         Self {
-            url: Self::_url(""),
+            url: Self::_url("", ""),
             sha: "".to_string(),
             name: None,
             description: None,
@@ -240,18 +243,22 @@ impl File {
             display_type: DisplayType::Download.to_string(),
         }
     }
-    fn _url(sha: &str) -> String {
+    fn _url(sha: &str, filename: &str) -> String {
         if sha.is_empty() {
             return "".to_string();
         }
         let config = FieldConfig::get();
-        format!("{}/{}", config.uploads_url, sha)
+        if filename.is_empty() {
+            format!("{}/{}", config.uploads_url, sha)
+        } else {
+            format!("{}/{}/{}", config.uploads_url, sha, filename)
+        }
     }
     pub fn update_url(&mut self) {
-        self.url = Self::_url(&self.sha);
+        self.url = Self::_url(&self.sha, &self.filename);
     }
     pub fn url(&self) -> String {
-        Self::_url(&self.sha)
+        Self::_url(&self.sha, &self.filename)
     }
     pub fn to_map(&self, include_url: bool) -> HashMap<&str, &String> {
         let mut m = HashMap::new();
