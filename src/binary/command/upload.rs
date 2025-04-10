@@ -10,6 +10,7 @@ use crate::{
 };
 use clap::{arg, value_parser, ArgMatches};
 use indicatif::{ProgressBar, ProgressStyle};
+use regex::Regex;
 use reqwest::{
     header::{HeaderMap, AUTHORIZATION},
     StatusCode,
@@ -37,6 +38,10 @@ pub enum UploadError {
     NonUploadableType(String),
     #[error("upload failed {0}")]
     UploadFailed(String),
+    #[error("could not infer repo from remotes: git command failed: {0}")]
+    NoGit(String),
+    #[error("could not infer repo from remotes: {0} - only github URLs supported.")]
+    InferringRepoFailed(String),
 }
 
 impl FieldType {
@@ -63,6 +68,10 @@ impl BinaryCommand for Command {
             .arg(
                 arg!([field] "The field to upload to")
                     .required(true)
+                    .value_parser(value_parser!(String)),
+            )
+            .arg(
+                arg!(-r --repo <repo_name> "A repo name (e.g. github/jesseditson/blog) to use for this upload. If not provided, will be inferred from the first git remote.")
                     .value_parser(value_parser!(String)),
             )
             .arg(
@@ -125,6 +134,37 @@ impl BinaryCommand for Command {
         if !field_def.is_uploadable() {
             return Err(UploadError::NonUploadableType(field_def.to_string()).into());
         }
+        // Validate repo
+        let repo_id = if let Some(repo) = args.get_one::<String>("repo") {
+            repo.to_string()
+        } else {
+            let github_remote_match = Regex::new(r"github.com.+?\b(.+)\/(.+)\.git").unwrap();
+            let git_command = std::process::Command::new("git")
+                .current_dir(build_dir)
+                .arg("remote")
+                .arg("-v")
+                .output()
+                .map_err(|e| UploadError::NoGit(e.to_string()))?;
+            let output = String::from_utf8(git_command.stdout.as_slice().to_vec())
+                .map_err(|err| UploadError::InferringRepoFailed(err.to_string()))?;
+            let first_origin = output.split("\n").next().ok_or_else(|| {
+                UploadError::InferringRepoFailed(format!("No origins found in {}", output))
+            })?;
+            let first_match = github_remote_match
+                .captures_iter(first_origin)
+                .next()
+                .ok_or_else(|| {
+                    UploadError::InferringRepoFailed(format!(
+                        "No github origin found in {}",
+                        first_origin
+                    ))
+                })?;
+            format!(
+                "github/{}/{}",
+                first_match.get(1).unwrap().as_str(),
+                first_match.get(2).unwrap().as_str()
+            )
+        };
         // Ok, this looks legit. Upload the file
         let sha = archival.sha_for_file(file_path)?;
         let mime = mime_guess::from_path(file_path);
@@ -151,6 +191,7 @@ impl BinaryCommand for Command {
             .query(&[
                 ("action", "mpu-create"),
                 ("content-type", mime.first_or_octet_stream().as_ref()),
+                ("repo", &repo_id),
             ])
             .send()?;
         if !r.status().is_success() {
