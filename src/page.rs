@@ -104,16 +104,19 @@ pub(crate) fn debug_context(object: &liquid::Object, lp: usize) -> String {
                     "\n{}↘︎[{} items]{}\n{}⎼⎼⎼",
                     "  ".repeat(lp),
                     a.len(),
-                    if let Some(v) = a.first() {
-                        to_str(v, lp + 1)
-                    } else {
+                    if a.is_empty() {
                         "".to_string()
+                    } else {
+                        a.iter()
+                            .map(|v| to_str(v, lp + 1))
+                            .collect::<Vec<String>>()
+                            .join(&format!("\n{}--", "  ".repeat(lp + 2)))
                     },
                     "  ".repeat(lp),
                 )
             }
-            // Value::Nil => "nil".to_string(),
-            // Value::Scalar(s) => format!("{:?}", s.as_debug()),
+            Value::Nil => " (nil)".to_string(),
+            Value::Scalar(s) => format!(" ({}: {:?})", val.type_name(), s.as_view()),
             _ => format!(": ({})", val.type_name()),
         }
     }
@@ -167,15 +170,19 @@ impl<'a> Page<'a> {
         &self,
         parser: &liquid::Parser,
         objects_map: &BTreeMap<String, ObjectEntry>,
+        definitions: &BTreeMap<String, ObjectDefinition>,
     ) -> Result<String, Box<dyn Error>> {
         #[cfg(feature = "verbose-logging")]
         tracing::debug!("rendering {}", self.name);
         let mut globals = liquid::object!({ "page": self.name });
         let mut objects = liquid::object!({});
         for (name, obj_entry) in objects_map {
+            let definition = definitions
+                .get(name)
+                .unwrap_or_else(|| panic!("missing object definition {}", name));
             let values = match obj_entry {
-                ObjectEntry::List(l) => Value::array(l.iter().map(|o| o.liquid_object())),
-                ObjectEntry::Object(o) => o.liquid_object(),
+                ObjectEntry::List(l) => Value::array(l.iter().map(|o| o.liquid_object(definition))),
+                ObjectEntry::Object(o) => o.liquid_object(definition),
             };
             objects.insert(name.into(), values.clone());
             globals.insert(
@@ -186,7 +193,8 @@ impl<'a> Page<'a> {
         globals.insert("objects".into(), objects.into());
         if let Some(template_info) = &self.template {
             let template = parser.parse(&template_info.content)?;
-            let mut object_vals = match template_info.object.values.to_value() {
+            let mut object_vals = match template_info.object.liquid_object(template_info.definition)
+            {
                 liquid::model::Value::Object(v) => Ok(v),
                 _ => Err(InvalidPageError),
             }?;
@@ -355,6 +363,34 @@ mod tests {
         }
     }
 
+    fn get_definition_map() -> BTreeMap<String, ObjectDefinition> {
+        BTreeMap::from([
+            ("artist".to_string(), artist_definition()),
+            (
+                "c".to_string(),
+                ObjectDefinition {
+                    name: "c".to_string(),
+                    field_order: vec!["name".to_string(), "content".to_string()],
+                    fields: BTreeMap::from([
+                        ("name".to_string(), FieldType::String),
+                        ("content".to_string(), FieldType::Markdown),
+                    ]),
+                    template: None,
+                    children: BTreeMap::from([(
+                        "links".to_string(),
+                        ObjectDefinition {
+                            name: "links".to_string(),
+                            field_order: vec!["url".to_string()],
+                            fields: BTreeMap::from([("url".to_string(), FieldType::String)]),
+                            template: None,
+                            children: BTreeMap::new(),
+                        },
+                    )]),
+                },
+            ),
+        ])
+    }
+
     fn page_content() -> &'static str {
         "{% assign c = objects.c | where: \"name\", \"home\" | first %}
         name: {{c.name}}
@@ -386,13 +422,14 @@ mod tests {
     fn regular_page() -> Result<(), Box<dyn Error>> {
         let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
+        let definition_map = get_definition_map();
         let page = Page::new(
             "home".to_string(),
             page_content().to_string(),
             TemplateType::Default,
             Path::new("objects/home.toml"),
         );
-        let rendered = page.render(&liquid_parser, &objects_map)?;
+        let rendered = page.render(&liquid_parser, &objects_map, &definition_map)?;
         println!("rendered: {}", rendered);
         assert!(rendered.contains("name: home"), "filtered object");
         assert!(
@@ -413,6 +450,7 @@ mod tests {
     }
     #[test]
     fn template_page() -> Result<(), Box<dyn Error>> {
+        let definition_map = get_definition_map();
         let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
         let object = objects_map["artist"].into_iter().next().unwrap();
@@ -426,7 +464,7 @@ mod tests {
             TemplateType::Default,
             Path::new("objects/template.toml"),
         );
-        let rendered = page.render(&liquid_parser, &objects_map)?;
+        let rendered = page.render(&liquid_parser, &objects_map, &definition_map)?;
         println!("rendered: {}", rendered);
         assert!(rendered.contains("name: Tormenta Rey"), "root field");
         assert!(

@@ -46,6 +46,14 @@ impl Meta {
     pub fn get_value(&self, key: &str) -> Option<&MetaValue> {
         self.0.get(key)
     }
+
+    pub fn to_liquid(&self) -> liquid::model::Value {
+        let mut m = liquid::Object::new();
+        for (k, v) in &self.0 {
+            m.insert(k.into(), v.into());
+        }
+        m.into()
+    }
 }
 
 impl From<&serde_json::Value> for MetaValue {

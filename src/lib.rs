@@ -834,14 +834,23 @@ mod lib {
         // println!("post: {}", post_html);
         let rendered_links: Vec<_> = post_html.match_indices("<a href=").collect();
         // println!("LINKS: {:?}", rendered_links);
-        assert_eq!(rendered_links.len(), 1);
+        assert_eq!(rendered_links.len(), 2);
         archival
             .send_event(
                 ArchivalEvent::AddChild(AddChildEvent {
                     object: "post".to_string(),
                     filename: "a-post".to_string(),
                     path: ValuePath::default().append(ValuePathComponent::key("links")),
-                    values: vec![],
+                    values: vec![
+                        AddObjectValue {
+                            path: ValuePath::from_string("url"),
+                            value: FieldValue::String("http://foo.com".to_string()),
+                        },
+                        AddObjectValue {
+                            path: ValuePath::from_string("name"),
+                            value: FieldValue::String("another link".to_string()),
+                        },
+                    ],
                     index: None,
                 }),
                 Some(BuildOptions::default()),
@@ -856,7 +865,7 @@ mod lib {
                 let links = ValuePath::from_string("links").get_in_object(post).unwrap();
                 assert!(matches!(links, FieldValue::Objects(_)));
                 if let FieldValue::Objects(links) = links {
-                    assert_eq!(links.len(), 2);
+                    assert_eq!(links.len(), 3);
                 }
             }
         }
@@ -877,7 +886,11 @@ mod lib {
         println!("post: {}", post_html);
         let rendered_links: Vec<_> = post_html.match_indices("<a href=").collect();
         println!("LINKS: {:?}", rendered_links);
-        assert_eq!(rendered_links.len(), 2);
+        assert_eq!(rendered_links.len(), 3);
+        let rendered_link_url: Vec<_> = post_html.match_indices("foo.com").collect();
+        assert_eq!(rendered_link_url.len(), 1);
+        let rendered_link_name: Vec<_> = post_html.match_indices("another link").collect();
+        assert_eq!(rendered_link_name.len(), 1);
         Ok(())
     }
 
@@ -916,7 +929,7 @@ mod lib {
         println!("post: {}", post_html);
         let rendered_links: Vec<_> = post_html.match_indices("<a href=").collect();
         println!("LINKS: {:?}", rendered_links);
-        assert_eq!(rendered_links.len(), 0);
+        assert_eq!(rendered_links.len(), 1);
         Ok(())
     }
 
