@@ -53,7 +53,7 @@ export type FieldValue = ({
     "File": File;
 } | {
     "Meta": Meta;
-});
+} | "Null");
 export type AddObjectValue = {
     "path": ValuePath;
     "value": FieldValue;

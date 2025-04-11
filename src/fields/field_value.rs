@@ -1,3 +1,6 @@
+use crate::object::to_liquid::object_to_liquid;
+use crate::ObjectDefinition;
+
 use super::file::File;
 use super::meta::Meta;
 use super::DateTime;
@@ -70,6 +73,7 @@ pub enum FieldValue {
     Boolean(bool),
     File(File),
     Meta(Meta),
+    Null,
 }
 fn err(f_type: &FieldType, value: String) -> FieldValueError {
     FieldValueError::InvalidValue(f_type.to_string(), value.to_owned())
@@ -141,6 +145,19 @@ impl FieldValue {
         })
     }
 
+    pub fn typed_objects(&self, definition: &ObjectDefinition) -> model::Value {
+        if let FieldValue::Objects(children) = self {
+            model::Value::Array(
+                children
+                    .iter()
+                    .map(|child| model::Value::Object(object_to_liquid(child, definition)))
+                    .collect(),
+            )
+        } else {
+            panic!("cannot call typed_objects on FieldValue: {:?}", self);
+        }
+    }
+
     #[cfg(test)]
     pub fn liquid_date(&self) -> model::DateTime {
         match self {
@@ -195,6 +212,7 @@ impl From<&FieldValue> for Option<toml::Value> {
             )),
             FieldValue::File(f) => Some(toml::Value::Table(f.to_toml())),
             FieldValue::Meta(m) => Some(toml::Value::Table(m.to_toml())),
+            FieldValue::Null => None,
         }
     }
 }
@@ -224,6 +242,7 @@ impl ValueView for FieldValue {
             FieldValue::Boolean(_) => "boolean",
             FieldValue::File(_) => "file",
             FieldValue::Meta(_) => "meta",
+            FieldValue::Null => "null",
         }
     }
     /// Interpret as a string.
@@ -254,6 +273,7 @@ impl ValueView for FieldValue {
             FieldValue::Objects(_) => None,
             FieldValue::File(_f) => None,
             FieldValue::Meta(_m) => None,
+            FieldValue::Null => None,
         }
     }
     fn as_array(&self) -> Option<&dyn model::ArrayView> {
@@ -280,6 +300,7 @@ impl ValueView for FieldValue {
             FieldValue::Objects(_) => self.as_array().to_value(),
             FieldValue::File(_) => self.as_object().to_value(),
             FieldValue::Meta(_) => self.as_object().to_value(),
+            FieldValue::Null => self.as_scalar().to_value(),
         }
     }
 }
@@ -457,6 +478,7 @@ impl FieldValue {
             FieldValue::Objects(o) => format!("{:?}", o),
             FieldValue::File(f) => format!("{:?}", f.to_map(true)),
             FieldValue::Meta(m) => format!("{:?}", serde_json::Value::from(m)),
+            FieldValue::Null => "null".to_string(),
         }
     }
 }

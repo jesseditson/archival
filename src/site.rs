@@ -512,6 +512,7 @@ impl Site {
                                 &template_str,
                                 &template_path,
                                 build_dir,
+                                &self.object_definitions,
                                 &all_objects,
                                 fs,
                                 &liquid_parser,
@@ -562,6 +563,7 @@ impl Site {
                         page_name,
                         page_type,
                         build_dir,
+                        &self.object_definitions,
                         &all_objects,
                         fs,
                         &liquid_parser,
@@ -586,6 +588,7 @@ impl Site {
         template_str: &String,
         template_path: &PathBuf,
         build_dir: &PathBuf,
+        object_definitions: &BTreeMap<String, ObjectDefinition>,
         all_objects: &BTreeMap<String, ObjectEntry>,
         fs: &mut T,
         liquid_parser: &liquid::Parser,
@@ -598,7 +601,7 @@ impl Site {
             TemplateType::Default,
             template_path,
         );
-        let render_o = page.render(liquid_parser, all_objects);
+        let render_o = page.render(liquid_parser, all_objects, object_definitions);
         if render_o.is_err() {
             warn!("failed rendering {}", object.filename);
         }
@@ -621,6 +624,7 @@ impl Site {
         page_name: &str,
         page_type: TemplateType,
         build_dir: &PathBuf,
+        object_definitions: &BTreeMap<String, ObjectDefinition>,
         all_objects: &BTreeMap<String, ObjectEntry>,
         fs: &mut T,
         liquid_parser: &liquid::Parser,
@@ -632,7 +636,7 @@ impl Site {
                 TemplateType::Default,
                 file_path,
             );
-            let render_o = page.render(liquid_parser, all_objects);
+            let render_o = page.render(liquid_parser, all_objects, object_definitions);
             if render_o.is_err() {
                 warn!("failed rendering {}", file_path.display());
             }

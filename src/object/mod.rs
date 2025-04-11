@@ -7,14 +7,16 @@ use crate::{
     reserved_fields::{self, is_reserved_field},
 };
 use liquid::{
-    model::{KString, ObjectIndex, Value},
+    model::{KString, Value},
     ObjectView, ValueView,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt::Debug, path::Path};
+use to_liquid::object_to_liquid;
 use toml::Table;
 use tracing::{instrument, warn};
 mod object_entry;
+pub(crate) mod to_liquid;
 pub use object_entry::ObjectEntry;
 
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq)]
@@ -205,12 +207,8 @@ impl Object {
         toml::to_string_pretty(&write_obj)
     }
 
-    pub fn liquid_object(&self) -> Value {
-        let mut values: liquid::model::Object = self
-            .values
-            .iter()
-            .map(|(k, v)| (KString::from_ref(k.as_index()), v.to_value()))
-            .collect();
+    pub fn liquid_object(&self, definition: &ObjectDefinition) -> Value {
+        let mut values = object_to_liquid(&self.values, definition);
         // Reserved/special
         if values.contains_key("path") {
             panic!("Objects may not define path key.");
