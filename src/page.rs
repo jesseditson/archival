@@ -104,16 +104,19 @@ pub(crate) fn debug_context(object: &liquid::Object, lp: usize) -> String {
                     "\n{}↘︎[{} items]{}\n{}⎼⎼⎼",
                     "  ".repeat(lp),
                     a.len(),
-                    if let Some(v) = a.first() {
-                        to_str(v, lp + 1)
-                    } else {
+                    if a.is_empty() {
                         "".to_string()
+                    } else {
+                        a.iter()
+                            .map(|v| to_str(v, lp + 1))
+                            .collect::<Vec<String>>()
+                            .join(&format!("\n{}--", "  ".repeat(lp + 2)))
                     },
                     "  ".repeat(lp),
                 )
             }
-            // Value::Nil => "nil".to_string(),
-            // Value::Scalar(s) => format!("{:?}", s.as_debug()),
+            Value::Nil => " (nil)".to_string(),
+            Value::Scalar(s) => format!(" ({}: {:?})", val.type_name(), s.as_view()),
             _ => format!(": ({})", val.type_name()),
         }
     }
