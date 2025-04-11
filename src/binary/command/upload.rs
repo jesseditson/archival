@@ -173,7 +173,12 @@ impl BinaryCommand for Command {
         file.filename = file_path
             .file_name()
             .map_or("".to_string(), |f| f.to_string_lossy().to_string());
-        let upload_url = format!("{}/upload/{}/{}", API_URL, file.sha, file.filename);
+        let upload_url = format!(
+            "{}/upload/{}/{}",
+            API_URL,
+            file.sha,
+            urlencoding::encode(&file.filename)
+        );
         let field_data = FieldValue::File(file);
         let bar = ProgressBar::new_spinner();
         bar.set_style(ProgressStyle::with_template("{msg} {spinner}").unwrap());

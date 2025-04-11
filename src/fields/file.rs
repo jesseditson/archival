@@ -251,7 +251,12 @@ impl File {
         if filename.is_empty() {
             format!("{}/{}", config.uploads_url, sha)
         } else {
-            format!("{}/{}/{}", config.uploads_url, sha, filename)
+            format!(
+                "{}/{}/{}",
+                config.uploads_url,
+                sha,
+                urlencoding::encode(filename)
+            )
         }
     }
     pub fn update_url(&mut self) {
