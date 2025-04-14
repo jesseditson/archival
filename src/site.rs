@@ -144,7 +144,6 @@ impl Site {
         )
     }
 
-    #[cfg(feature = "json-schema")]
     pub fn root_objects(&self, fs: &impl FileSystemAPI) -> HashSet<String> {
         let mut root_objects = HashSet::new();
         let objects_dir = &self.manifest.objects_dir;

@@ -471,6 +471,14 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 event.object
             )))?;
         self.fs_mutex.with_fs(|fs| {
+            let root_objects = self.site.root_objects(fs);
+            if root_objects.contains(&event.from) {
+                return Err(ArchivalError::new(&format!(
+                    "cannot rename root object {}",
+                    event.from
+                ))
+                .into());
+            }
             let from_path = self.object_path_impl(&obj_def.name, &event.from, fs)?;
             let to_path = self.object_path_impl(&obj_def.name, &event.to, fs)?;
             let content = fs.read(&from_path)?.ok_or(ArchivalError::new(&format!(
