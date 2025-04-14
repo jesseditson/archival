@@ -24,12 +24,6 @@ impl ObjectEntry {
     pub fn is_object(&self) -> bool {
         matches!(self, ObjectEntry::Object(_))
     }
-    pub fn count(&self) -> usize {
-        match self {
-            ObjectEntry::List(l) => l.len(),
-            ObjectEntry::Object(_) => 1,
-        }
-    }
 }
 
 pub struct ObjectEntryIterator<'a> {

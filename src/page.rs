@@ -186,7 +186,7 @@ impl<'a> Page<'a> {
             };
             objects.insert(name.into(), values.clone());
             globals.insert(
-                pluralize(name, obj_entry.count().try_into().unwrap(), false).into(),
+                pluralize(name, if obj_entry.is_list() { 2 } else { 1 }, false).into(),
                 values,
             );
         }
