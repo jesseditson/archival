@@ -9,6 +9,7 @@ use crate::{value_path::ValuePath, FieldValue};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub enum ArchivalEvent {
+    RenameObject(RenameObjectEvent),
     AddObject(AddObjectEvent),
     AddRootObject(AddRootObjectEvent),
     DeleteObject(DeleteObjectEvent),
@@ -28,6 +29,7 @@ impl ArchivalEvent {
             ArchivalEvent::EditOrder(evt) => &evt.object,
             ArchivalEvent::AddChild(evt) => &evt.object,
             ArchivalEvent::RemoveChild(evt) => &evt.object,
+            ArchivalEvent::RenameObject(evt) => &evt.object,
         }
     }
     pub fn filename(&self) -> &str {
@@ -39,6 +41,7 @@ impl ArchivalEvent {
             ArchivalEvent::EditOrder(evt) => &evt.filename,
             ArchivalEvent::AddChild(evt) => &evt.filename,
             ArchivalEvent::RemoveChild(evt) => &evt.filename,
+            ArchivalEvent::RenameObject(evt) => &evt.from,
         }
     }
 }
@@ -80,6 +83,14 @@ impl Display for ArchivalEvent {
                         indefinite(child_name),
                         evt.object,
                         evt.filename
+                    )
+                }
+                ArchivalEvent::RenameObject(evt) => {
+                    format!(
+                        "Rename {} '{}' to '{}'",
+                        indefinite(&evt.object),
+                        evt.from,
+                        evt.to
                     )
                 }
             }
@@ -162,6 +173,14 @@ pub struct RemoveChildEvent {
     pub filename: String,
     pub path: ValuePath,
     pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "typescript", derive(TypeDef))]
+pub struct RenameObjectEvent {
+    pub object: String,
+    pub from: String,
+    pub to: String,
 }
 
 #[cfg(test)]

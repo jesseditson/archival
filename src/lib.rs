@@ -19,7 +19,7 @@ mod value_path;
 pub use constants::{MANIFEST_FILE_NAME, MIN_COMPAT_VERSION};
 use events::{
     AddChildEvent, AddObjectEvent, ArchivalEvent, DeleteObjectEvent, EditFieldEvent,
-    EditOrderEvent, RemoveChildEvent,
+    EditOrderEvent, RemoveChildEvent, RenameObjectEvent,
 };
 use events::{AddRootObjectEvent, ArchivalEventResponse};
 pub use fields::FieldConfig;
@@ -352,6 +352,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let r = match event {
             ArchivalEvent::AddObject(event) => self.add_object(event)?,
+            ArchivalEvent::RenameObject(event) => self.rename_object(event)?,
             ArchivalEvent::AddRootObject(event) => self.add_root_object(event)?,
             ArchivalEvent::DeleteObject(event) => self.delete_object(event)?,
             ArchivalEvent::EditField(event) => self.edit_field(event)?,
@@ -452,6 +453,33 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 ArchivalError::new(&format!("failed writing to {}: {}", path.display(), error))
             })?;
             self.site.invalidate_file(&path);
+            Ok(())
+        })?;
+        Ok(ArchivalEventResponse::None)
+    }
+
+    fn rename_object(
+        &self,
+        event: RenameObjectEvent,
+    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+        let obj_def = self
+            .site
+            .object_definitions
+            .get(&event.object)
+            .ok_or(ArchivalError::new(&format!(
+                "object not found: {}",
+                event.object
+            )))?;
+        self.fs_mutex.with_fs(|fs| {
+            let from_path = self.object_path_impl(&obj_def.name, &event.from, fs)?;
+            let to_path = self.object_path_impl(&obj_def.name, &event.to, fs)?;
+            let content = fs.read(&from_path)?.ok_or(ArchivalError::new(&format!(
+                "file not found: {}",
+                event.from
+            )))?;
+            fs.write(&to_path, content)?;
+            fs.delete(&from_path)?;
+            self.site.invalidate_file(&from_path);
             Ok(())
         })?;
         Ok(ArchivalEventResponse::None)
@@ -772,6 +800,37 @@ mod lib {
             .unwrap();
         println!("index: {}", index_html);
         assert!(!index_html.contains("This is the new title"));
+        Ok(())
+    }
+
+    #[test]
+    fn rename_object() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        let sections_dir = archival.site.manifest.objects_dir.join("section");
+        let sections_before_rename = archival.fs_mutex.with_fs(|fs| {
+            fs.walk_dir(&sections_dir, false)
+                .map(|d| d.collect::<Vec<PathBuf>>())
+        })?;
+        archival.send_event(
+            ArchivalEvent::RenameObject(RenameObjectEvent {
+                object: "section".to_string(),
+                from: "first".to_string(),
+                to: "renamed".to_string(),
+            }),
+            Some(BuildOptions::default()),
+        )?;
+        // Sending an event should result in an updated fs
+        let sections_dir = archival.site.manifest.objects_dir.join("section");
+        let sections = archival.fs_mutex.with_fs(|fs| {
+            fs.walk_dir(&sections_dir, false)
+                .map(|d| d.collect::<Vec<PathBuf>>())
+        })?;
+        println!("SECTIONS: {:?}", sections);
+        assert_eq!(sections.len(), sections_before_rename.len());
+        assert!(sections.iter().any(|path| path.ends_with("renamed.toml")));
         Ok(())
     }
 

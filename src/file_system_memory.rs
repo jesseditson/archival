@@ -8,6 +8,7 @@ use std::{
 };
 #[cfg(feature = "verbose-logging")]
 use tracing::debug;
+use tracing::error;
 
 use crate::ArchivalError;
 
@@ -173,7 +174,13 @@ impl FileSystemAPI for MemoryFileSystem {
                         if !include_dirs && !de.is_file {
                             return None;
                         }
-                        Some(de.path.strip_prefix(&path).unwrap().to_owned())
+                        match de.path.strip_prefix(&path) {
+                            Ok(path) => Some(path.to_owned()),
+                            Err(e) => {
+                                error!("Ignorning invalid path {} ({})", path.display(), e);
+                                None
+                            }
+                        }
                     })
                     .collect(),
             );
