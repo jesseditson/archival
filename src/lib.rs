@@ -404,7 +404,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 ))
                 .into());
             }
-            let object = Object::from_def(obj_def, &event.object, -1, event.values)?;
+            let object = Object::from_def(obj_def, &event.object, None, event.values)?;
             fs.write_str(&path, object.to_toml()?)?;
             self.site.invalidate_file(&path);
             Ok(())
@@ -722,7 +722,7 @@ mod lib {
             ArchivalEvent::AddObject(AddObjectEvent {
                 object: "section".to_string(),
                 filename: "my-section".to_string(),
-                order: 3,
+                order: Some(3.),
                 // Sections require a name field, so we have to add it or we'll get a build error
                 values: vec![AddObjectValue {
                     path: ValuePath::from_string("name"),
@@ -862,7 +862,7 @@ mod lib {
             ArchivalEvent::EditOrder(EditOrderEvent {
                 object: "section".to_string(),
                 filename: "first".to_string(),
-                order: 12,
+                order: Some(12.),
                 source: None,
             }),
             Some(BuildOptions::default()),

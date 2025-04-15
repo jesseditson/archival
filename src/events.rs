@@ -120,7 +120,7 @@ pub struct EditFieldEvent {
 pub struct EditOrderEvent {
     pub object: String,
     pub filename: String,
-    pub order: i32,
+    pub order: Option<f64>,
     pub source: Option<String>,
 }
 
@@ -144,7 +144,7 @@ pub struct AddObjectValue {
 pub struct AddObjectEvent {
     pub object: String,
     pub filename: String,
-    pub order: i32,
+    pub order: Option<f64>,
     pub values: Vec<AddObjectValue>,
 }
 

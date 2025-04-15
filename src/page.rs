@@ -288,7 +288,7 @@ mod tests {
             filename: "tormenta-rey".to_string(),
             object_name: "artist".to_string(),
             path: "artist/tormenta-rey".to_string(),
-            order: 1,
+            order: None,
             values: artist_values,
         };
         let links_objects = vec![ObjectValues::from([(
@@ -308,7 +308,7 @@ mod tests {
             filename: "home".to_string(),
             object_name: "c".to_string(),
             path: "home".to_string(),
-            order: -1,
+            order: None,
             values: c_values,
         };
 

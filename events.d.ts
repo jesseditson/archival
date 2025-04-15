@@ -5,7 +5,7 @@ export type RenameObjectEvent = {
     "from": string;
     "to": string;
 };
-export type I32 = number;
+export type F64 = number;
 export type Usize = number;
 export type ValuePathComponent = ({
     "Key": string;
@@ -15,7 +15,6 @@ export type ValuePathComponent = ({
 export type ValuePath = {
     "path": (ValuePathComponent)[];
 };
-export type F64 = number;
 export type DateTime = {
     "raw": string;
 };
@@ -66,7 +65,7 @@ export type AddObjectValue = {
 export type AddObjectEvent = {
     "object": string;
     "filename": string;
-    "order": I32;
+    "order": (F64 | null);
     "values": (AddObjectValue)[];
 };
 export type AddRootObjectEvent = {
@@ -89,7 +88,7 @@ export type EditFieldEvent = {
 export type EditOrderEvent = {
     "object": string;
     "filename": string;
-    "order": I32;
+    "order": (F64 | null);
     "source": (string | null);
 };
 export type AddChildEvent = {

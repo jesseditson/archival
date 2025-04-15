@@ -603,7 +603,7 @@ pub mod tests {
         Object {
             filename: "test_filename".to_string(),
             object_name: "test_object_name".to_string(),
-            order: -1,
+            order: None,
             path: "".to_string(),
             values: ObjectValues::from([
                 ("title".to_string(), FieldValue::String("title".to_string())),

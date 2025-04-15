@@ -24,7 +24,7 @@ pub use object_entry::ObjectEntry;
 pub struct Object {
     pub filename: String,
     pub object_name: String,
-    pub order: i32,
+    pub order: Option<f64>,
     pub path: String,
     pub values: ObjectValues,
 }
@@ -148,10 +148,12 @@ impl Object {
     ) -> Result<Object, Box<dyn Error>> {
         let values =
             Object::values_from_table(file, table, definition, custom_types, skip_validation)?;
-        let mut order = -1;
+        let mut order = None;
         if let Some(t_order) = table.get(reserved_fields::ORDER) {
             if let Some(int_order) = t_order.as_integer() {
-                order = int_order as i32;
+                order = Some(int_order as f64);
+            } else if let Some(float_order) = t_order.as_float() {
+                order = Some(float_order);
             } else {
                 warn!("Invalid order {}", t_order);
             }
@@ -173,7 +175,7 @@ impl Object {
     pub fn from_def(
         definition: &ObjectDefinition,
         filename: &str,
-        order: i32,
+        order: Option<f64>,
         defaults: Vec<AddObjectValue>,
     ) -> Result<Self, Box<dyn Error>> {
         let path = Path::new(&definition.name).join(filename);
@@ -196,8 +198,15 @@ impl Object {
 
     pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
         let mut write_obj = Table::new();
-        if self.order != -1 {
-            write_obj.insert("order".to_string(), toml::Value::Integer(self.order as i64));
+        if let Some(order) = self.order {
+            write_obj.insert(
+                "order".to_string(),
+                if order.fract() == 0. {
+                    toml::Value::Integer(order as i64)
+                } else {
+                    toml::Value::Float(order)
+                },
+            );
         }
         for (key, val) in &self.values {
             if let Some(val) = val.into() {
@@ -261,7 +270,7 @@ mod tests {
             &HashMap::new(),
             false,
         )?;
-        assert_eq!(obj.order, 1);
+        assert_eq!(obj.order, Some(1.));
         assert_eq!(obj.object_name, "artist");
         assert_eq!(obj.filename, "tormenta-rey");
         assert_eq!(obj.values.len(), 4);

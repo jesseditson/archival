@@ -80,10 +80,10 @@ impl std::fmt::Display for Site {
 }
 
 fn get_order(obj: &Object) -> String {
-    if obj.order == -1 {
-        obj.filename.to_owned()
+    if let Some(order) = obj.order {
+        format!("{:0>10}", order)
     } else {
-        format!("{:0>10}", obj.order)
+        obj.filename.to_owned()
     }
 }
 

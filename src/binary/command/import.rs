@@ -345,7 +345,7 @@ impl Command {
                     ArchivalEvent::AddObject(AddObjectEvent {
                         object: object.to_string(),
                         filename: f.to_string(),
-                        order: 0,
+                        order: Some(0.),
                         values: vec![],
                     }),
                     None,
@@ -401,7 +401,7 @@ impl Command {
                             ArchivalEvent::AddObject(AddObjectEvent {
                                 object: object.to_string(),
                                 filename: file_name.to_string(),
-                                order: 0,
+                                order: Some(0.),
                                 values: vec![],
                             }),
                             None,
