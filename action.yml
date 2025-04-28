@@ -5,6 +5,17 @@ branding:
   icon: "archive"
   color: "green"
 inputs:
+  archival-bin:
+    description:
+      A path to an archival binary to run. If not provided, will run the version
+      from Cargo.toml.
+    required: false
+  archival-version:
+    description:
+      Override the archival version to use from cargo. If archival-bin is
+      specified, this does nothing.
+    required: false
+    default: "0.10.0"
   api-host:
     descrition: "API Host to send build events to"
     required: false
@@ -16,15 +27,27 @@ runs:
       uses: actions/checkout@v4
     - name: Setup Node
       uses: actions/setup-node@v4
+    - name: Setup Rust
+      if: ${{ inputs.archival-bin == "" }}
+      uses: moonrepo/setup-rust@v1
+      with:
+        bins: archival@${{ inputs.archival-version }}
+    - name: Determine Archival Binary Name
+      id: archival-bin
+      uses: haya14busa/action-cond@v1
+      with:
+        cond: ${{ inputs.archival-bin == "" }}
+        if_true: "archival"
+        if_false: ${{ inputs.archival-bin }}
     - name: Set Build Dir
       id: dist
-      run: echo "dist=$(bin/archival manifest build-dir)" >> $GITHUB_OUTPUT
+      run: echo "dist=$(${{ steps.archival-bin.outputs.value }} manifest build-dir)" >> $GITHUB_OUTPUT
       shell: bash
     - name: Archival Prebuild
-      run: bin/archival prebuild
+      run: ${{ steps.archival-bin.outputs.value }} prebuild
       shell: bash
     - name: Build with Archival
-      run: bin/archival build
+      run: ${{ steps.archival-bin.outputs.value }} build
       shell: bash
     - name: Get Build Size
       id: size
