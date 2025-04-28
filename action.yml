@@ -1,6 +1,7 @@
 # A github action for building archival sites and publishing them to a branch.
-name: Build & Publish Archival Site
+name: Archival
 author: "Archival Team"
+description: "Builds and publishes a local archival site"
 branding:
   icon: "archive"
   color: "green"
@@ -17,7 +18,7 @@ inputs:
     required: false
     default: "0.10.0"
   api-host:
-    descrition: "API Host to send build events to"
+    description: "API Host to send build events to"
     required: false
     default: "https://api.archival.dev"
 runs:
@@ -28,7 +29,7 @@ runs:
     - name: Setup Node
       uses: actions/setup-node@v4
     - name: Setup Rust
-      if: ${{ inputs.archival-bin == "" }}
+      if: ${{ inputs.archival-bin == '' }}
       uses: moonrepo/setup-rust@v1
       with:
         bins: archival@${{ inputs.archival-version }}
@@ -36,7 +37,7 @@ runs:
       id: archival-bin
       uses: haya14busa/action-cond@v1
       with:
-        cond: ${{ inputs.archival-bin == "" }}
+        cond: ${{ inputs.archival-bin == '' }}
         if_true: "archival"
         if_false: ${{ inputs.archival-bin }}
     - name: Set Build Dir
