@@ -30,6 +30,9 @@ pub trait BinaryCommand {
     fn no_path(&self) -> bool {
         false
     }
+    fn uses_uploads(&self) -> bool {
+        false
+    }
     fn cli(&self, cmd: Command) -> Command;
     fn handler(&self, build_dir: &Path, args: &ArgMatches) -> Result<ExitStatus, Box<dyn Error>>;
 }

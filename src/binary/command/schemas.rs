@@ -43,7 +43,7 @@ impl BinaryCommand for Command {
         let object = args.get_one::<String>("object");
         let inline = *args.get_one::<bool>("inline").unwrap();
         let pretty = *args.get_one::<bool>("pretty").unwrap();
-        let site = Site::load(&fs)?;
+        let site = Site::load(&fs, Some(""))?;
         if inline {
             let schema = if let Some(object) = object {
                 let def = site

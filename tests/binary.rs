@@ -16,10 +16,13 @@ mod binary_tests {
 
     #[test]
     #[traced_test]
-    fn build_basics() -> Result<(), Box<dyn Error>> {
+    fn build_basics() {
         _ = fs::remove_dir_all("tests/fixtures/website/dist");
         assert!(Path::new("tests/fixtures/website").exists());
-        println!("current dir: {}", std::env::current_dir()?.display());
+        println!(
+            "current dir: {}",
+            std::env::current_dir().unwrap().display()
+        );
         println!(
             r"files: \n{}",
             WalkDir::new(Path::new("tests/fixtures/website"))
@@ -30,8 +33,13 @@ mod binary_tests {
                 .collect::<Vec<String>>()
                 .join("\n")
         );
-        archival::binary::binary(get_args(vec!["build", "tests/fixtures/website"]))?;
-        Ok(())
+        archival::binary::binary(get_args(vec![
+            "build",
+            "tests/fixtures/website",
+            "--upload-prefix",
+            "test",
+        ]))
+        .unwrap();
     }
 
     #[test]

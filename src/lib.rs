@@ -120,7 +120,7 @@ pub struct Archival<F: FileSystemAPI + Clone + Debug> {
 
 impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn is_compatible(fs: &F) -> Result<bool, Box<dyn Error>> {
-        let site = Site::load(fs)?;
+        let site = Site::load(fs, Some(""))?;
         if let Some(version_str) = &site.manifest.archival_version {
             let (ok, msg) = check_compatibility(version_str);
             if !ok {
@@ -132,8 +132,18 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         }
     }
     pub fn new(fs: F) -> Result<Self, Box<dyn Error>> {
-        let site = Site::load(&fs)?;
-        FieldConfig::set(site.get_field_config());
+        let site = Site::load(&fs, None)?;
+        FieldConfig::set_global(site.get_field_config(None)?);
+        let fs_mutex = FileSystemMutex::init(fs);
+        Ok(Self {
+            fs_mutex,
+            site,
+            last_build_id: Cell::new(0),
+        })
+    }
+    pub fn new_with_upload_prefix(fs: F, upload_prefix: &str) -> Result<Self, Box<dyn Error>> {
+        let site = Site::load(&fs, Some(upload_prefix))?;
+        FieldConfig::set_global(site.get_field_config(Some(upload_prefix))?);
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self {
             fs_mutex,
@@ -142,8 +152,8 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         })
     }
     pub fn new_with_field_config(fs: F, field_config: FieldConfig) -> Result<Self, Box<dyn Error>> {
-        let site = Site::load(&fs)?;
-        FieldConfig::set(field_config);
+        let site = Site::load(&fs, Some(&field_config.upload_prefix))?;
+        FieldConfig::set_global(field_config);
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self {
             fs_mutex,

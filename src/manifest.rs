@@ -175,6 +175,7 @@ pub type EditorTypes = HashMap<String, ManifestEditorType>;
 pub struct Manifest {
     #[serde(skip)]
     root: PathBuf,
+    pub upload_prefix: String,
     pub archival_version: Option<String>,
     pub prebuild: Vec<String>,
     pub site_name: Option<String>,
@@ -194,6 +195,7 @@ pub struct Manifest {
 #[cfg_attr(feature = "binary", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ManifestField {
+    UploadPrefix,
     ArchivalVersion,
     SiteUrl,
     SiteName,
@@ -212,6 +214,7 @@ pub enum ManifestField {
 impl ManifestField {
     fn field_name(&self) -> &str {
         match self {
+            ManifestField::UploadPrefix => "upload_prefix",
             ManifestField::ArchivalVersion => "archival_version",
             ManifestField::SiteUrl => "site_url",
             ManifestField::SiteName => "site_name",
@@ -234,6 +237,7 @@ impl fmt::Display for Manifest {
         write!(
             f,
             r#"
+        upload_prefix: {}
         archival_version: {}
         site_url: {}
         uploads_url: {}
@@ -245,13 +249,14 @@ impl fmt::Display for Manifest {
         build dir: {}
         {}
         "#,
+            self.upload_prefix,
             self.archival_version
                 .as_ref()
                 .unwrap_or(&"unknown".to_owned()),
             self.site_url.as_ref().unwrap_or(&"none".to_owned()),
             self.uploads_url
                 .as_ref()
-                .unwrap_or(&FieldConfig::get().uploads_url.to_string()),
+                .unwrap_or(&FieldConfig::get_global().uploads_url.to_string()),
             self.object_definition_file.display(),
             self.objects_dir.display(),
             self.pages_dir.display(),
@@ -293,9 +298,10 @@ impl fmt::Display for Manifest {
 }
 
 impl Manifest {
-    pub fn default(root: &Path) -> Manifest {
+    pub fn default(root: &Path, upload_prefix: &str) -> Manifest {
         Manifest {
             root: root.to_owned(),
+            upload_prefix: upload_prefix.to_string(),
             archival_version: None,
             prebuild: vec![],
             site_url: None,
@@ -340,8 +346,12 @@ impl Manifest {
             _ => str_value.is_empty(),
         }
     }
-    pub fn from_string(root: &Path, string: String) -> Result<Manifest, Box<dyn Error>> {
-        let mut manifest = Manifest::default(root);
+    pub fn from_string(
+        root: &Path,
+        string: String,
+        upload_prefix: Option<&str>,
+    ) -> Result<Manifest, Box<dyn Error>> {
+        let mut manifest = Manifest::default(root, "");
         let values: Table = toml::from_str(&string)?;
         let path_or_err = |value: Value, field: &str| -> Result<PathBuf, InvalidManifestError> {
             if let Some(string) = value.as_str() {
@@ -349,6 +359,23 @@ impl Manifest {
             }
             Err(InvalidManifestError::BadPath(value, field.to_string()))
         };
+        // Required fields
+        manifest.upload_prefix = if let Some(upload_prefix) = upload_prefix {
+            upload_prefix.to_string()
+        } else if let Some(manifest_value) = values.get("upload_prefix") {
+            manifest_value
+                .as_str()
+                .ok_or_else(|| {
+                    InvalidManifestError::InvalidField(
+                        manifest_value.clone(),
+                        "upload_prefix".to_string(),
+                    )
+                })?
+                .to_string()
+        } else {
+            FieldConfig::get_global().upload_prefix.clone()
+        };
+        // Optional fields
         for (key, value) in values.into_iter() {
             match key.as_str() {
                 "archival_version" => {
@@ -383,17 +410,19 @@ impl Manifest {
     pub fn from_file(
         manifest_path: &Path,
         fs: &impl FileSystemAPI,
+        upload_prefix: Option<&str>,
     ) -> Result<Manifest, Box<dyn Error>> {
         let root = manifest_path
             .parent()
             .ok_or(InvalidManifestError::InvalidSitePath)?;
         let string = fs.read_to_string(manifest_path)?.unwrap_or_default();
-        Manifest::from_string(root, string)
+        Manifest::from_string(root, string, upload_prefix)
     }
 
     fn toml_field(&self, field: &ManifestField) -> Option<Value> {
         match field {
             ManifestField::ArchivalVersion => self.archival_version.to_owned().map(Value::String),
+            ManifestField::UploadPrefix => Some(Value::String(self.upload_prefix.to_owned())),
             ManifestField::SiteUrl => self.site_url.to_owned().map(Value::String),
             ManifestField::SiteName => self.site_name.to_owned().map(Value::String),
             ManifestField::ObjectDefinitionFile => Some(Value::String(
@@ -537,6 +566,7 @@ impl Manifest {
     pub fn set(&mut self, field: &ManifestField, value: String) {
         match field {
             ManifestField::ArchivalVersion => self.archival_version = Some(value),
+            ManifestField::UploadPrefix => panic!("uploads prefix is not modifiable via events"),
             ManifestField::ObjectDefinitionFile => {
                 self.object_definition_file = PathBuf::from(value)
             }
@@ -544,7 +574,7 @@ impl Manifest {
             ManifestField::SiteName => self.site_name = Some(value),
             ManifestField::CdnUrl => self.uploads_url = Some(value),
             ManifestField::Prebuild => {
-                todo!("Prebuild is not modifiable via events")
+                panic!("Prebuild is not modifiable via events")
             }
             ManifestField::ObjectsDir => self.objects_dir = PathBuf::from(value),
             ManifestField::PagesDir => self.pages_dir = PathBuf::from(value),
@@ -553,7 +583,7 @@ impl Manifest {
             ManifestField::SchemasDir => self.schemas_dir = PathBuf::from(value),
             ManifestField::LayoutDir => self.layout_dir = PathBuf::from(value),
             ManifestField::EditorTypes => {
-                todo!("EditorTypes are not modifiable via events")
+                panic!("EditorTypes are not modifiable via events")
             }
         }
     }
@@ -620,6 +650,7 @@ mod tests {
 
     fn full_manifest_content() -> &'static str {
         "archival_version = '0.8.0'
+        upload_prefix = 'site-repo-doid/'
         site_url = 'https://jesse.onarchival.dev'
         object_file = 'm_objects.toml'
         prebuild = ['echo \"HELLO!\"']
@@ -646,9 +677,10 @@ mod tests {
 
     #[test]
     fn manifest_parsing() -> Result<(), Box<dyn Error>> {
-        let m = Manifest::from_string(Path::new(""), full_manifest_content().to_string())?;
+        let m = Manifest::from_string(Path::new(""), full_manifest_content().to_string(), None)?;
         println!("M: {:?}", m);
         assert_eq!(m.archival_version, Some("0.8.0".to_string()));
+        assert_eq!(m.upload_prefix, "site-repo-doid/".to_string());
         assert_eq!(m.site_url, Some("https://jesse.onarchival.dev".to_string()));
         assert_eq!(
             m.object_definition_file,

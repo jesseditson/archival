@@ -58,6 +58,9 @@ impl BinaryCommand for Command {
     fn name(&self) -> &str {
         "upload"
     }
+    fn uses_uploads(&self) -> bool {
+        true
+    }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
         cmd.about("uploads a local file to archival")
             .arg(
@@ -115,7 +118,13 @@ impl BinaryCommand for Command {
         let field_path = ValuePath::from_string(field);
         // Set up an archival site to make sure we're able to modify fields
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
-        let archival = Archival::new(fs)?;
+        let archival = if let Some(upload_prefix) =
+            args.get_one::<String>("upload-prefix").map(|s| s.as_str())
+        {
+            Archival::new_with_upload_prefix(fs, upload_prefix)?
+        } else {
+            Archival::new(fs)?
+        };
         // Make sure that the specified object exists
         if !archival.object_exists(&object_type, &object_name)? {
             return Err(UploadError::InvalidObjectPath(object.to_owned()).into());
@@ -174,8 +183,9 @@ impl BinaryCommand for Command {
             .file_name()
             .map_or("".to_string(), |f| f.to_string_lossy().to_string());
         let upload_url = format!(
-            "{}/upload/{}/{}",
+            "{}/upload/{}{}/{}",
             API_URL,
+            archival.site.manifest.upload_prefix,
             file.sha,
             urlencoding::encode(&file.filename)
         );

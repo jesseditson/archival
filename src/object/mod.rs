@@ -315,6 +315,7 @@ mod tests {
             let vf = video.get("video").unwrap();
             assert!(matches!(vf, FieldValue::File(_)));
             println!("{:?}", vf);
+            let fc = FieldConfig::get_global();
             if let FieldValue::File(vf) = vf {
                 assert_eq!(vf.sha, "fake-sha");
                 assert_eq!(vf.name, Some("Video Name".to_string()));
@@ -322,7 +323,7 @@ mod tests {
                 assert_eq!(vf.mime, "video/mpeg4");
                 assert_eq!(
                     vf.url,
-                    format!("{}/fake-sha/video.mp4", FieldConfig::get().uploads_url)
+                    format!("{}{}/fake-sha/video.mp4", fc.upload_prefix, fc.uploads_url)
                 );
             }
         }

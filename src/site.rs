@@ -89,11 +89,14 @@ fn get_order(obj: &Object) -> String {
 
 impl Site {
     #[instrument(skip(fs))]
-    pub fn load(fs: &impl FileSystemAPI) -> Result<Site, Box<dyn Error>> {
+    pub fn load(
+        fs: &impl FileSystemAPI,
+        upload_prefix: Option<&str>,
+    ) -> Result<Site, Box<dyn Error>> {
         // Load our manifest (should it exist)
         let manifest_path = Path::new(MANIFEST_FILE_NAME);
         let manifest = if fs.exists(manifest_path)? {
-            let manifest = Manifest::from_file(manifest_path, fs)?;
+            let manifest = Manifest::from_file(manifest_path, fs, upload_prefix)?;
             // When loading a manifest, check its compatibility.
             if let Some(manifest_version) = &manifest.archival_version {
                 let (compat, message) = check_compatibility(manifest_version);
@@ -103,7 +106,14 @@ impl Site {
             }
             manifest
         } else {
-            Manifest::default(Path::new(""))
+            Manifest::default(
+                Path::new(""),
+                upload_prefix.ok_or_else(|| {
+                    ArchivalError::new(
+                        "upload_prefix must be manually defined if manifest.toml is not present.",
+                    )
+                })?,
+            )
         };
         let odf = Path::new(&manifest.object_definition_file);
         if !fs.exists(odf)? {
@@ -210,8 +220,11 @@ impl Site {
         Ok(())
     }
 
-    pub fn get_field_config(&self) -> FieldConfig {
-        FieldConfig::new(self.manifest.uploads_url.as_ref().map(|u| u.to_owned()))
+    pub fn get_field_config(
+        &self,
+        upload_prefix: Option<&str>,
+    ) -> Result<FieldConfig, ArchivalError> {
+        FieldConfig::from_manifest(Some(&self.manifest), upload_prefix)
     }
 
     #[instrument(skip(fs))]

@@ -22,7 +22,7 @@ impl BinaryCommand for Command {
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let field = args.get_one::<ManifestField>("field").unwrap();
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
-        let site = Site::load(&fs)?;
+        let site = Site::load(&fs, Some(""))?;
         print!("{}", site.manifest.field_as_string(field));
         Ok(ExitStatus::Ok)
     }

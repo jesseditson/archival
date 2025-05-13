@@ -20,7 +20,7 @@ impl BinaryCommand for Command {
         _args: &ArgMatches,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
-        let site = Site::load(&fs)?;
+        let site = Site::load(&fs, Some(""))?;
         let mut objects: HashMap<String, liquid::model::Value> = HashMap::new();
         let definitions = &site.object_definitions;
         for (name, obj_entry) in site.get_objects(&fs)? {

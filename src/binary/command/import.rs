@@ -517,7 +517,7 @@ mod csv_tests {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../../../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = crate::Archival::new(fs)?;
+        let archival = crate::Archival::new_with_upload_prefix(fs, "")?;
         let obj_def = archival.site.object_definitions.get("post").unwrap();
         Command::parse(
             &mut reader,
@@ -565,7 +565,7 @@ mod csv_tests {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../../../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = crate::Archival::new(fs)?;
+        let archival = crate::Archival::new_with_upload_prefix(fs, "")?;
         let obj_def = archival.site.object_definitions.get("childlist").unwrap();
         Command::parse(
             &mut reader,

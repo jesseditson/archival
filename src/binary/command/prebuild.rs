@@ -17,7 +17,7 @@ impl BinaryCommand for Command {
         _args: &ArgMatches,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
-        let site = Site::load(&fs)?;
+        let site = Site::load(&fs, Some(""))?;
         for s in site.manifest.prebuild {
             let cmd_parts: Vec<&str> = s.split_whitespace().collect();
             if !cmd_parts.is_empty() {

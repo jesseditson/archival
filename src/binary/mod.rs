@@ -11,6 +11,13 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn 
     let mut cmd = command!().arg_required_else_help(true);
     for command in COMMANDS {
         let mut subcommand = command.cli(Command::new(command.name()));
+        if command.uses_uploads() {
+            subcommand = subcommand.arg(
+                // NOTE: weird long form quoting due to https://github.com/clap-rs/clap/issues/3586
+                arg!(-u --"upload-prefix" <prefix> "override the uploads prefix. If no manifest.toml is present, this is required.")
+                    .value_parser(value_parser!(String)),
+            )
+        }
         if !command.no_path() {
             subcommand = subcommand.arg(
                 arg!([site_path] "an optional path to the archival site. Otherwise will be auto-detected from cwd.")

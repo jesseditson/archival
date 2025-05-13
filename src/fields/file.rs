@@ -247,12 +247,13 @@ impl File {
         if sha.is_empty() {
             return "".to_string();
         }
-        let config = FieldConfig::get();
+        let config = FieldConfig::get_global();
         if filename.is_empty() {
-            format!("{}/{}", config.uploads_url, sha)
+            format!("{}{}/{}", config.upload_prefix, config.uploads_url, sha)
         } else {
             format!(
-                "{}/{}/{}",
+                "{}{}/{}/{}",
+                config.upload_prefix,
                 config.uploads_url,
                 sha,
                 urlencoding::encode(filename)
