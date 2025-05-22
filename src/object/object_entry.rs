@@ -24,6 +24,18 @@ impl ObjectEntry {
     pub fn is_object(&self) -> bool {
         matches!(self, ObjectEntry::Object(_))
     }
+    pub fn as_object(&self) -> Option<&Object> {
+        match self {
+            Self::Object(o) => Some(o),
+            _ => None,
+        }
+    }
+    pub fn as_list(&self) -> Option<&Vec<Object>> {
+        match self {
+            Self::List(l) => Some(l),
+            _ => None,
+        }
+    }
 }
 
 pub struct ObjectEntryIterator<'a> {
