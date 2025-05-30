@@ -249,12 +249,12 @@ impl File {
         }
         let config = FieldConfig::get_global();
         if filename.is_empty() {
-            format!("{}{}/{}", config.upload_prefix, config.uploads_url, sha)
+            format!("{}/{}{}", config.uploads_url, config.upload_prefix, sha)
         } else {
             format!(
-                "{}{}/{}/{}",
-                config.upload_prefix,
+                "{}/{}{}/{}",
                 config.uploads_url,
+                config.upload_prefix,
                 sha,
                 urlencoding::encode(filename)
             )
@@ -376,6 +376,32 @@ pub mod tests {
             println!("{}", file.url());
             assert!(!file.url().is_empty());
         }
+    }
+    #[test]
+    fn files_urls_are_relative_to_uploads_url() {
+        FieldConfig::set_global(FieldConfig {
+            uploads_url: "http://foo.com".to_string(),
+            upload_prefix: "".to_string(),
+        });
+        let mut file = File::image();
+        file.filename = "image.png".to_string();
+        file.sha = "fake-sha".to_string();
+        println!("{}", file.url());
+        assert_eq!(file.url(), "http://foo.com/fake-sha/image.png");
+        FieldConfig::set_global(FieldConfig::default());
+    }
+    #[test]
+    fn files_urls_include_uploads_prefix() {
+        FieldConfig::set_global(FieldConfig {
+            uploads_url: "http://foo.com".to_string(),
+            upload_prefix: "repo-doid/".to_string(),
+        });
+        let mut file = File::image();
+        file.filename = "image.png".to_string();
+        file.sha = "fake-sha".to_string();
+        println!("{}", file.url());
+        assert_eq!(file.url(), "http://foo.com/repo-doid/fake-sha/image.png");
+        FieldConfig::set_global(FieldConfig::default());
     }
     #[test]
     fn files_dont_have_urls_until_specific() {
