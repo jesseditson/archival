@@ -15,6 +15,7 @@ mod site;
 mod tags;
 #[cfg(test)]
 mod test_utils;
+mod util;
 mod value_path;
 pub use constants::{MANIFEST_FILE_NAME, MIN_COMPAT_VERSION};
 use events::{

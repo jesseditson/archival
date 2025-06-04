@@ -27,7 +27,7 @@ mod typedefs {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ObjectDefinition {
     pub name: String,
@@ -154,7 +154,7 @@ impl ObjectDefinition {
 #[cfg(test)]
 pub mod tests {
 
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     use super::*;
 
@@ -180,7 +180,7 @@ pub mod tests {
     #[test]
     fn parsing() -> Result<(), Box<dyn Error>> {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table, &HashMap::new())?;
+        let defs = ObjectDefinition::from_table(&table, &BTreeMap::new())?;
 
         println!("{:?}", defs);
 

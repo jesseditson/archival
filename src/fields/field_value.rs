@@ -1,4 +1,5 @@
 use crate::object::to_liquid::object_to_liquid;
+use crate::util::integer_decode;
 use crate::ObjectDefinition;
 
 use super::file::File;
@@ -10,6 +11,7 @@ use liquid::{model, ValueView};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::hash::Hash;
 use std::{
     error::Error,
     fmt::{self, Debug},
@@ -77,6 +79,15 @@ pub enum FieldValue {
 }
 fn err(f_type: &FieldType, value: String) -> FieldValueError {
     FieldValueError::InvalidValue(f_type.to_string(), value.to_owned())
+}
+
+impl Hash for FieldValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            FieldValue::Number(n) => integer_decode(*n).hash(state),
+            v => v.hash(state),
+        }
+    }
 }
 
 impl FieldValue {

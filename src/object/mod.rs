@@ -5,13 +5,14 @@ use crate::{
     manifest::{EditorTypes, ManifestEditorTypeValidator},
     object_definition::ObjectDefinition,
     reserved_fields::{self, is_reserved_field},
+    util::integer_decode,
 };
 use liquid::{
     model::{KString, Value},
     ObjectView, ValueView,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, error::Error, fmt::Debug, path::Path};
+use std::{collections::BTreeMap, error::Error, fmt::Debug, hash::Hash, path::Path};
 use to_liquid::object_to_liquid;
 use toml::Table;
 use tracing::{instrument, warn};
@@ -27,6 +28,15 @@ pub struct Object {
     pub order: Option<f64>,
     pub path: String,
     pub values: ObjectValues,
+}
+impl Hash for Object {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.filename.hash(state);
+        self.object_name.hash(state);
+        self.order.map(integer_decode).hash(state);
+        self.path.hash(state);
+        self.values.hash(state);
+    }
 }
 
 impl Object {
@@ -180,7 +190,7 @@ impl Object {
     ) -> Result<Self, Box<dyn Error>> {
         let path = Path::new(&definition.name).join(filename);
         let values =
-            Object::values_from_table(&path, &Table::new(), definition, &HashMap::new(), true)?;
+            Object::values_from_table(&path, &Table::new(), definition, &BTreeMap::new(), true)?;
         let mut object = Self {
             filename: filename.to_owned(),
             object_name: definition.name.clone(),
@@ -233,7 +243,6 @@ impl Object {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
 
     use crate::{
         fields::DateTime, object_definition::tests::artist_and_example_definition_str, FieldConfig,
@@ -260,14 +269,14 @@ mod tests {
     fn object_parsing() -> Result<(), Box<dyn Error>> {
         let defs = ObjectDefinition::from_table(
             &toml::from_str(artist_and_example_definition_str())?,
-            &HashMap::new(),
+            &BTreeMap::new(),
         )?;
         let table: Table = toml::from_str(artist_object_str())?;
         let obj = Object::from_table(
             defs.get("artist").unwrap(),
             Path::new("tormenta-rey"),
             &table,
-            &HashMap::new(),
+            &BTreeMap::new(),
             false,
         )?;
         assert_eq!(obj.order, Some(1.));

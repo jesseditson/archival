@@ -11,7 +11,7 @@ use time::{
     format_description, macros::format_description, OffsetDateTime as DateTimeImpl, UtcOffset,
 };
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, PartialOrd, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct DateTime {
     #[serde(skip)]

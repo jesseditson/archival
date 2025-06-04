@@ -141,7 +141,7 @@ pub fn generate_json_schema(
 pub mod tests {
 
     use serde_json::json;
-    use std::{collections::HashMap, error::Error};
+    use std::{collections::BTreeMap, error::Error};
     use toml::Table;
 
     use crate::{
@@ -171,7 +171,7 @@ pub mod tests {
     #[test]
     fn json_schema_generation() -> Result<(), Box<dyn Error>> {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table, &HashMap::new())?;
+        let defs = ObjectDefinition::from_table(&table, &BTreeMap::new())?;
 
         let schema = generate_json_schema(
             "artist",

@@ -1,9 +1,10 @@
 use regex::Regex;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     error::Error,
     fmt::{self, Display},
+    hash::Hash,
     ops::Deref,
     path::{Path, PathBuf},
 };
@@ -49,6 +50,12 @@ pub struct Validator(#[cfg_attr(feature = "typescript", type_def(type_of = "Stri
 impl PartialEq for Validator {
     fn eq(&self, other: &Self) -> bool {
         self.as_str() == other.as_str()
+    }
+}
+
+impl Hash for Validator {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.as_str().hash(state);
     }
 }
 
@@ -103,14 +110,14 @@ impl<'de> Deserialize<'de> for Validator {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ManifestEditorTypePathValidator {
     pub path: ValuePath,
     pub validate: Validator,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ManifestEditorTypeValidator {
     Value(Validator),
@@ -148,7 +155,7 @@ impl From<&ManifestEditorTypeValidator> for toml::Value {
         }
     }
 }
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ManifestEditorType {
     pub alias_of: String,
@@ -168,9 +175,9 @@ impl From<&ManifestEditorType> for toml::Value {
     }
 }
 
-pub type EditorTypes = HashMap<String, ManifestEditorType>;
+pub type EditorTypes = BTreeMap<String, ManifestEditorType>;
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Manifest {
     #[serde(skip)]
@@ -314,7 +321,7 @@ impl Manifest {
             build_dir: root.join(BUILD_DIR_NAME),
             static_dir: root.join(STATIC_DIR_NAME),
             layout_dir: root.join(LAYOUT_DIR_NAME),
-            editor_types: HashMap::new(),
+            editor_types: BTreeMap::new(),
         }
     }
     fn is_default(&self, field: &ManifestField) -> bool {
@@ -474,7 +481,7 @@ impl Manifest {
             toml::Value::Table(t) => t,
             _ => return Err(InvalidManifestError::FailedParsing),
         };
-        let mut editor_types = HashMap::new();
+        let mut editor_types = BTreeMap::new();
         for (type_name, info) in types {
             let mut editor_type = ManifestEditorType::default();
             let info_map = match info {

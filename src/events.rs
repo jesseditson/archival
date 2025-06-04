@@ -1,12 +1,12 @@
 use indefinite::indefinite;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{fmt::Display, hash::Hash};
 #[cfg(feature = "typescript")]
 use typescript_type_def::TypeDef;
 
-use crate::{value_path::ValuePath, FieldValue};
+use crate::{util::integer_decode, value_path::ValuePath, FieldValue};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub enum ArchivalEvent {
     RenameObject(RenameObjectEvent),
@@ -105,7 +105,7 @@ pub enum ArchivalEventResponse {
     Index(usize),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct EditFieldEvent {
     pub object: String,
@@ -124,7 +124,16 @@ pub struct EditOrderEvent {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+impl Hash for EditOrderEvent {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.object.hash(state);
+        self.filename.hash(state);
+        self.order.map(integer_decode).hash(state);
+        self.source.hash(state);
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct DeleteObjectEvent {
     pub object: String,
@@ -132,7 +141,7 @@ pub struct DeleteObjectEvent {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct AddObjectValue {
     pub path: ValuePath,
@@ -148,14 +157,23 @@ pub struct AddObjectEvent {
     pub values: Vec<AddObjectValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+impl Hash for AddObjectEvent {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.object.hash(state);
+        self.filename.hash(state);
+        self.order.map(integer_decode).hash(state);
+        self.values.hash(state);
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct AddRootObjectEvent {
     pub object: String,
     pub values: Vec<AddObjectValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct AddChildEvent {
     pub object: String,
@@ -166,7 +184,7 @@ pub struct AddChildEvent {
     pub index: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct RemoveChildEvent {
     pub object: String,
@@ -175,7 +193,7 @@ pub struct RemoveChildEvent {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
 pub struct RenameObjectEvent {
     pub object: String,

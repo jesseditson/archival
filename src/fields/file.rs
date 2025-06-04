@@ -70,7 +70,9 @@ mod typedefs {
     }
 }
 
-#[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq, PartialOrd)]
+#[derive(
+    Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq, PartialOrd, Hash,
+)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct File {
     pub sha: String,

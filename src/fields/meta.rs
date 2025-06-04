@@ -1,6 +1,8 @@
 use liquid_core::model;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt::Display};
+use std::{collections::BTreeMap, fmt::Display, hash::Hash};
+
+use crate::util::integer_decode;
 
 use super::DateTime;
 
@@ -25,7 +27,7 @@ mod typedefs {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Meta(pub BTreeMap<String, MetaValue>);
 
@@ -130,6 +132,15 @@ pub enum MetaValue {
     ),
     // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
     Map(#[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::MetaTypeDef"))] Meta),
+}
+
+impl Hash for MetaValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            MetaValue::Number(n) => integer_decode(*n).hash(state),
+            v => v.hash(state),
+        }
+    }
 }
 
 impl MetaValue {
