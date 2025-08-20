@@ -22,7 +22,7 @@ pub struct DirEntry {
 
 impl PartialOrd for DirEntry {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.path.cmp(&other.path))
+        Some(self.cmp(other))
     }
 }
 
