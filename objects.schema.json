@@ -1,0 +1,46 @@
+{
+  "$id": "jesseditson/archival/v0.10.4/objects.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "id": "object_def",
+  "patternProperties": {
+    "^[a-zA-Z0-9_-]+$": {
+      "anyOf": [
+        {
+          "type": "string",
+          "description": "the archival type that this field will use. NOTE: this schema does not yet support custom types.",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "date",
+            "markdown",
+            "image",
+            "video",
+            "audio",
+            "upload",
+            "meta"
+          ]
+        },
+        {
+          "$ref": "#",
+          "description": "a child object definition"
+        }
+      ]
+    }
+  },
+  "propertyNames": {
+    "not": {
+      "anyOf": [
+        { "const": "template" },
+        { "const": "order" },
+        { "const": "objects" },
+        { "const": "object_name" },
+        { "const": "page" },
+        { "const": "page_name" },
+        { "const": "site_url" }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

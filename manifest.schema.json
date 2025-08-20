@@ -1,6 +1,8 @@
 {
-  "$id": "jesseditson/archival/v0.10.5/app.schema.json",
+  "$id": "jesseditson/archival/v0.10.4/manifest.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "type": "object",
   "properties": {
     "upload_prefix": {
       "description": "this string is appended to all upload paths, used for differentiating sites using the same uploads_url",
@@ -66,8 +68,11 @@
     },
     "editor_types": {
       "type": "object",
+      "description": "a dictionary of custom-defined editor types",
+      "additionalProperties": false,
       "properties": {
         "type": {
+          "description": "the type that this custom type is backed with",
           "enum": [
             "string",
             "number",
@@ -83,6 +88,7 @@
           "type": "string"
         },
         "editor_url": {
+          "description": "a URL to load a custom editor from. If unspecified, will use the underlying type's editor",
           "type": "string"
         },
         "validate": {
@@ -96,6 +102,7 @@
               },
               {
                 "type": "object",
+                "additionalProperties": false,
                 "properties": {
                   "path": {
                     "type": "string",
@@ -112,6 +119,5 @@
         }
       }
     }
-  },
-  "type": "object"
+  }
 }
