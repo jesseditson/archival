@@ -1,9 +1,9 @@
 use std::{error::Error, ops::DerefMut, sync::Mutex};
-use thiserror::Error;
 
 use crate::FileSystemAPI;
 
-#[derive(Error, Debug)]
+#[cfg(not(debug_assertions))]
+#[derive(thiserror::Error, Debug)]
 pub enum FileSystemMutexError {
     #[cfg(not(debug_assertions))]
     #[error("File System mutex lock failed.")]
