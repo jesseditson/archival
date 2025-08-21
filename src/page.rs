@@ -469,6 +469,10 @@ mod tests {
             rendered.contains("path: artist/tormenta-rey"),
             "items define paths"
         );
+        assert!(
+            rendered.contains("url: https://foo.bar"),
+            "site_url is defined"
+        );
         Ok(())
     }
     #[test]
