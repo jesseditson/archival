@@ -99,7 +99,12 @@ pub static MARKDOWN_OPTIONS: Lazy<ComrakOptions> = Lazy::new(|| {
     options.extension.table = true;
     options.extension.superscript = true;
     options.extension.description_lists = true;
-    options.extension.tagfilter = true;
+    // NOTE: it's unclear how much nannying we need to do here, as users are
+    // only able to update their own markdown and by definition they have access
+    // to the html if they have access to the repo... however if someone is
+    // tricked into pasting things into markdown they could potentially open
+    // some issues?
+    options.extension.tagfilter = false;
     options.extension.header_ids = Some("".to_string());
     options.extension.footnotes = true;
     options.render.unsafe_ = true;
@@ -301,13 +306,10 @@ impl ValueView for FieldValue {
             FieldValue::Number(n) => Some(model::ScalarCow::new(*n)),
             // TODO: should be able to return a datetime value here
             FieldValue::Date(d) => Some(model::ScalarCow::new((*d).as_liquid_datetime())),
-            FieldValue::Markdown(s) => {
-                println!("OPTIONS: {:?}", *MARKDOWN_OPTIONS);
-                Some(model::ScalarCow::new(markdown_to_html(
-                    s,
-                    &MARKDOWN_OPTIONS,
-                )))
-            }
+            FieldValue::Markdown(s) => Some(model::ScalarCow::new(markdown_to_html(
+                s,
+                &MARKDOWN_OPTIONS,
+            ))),
             FieldValue::Boolean(b) => Some(model::ScalarCow::new(*b)),
             FieldValue::Objects(_) => None,
             FieldValue::File(_f) => None,
@@ -652,14 +654,14 @@ pub mod markdown_tests {
     fn some_html_is_allowed() {
         // tricky; indenting these will cause them to be parsed as code, which
         // will fail the test.
-        let value = FieldValue::Markdown("# Hello!
+        let value = FieldValue::Markdown(
+            "# Hello!
 here is some markdown.
 
-Within it I am allowed to add some tags like: <a href=\"https://taskmastersbirthday.com\">links</a>
-
-However others, like <script type='application/javascript'>alert('you have been pwned!');</script> do not.
-".to_string()
-    );
+Within it I can add some tags like: <a href=\"https://taskmastersbirthday.com\">links</a>
+"
+            .to_string(),
+        );
 
         let rendered = value.as_scalar().expect("parsing failed").into_string();
 
@@ -669,6 +671,5 @@ However others, like <script type='application/javascript'>alert('you have been 
             rendered.contains("<a href=\"https://"),
             "links are rendered properly"
         );
-        assert!(!rendered.contains("<script"), "scripts are not rendered");
     }
 }
