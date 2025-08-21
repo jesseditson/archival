@@ -263,6 +263,16 @@ mod tests {
 
     use super::*;
 
+    fn content_markdown() -> String {
+        "## hello from markdown!
+
+here is some unescaped html: <br/>
+
+here is a liquid variable: {{site_url}}
+        "
+        .to_string()
+    }
+
     fn get_objects_map() -> BTreeMap<String, ObjectEntry> {
         let tour_dates_objects = vec![ObjectValues::from([
             (
@@ -316,7 +326,7 @@ mod tests {
         let c_values = ObjectValues::from([
             (
                 "content".to_string(),
-                FieldValue::Markdown("# hello".to_string()),
+                FieldValue::Markdown(content_markdown()),
             ),
             ("name".to_string(), FieldValue::String("home".to_string())),
             ("links".to_string(), FieldValue::Objects(links_objects)),
@@ -456,8 +466,8 @@ mod tests {
         println!("rendered: {}", rendered);
         assert!(rendered.contains("name: home"), "filtered object");
         assert!(
-            rendered.contains("content: <h1>hello</h1>"),
-            "markdown field"
+            rendered.contains(r##"content: <h2><a href="#hello-from-markdown" aria-hidden="true" class="anchor" id="hello-from-markdown"></a>hello from markdown!</h2>"##),
+            "markdown is parsed into html correctly"
         );
         assert!(rendered.contains("link: foo.com"), "child string field");
         assert!(
@@ -472,6 +482,10 @@ mod tests {
         assert!(
             rendered.contains("url: https://foo.bar"),
             "site_url is defined"
+        );
+        assert!(
+            rendered.contains("here is some unescaped html: <br/>"),
+            "html in markdown is not escaped"
         );
         Ok(())
     }

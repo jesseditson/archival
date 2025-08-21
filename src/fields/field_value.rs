@@ -8,6 +8,7 @@ use super::DateTime;
 use super::{FieldType, InvalidFieldError};
 use comrak::{markdown_to_html, ComrakOptions};
 use liquid::{model, ValueView};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -90,6 +91,20 @@ impl Hash for FieldValue {
         }
     }
 }
+
+pub static MARKDOWN_OPTIONS: Lazy<ComrakOptions> = Lazy::new(|| {
+    let mut options = ComrakOptions::default();
+    options.extension.autolink = true;
+    options.extension.strikethrough = true;
+    options.extension.table = true;
+    options.extension.superscript = true;
+    options.extension.description_lists = true;
+    options.extension.tagfilter = true;
+    options.extension.header_ids = Some("".to_string());
+    options.extension.footnotes = true;
+    options.render.unsafe_ = true;
+    options
+});
 
 impl FieldValue {
     // Note that this comparison just skips fields that cannot be compared and
@@ -286,10 +301,13 @@ impl ValueView for FieldValue {
             FieldValue::Number(n) => Some(model::ScalarCow::new(*n)),
             // TODO: should be able to return a datetime value here
             FieldValue::Date(d) => Some(model::ScalarCow::new((*d).as_liquid_datetime())),
-            FieldValue::Markdown(s) => Some(model::ScalarCow::new(markdown_to_html(
-                s,
-                &ComrakOptions::default(),
-            ))),
+            FieldValue::Markdown(s) => {
+                println!("OPTIONS: {:?}", *MARKDOWN_OPTIONS);
+                Some(model::ScalarCow::new(markdown_to_html(
+                    s,
+                    &MARKDOWN_OPTIONS,
+                )))
+            }
             FieldValue::Boolean(b) => Some(model::ScalarCow::new(*b)),
             FieldValue::Objects(_) => None,
             FieldValue::File(_f) => None,
@@ -618,5 +636,39 @@ pub mod enum_tests {
         }));
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+pub mod markdown_tests {
+
+    use super::*;
+
+    // We use tagfilter
+    // (https://github.github.com/gfm/#disallowed-raw-html-extension-) instead
+    // of fully removing or disabling html, so most things users want to do will
+    // still work.
+    #[test]
+    fn some_html_is_allowed() {
+        // tricky; indenting these will cause them to be parsed as code, which
+        // will fail the test.
+        let value = FieldValue::Markdown("# Hello!
+here is some markdown.
+
+Within it I am allowed to add some tags like: <a href=\"https://taskmastersbirthday.com\">links</a>
+
+However others, like <script type='application/javascript'>alert('you have been pwned!');</script> do not.
+".to_string()
+    );
+
+        let rendered = value.as_scalar().expect("parsing failed").into_string();
+
+        println!("rendered: {}", rendered);
+
+        assert!(
+            rendered.contains("<a href=\"https://"),
+            "links are rendered properly"
+        );
+        assert!(!rendered.contains("<script"), "scripts are not rendered");
     }
 }
