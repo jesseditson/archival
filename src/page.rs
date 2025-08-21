@@ -225,27 +225,40 @@ impl<'a> Page<'a> {
             context.extend(liquid::object!({
               template_info.definition.name.to_owned(): object_vals
             }));
-            return match template.render(&context) {
-                Ok(v) => Ok(v),
-                Err(error) => Err(error
-                    .trace(format!("{}", template_info.debug_path.to_string_lossy()))
-                    .trace(format!("context (template):{}", debug_context(&context, 0)))
-                    .into()),
-            };
+            template
+                .render(&context)
+                .and_then(|rendered| {
+                    // We now have a rendered string, but because of possible variables
+                    // in markdown, we actually need to render one more time
+                    parser.parse(&rendered)?.render(&context)
+                })
+                .map_err(|error| {
+                    error
+                        .trace(format!("{}", template_info.debug_path.to_string_lossy()))
+                        .trace(format!("context (template):{}", debug_context(&context, 0)))
+                        .into()
+                })
         } else if let Some(content) = &self.content {
             let template = parser.parse(content)?;
-            return match template.render(&globals) {
-                Ok(v) => Ok(v),
-                Err(error) => Err(error
-                    .trace(format!(
-                        "{}",
-                        self.debug_path.as_ref().unwrap().to_string_lossy()
-                    ))
-                    .trace(format!("context (page):{}", debug_context(&globals, 0)))
-                    .into()),
-            };
+            template
+                .render(&globals)
+                .and_then(|rendered| {
+                    // We now have a rendered string, but because of possible variables
+                    // in markdown, we actually need to render one more time
+                    parser.parse(&rendered)?.render(&globals)
+                })
+                .map_err(|error| {
+                    error
+                        .trace(format!(
+                            "{}",
+                            self.debug_path.as_ref().unwrap().to_string_lossy()
+                        ))
+                        .trace(format!("context (page):{}", debug_context(&globals, 0)))
+                        .into()
+                })
+        } else {
+            panic!("Pages must have either a template or a path");
         }
-        panic!("Pages must have either a template or a path");
     }
 
     pub fn extension(&self) -> &str {
@@ -486,6 +499,10 @@ here is a liquid variable: {{site_url}}
         assert!(
             rendered.contains("here is some unescaped html: <br/>"),
             "html in markdown is not escaped"
+        );
+        assert!(
+            rendered.contains("here is a liquid variable: https://foo.bar"),
+            "liquid in markdown is parsed"
         );
         Ok(())
     }
