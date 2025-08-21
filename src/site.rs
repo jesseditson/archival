@@ -7,7 +7,7 @@ use crate::{
     manifest::Manifest,
     object::{Object, ObjectEntry},
     object_definition::{ObjectDefinition, ObjectDefinitions},
-    page::{Page, TemplateType},
+    page::{Page, RenderGlobals, TemplateType},
     read_toml::read_toml,
     tags::layout,
     ArchivalError, FieldConfig, FileSystemAPI,
@@ -453,8 +453,13 @@ impl Site {
             layout_dir,
             pages_dir,
             build_dir,
+            site_url,
             ..
         } = &self.manifest;
+
+        let globals = RenderGlobals {
+            site_url: site_url.as_ref().map(|v| v.into()).unwrap_or_default(),
+        };
 
         // Validate paths
         if !fs.exists(objects_dir)? {
@@ -527,6 +532,7 @@ impl Site {
                                 &self.object_definitions,
                                 &all_objects,
                                 fs,
+                                &globals,
                                 &liquid_parser,
                             ) {
                                 return Err(BuildError::TemplateRenderError(
@@ -578,6 +584,7 @@ impl Site {
                         &self.object_definitions,
                         &all_objects,
                         fs,
+                        &globals,
                         &liquid_parser,
                     ) {
                         return Err(BuildError::PageRenderError(
@@ -603,6 +610,7 @@ impl Site {
         object_definitions: &BTreeMap<String, ObjectDefinition>,
         all_objects: &BTreeMap<String, ObjectEntry>,
         fs: &mut T,
+        globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
     ) -> Result<(), Box<dyn Error>> {
         let page = Page::new_with_template(
@@ -611,6 +619,7 @@ impl Site {
             object,
             template_str.to_owned(),
             TemplateType::Default,
+            globals,
             template_path,
         );
         let render_o = page.render(liquid_parser, all_objects, object_definitions);
@@ -639,6 +648,7 @@ impl Site {
         object_definitions: &BTreeMap<String, ObjectDefinition>,
         all_objects: &BTreeMap<String, ObjectEntry>,
         fs: &mut T,
+        globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
     ) -> Result<(), Box<dyn Error>> {
         if let Some(template_str) = fs.read_to_string(file_path)? {
@@ -646,6 +656,7 @@ impl Site {
                 page_name.to_string(),
                 template_str,
                 TemplateType::Default,
+                globals,
                 file_path,
             );
             let render_o = page.render(liquid_parser, all_objects, object_definitions);

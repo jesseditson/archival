@@ -572,7 +572,7 @@ impl From<&serde_json::Value> for FieldValue {
 }
 
 #[cfg(test)]
-pub mod tests {
+pub mod enum_tests {
 
     use super::*;
 

@@ -8,6 +8,7 @@ use once_cell::sync::Lazy;
 use pluralizer::pluralize;
 use regex::Regex;
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     error::Error,
     fmt,
@@ -86,11 +87,23 @@ pub struct PageTemplate<'a> {
     pub debug_path: PathBuf,
 }
 
+#[derive(Debug)]
+pub struct RenderGlobals<'a> {
+    pub site_url: Cow<'a, str>,
+}
+
+impl RenderGlobals<'_> {
+    fn inject(&self, object: &mut liquid::Object) {
+        object.insert("site_url".into(), Value::scalar(self.site_url.to_string()));
+    }
+}
+
 pub struct Page<'a> {
     name: String,
     content: Option<String>,
     template: Option<PageTemplate<'a>>,
     file_type: TemplateType,
+    globals: &'a RenderGlobals<'a>,
     pub debug_path: Option<PathBuf>,
 }
 
@@ -136,6 +149,7 @@ impl<'a> Page<'a> {
         object: &'a Object,
         content: String,
         file_type: TemplateType,
+        globals: &'a RenderGlobals<'a>,
         template_debug_path: &Path,
     ) -> Page<'a> {
         Page {
@@ -149,6 +163,7 @@ impl<'a> Page<'a> {
                 debug_path: template_debug_path.to_path_buf(),
             }),
             file_type,
+            globals,
             debug_path: None,
         }
     }
@@ -156,6 +171,7 @@ impl<'a> Page<'a> {
         name: String,
         content: String,
         file_type: TemplateType,
+        globals: &'a RenderGlobals<'a>,
         debug_path: &Path,
     ) -> Page<'a> {
         Page {
@@ -163,6 +179,7 @@ impl<'a> Page<'a> {
             content: Some(content),
             template: None,
             file_type,
+            globals,
             debug_path: Some(debug_path.to_path_buf()),
         }
     }
@@ -189,6 +206,7 @@ impl<'a> Page<'a> {
                 pluralize(name, if obj_entry.is_list() { 2 } else { 1 }, false).into(),
                 values,
             );
+            self.globals.inject(&mut globals);
         }
         globals.insert("objects".into(), objects.into());
         if let Some(template_info) = &self.template {
@@ -393,6 +411,7 @@ mod tests {
 
     fn page_content() -> &'static str {
         "{% assign c = objects.c | where: \"name\", \"home\" | first %}
+        url: {{site_url}}
         name: {{c.name}}
         content: {{c.content}}
         page_path: {{c.path}}
@@ -421,12 +440,16 @@ mod tests {
     #[test]
     fn regular_page() -> Result<(), Box<dyn Error>> {
         let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
+        let globals = RenderGlobals {
+            site_url: "https://foo.bar".into(),
+        };
         let objects_map = get_objects_map();
         let definition_map = get_definition_map();
         let page = Page::new(
             "home".to_string(),
             page_content().to_string(),
             TemplateType::Default,
+            &globals,
             Path::new("objects/home.toml"),
         );
         let rendered = page.render(&liquid_parser, &objects_map, &definition_map)?;
@@ -450,6 +473,9 @@ mod tests {
     }
     #[test]
     fn template_page() -> Result<(), Box<dyn Error>> {
+        let globals = RenderGlobals {
+            site_url: "https://foo.bar".into(),
+        };
         let definition_map = get_definition_map();
         let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
@@ -462,6 +488,7 @@ mod tests {
             object,
             artist_template_content().to_string(),
             TemplateType::Default,
+            &globals,
             Path::new("objects/template.toml"),
         );
         let rendered = page.render(&liquid_parser, &objects_map, &definition_map)?;
