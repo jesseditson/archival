@@ -181,6 +181,14 @@ impl FieldType {
                         schema.insert("format".into(), "date".into());
                     }
                     schema
+                } else if let Self::Enum(valid_values) = self {
+                    use serde_json::json;
+
+                    let mut schema = serde_json::Map::new();
+                    schema.insert("description".into(), description.into());
+                    schema.insert("type".into(), "string".into());
+                    schema.insert("enum".into(), json!(valid_values));
+                    schema
                 } else {
                     let mut schema = serde_json::Map::new();
                     schema.insert("description".into(), description.into());

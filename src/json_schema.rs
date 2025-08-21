@@ -153,6 +153,7 @@ pub mod tests {
         "[artist]
         name = \"string\"
         meta = \"meta\"
+        genre = [\"emo\",\"metal\"]
         template = \"artist\"
         [artist.tour_dates]
         date = \"date\"
@@ -180,6 +181,7 @@ pub mod tests {
         );
         println!("SCHEMA: {:#?}", schema);
         let instance = json!({
+            "genre": "emo",
             "tour_dates": [{
                 "date": "2021-01-26 00:01:22",
                 "ticket_link": "https://archival.dev"
