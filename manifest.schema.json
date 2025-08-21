@@ -1,0 +1,123 @@
+{
+  "$id": "jesseditson/archival/v0.10.4/manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "type": "object",
+  "properties": {
+    "upload_prefix": {
+      "description": "this string is appended to all upload paths, used for differentiating sites using the same uploads_url",
+      "type": "string"
+    },
+    "uploads_url": {
+      "description": "the host url of the CDN used for uploads",
+      "type": "string"
+    },
+    "archival_version": {
+      "description": "an optional version string to indicate the minimum version of archival this site is compatible with",
+      "type": "string"
+    },
+    "prebuild": {
+      "description": "a list of shell commands to run before building this site",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "site_url": {
+      "description": "a url that will be available to this site's liquid files as site_url, which can also be used by the archival editor",
+      "type": "string"
+    },
+    "site_name": {
+      "description": "a name for this site, used by the archival editor and other machine readers of this manifest",
+      "type": "string"
+    },
+    "object_definition_file": {
+      "description": "the file that archival uses to read the objects schema for this site",
+      "type": "string",
+      "default": "objects.toml"
+    },
+    "pages_dir": {
+      "description": "the folder that archival looks for page liquid files in",
+      "type": "string",
+      "default": "pages"
+    },
+    "objects_dir": {
+      "description": "the folder that archival looks for object toml files in",
+      "type": "string",
+      "default": "objects.toml"
+    },
+    "schemas_dir": {
+      "description": "the folder that the archival schemas command generates schemas into",
+      "type": "string",
+      "default": "schemas"
+    },
+    "build_dir": {
+      "description": "the folder that archival builds your site into",
+      "type": "string",
+      "default": "dist"
+    },
+    "static_dir": {
+      "description": "the static dir that is copied directly to your build dir",
+      "type": "string",
+      "default": "public"
+    },
+    "layout_dir": {
+      "description": "the folder that archival reads layouts from",
+      "type": "string",
+      "default": "layout"
+    },
+    "editor_types": {
+      "type": "object",
+      "description": "a dictionary of custom-defined editor types",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "description": "the type that this custom type is backed with",
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "date",
+            "markdown",
+            "image",
+            "video",
+            "audio",
+            "upload",
+            "meta"
+          ],
+          "type": "string"
+        },
+        "editor_url": {
+          "description": "a URL to load a custom editor from. If unspecified, will use the underlying type's editor",
+          "type": "string"
+        },
+        "validate": {
+          "type": "array",
+          "description": "a list of validations to run on fields of this type",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "a regular expression to run on this field's string representation"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "a path inside a meta field to validate"
+                  },
+                  "validate": {
+                    "type": "string",
+                    "description": "a regular expression to run on this field at the specified path"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
