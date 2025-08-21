@@ -61,6 +61,7 @@ macro_rules! compare_values {
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldValue {
     String(String),
+    Enum(String),
     Markdown(String),
     Number(f64),
     Date(DateTime),
@@ -129,6 +130,12 @@ impl FieldValue {
                     .ok_or_else(|| err(f_type, value))?
                     .to_string(),
             ),
+            FieldType::Enum(_) => Self::Enum(
+                t_val
+                    .as_str()
+                    .ok_or_else(|| err(f_type, value))?
+                    .to_string(),
+            ),
             FieldType::Date => Self::Date(DateTime::from_toml(
                 t_val.as_datetime().ok_or_else(|| err(f_type, value))?,
             )?),
@@ -188,6 +195,7 @@ impl From<&FieldValue> for Option<toml::Value> {
     fn from(value: &FieldValue) -> Self {
         match value {
             FieldValue::String(v) => Some(toml::Value::String(v.to_owned())),
+            FieldValue::Enum(v) => Some(toml::Value::String(v.to_owned())),
             FieldValue::Markdown(v) => Some(toml::Value::String(v.to_owned())),
             FieldValue::Number(n) => Some(toml::Value::Float(*n)),
             FieldValue::Date(d) => {
@@ -246,6 +254,7 @@ impl ValueView for FieldValue {
     fn type_name(&self) -> &'static str {
         match self {
             FieldValue::String(_) => "string",
+            FieldValue::Enum(_) => "enum",
             FieldValue::Markdown(_) => "markdown",
             FieldValue::Number(_) => "number",
             FieldValue::Date(_) => "date",
@@ -273,6 +282,7 @@ impl ValueView for FieldValue {
     fn as_scalar(&self) -> Option<model::ScalarCow<'_>> {
         match self {
             FieldValue::String(s) => Some(model::ScalarCow::new(s)),
+            FieldValue::Enum(s) => Some(model::ScalarCow::new(s)),
             FieldValue::Number(n) => Some(model::ScalarCow::new(*n)),
             // TODO: should be able to return a datetime value here
             FieldValue::Date(d) => Some(model::ScalarCow::new((*d).as_liquid_datetime())),
@@ -304,6 +314,7 @@ impl ValueView for FieldValue {
     fn to_value(&self) -> liquid::model::Value {
         match self {
             FieldValue::String(_) => self.as_scalar().to_value(),
+            FieldValue::Enum(_) => self.as_scalar().to_value(),
             FieldValue::Markdown(_) => self.as_scalar().to_value(),
             FieldValue::Number(_) => self.as_scalar().to_value(),
             FieldValue::Date(_) => self.as_scalar().to_value(),
@@ -337,6 +348,16 @@ impl FieldValue {
         }
         match field_type {
             FieldType::String => Ok(FieldValue::String(value)),
+            FieldType::Enum(valid_values) => {
+                if !valid_values.contains(&value) {
+                    Err(InvalidFieldError::EnumMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value: value.to_string(),
+                    })?
+                }
+                Ok(FieldValue::Enum(value))
+            }
             FieldType::Markdown => Ok(FieldValue::Markdown(value)),
             FieldType::Number => Ok(FieldValue::Number(value.parse::<f64>().map_err(|_| {
                 InvalidFieldError::TypeMismatch {
@@ -385,6 +406,25 @@ impl FieldValue {
                     })?
                     .to_string(),
             )),
+            FieldType::Enum(valid_values) => {
+                let value = value
+                    .as_str()
+                    .ok_or_else(|| InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value: value.to_string(),
+                    })?
+                    .to_string();
+                if !valid_values.contains(&value) {
+                    Err(InvalidFieldError::EnumMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value: value.to_string(),
+                    })?
+                } else {
+                    Ok(FieldValue::Enum(value))
+                }
+            }
             FieldType::Markdown => Ok(FieldValue::Markdown(
                 value
                     .as_str()
@@ -482,6 +522,7 @@ impl FieldValue {
     fn as_string(&self) -> String {
         match self {
             FieldValue::String(s) => s.clone(),
+            FieldValue::Enum(s) => s.clone(),
             FieldValue::Markdown(n) => n.clone(),
             FieldValue::Number(n) => n.to_string(),
             FieldValue::Date(d) => d.as_liquid_datetime().to_rfc2822(),
@@ -527,5 +568,55 @@ impl From<&serde_json::Value> for FieldValue {
                     .collect(),
             ),
         }
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+
+    use super::*;
+
+    #[test]
+    fn enum_value_validation_from_toml() -> Result<(), Box<dyn Error>> {
+        let enum_field_type = FieldType::Enum(vec!["emo".to_string(), "metal".to_string()]);
+        assert!(FieldValue::from_toml(
+            &"some_key".to_string(),
+            &enum_field_type,
+            &Value::String("butt rock".to_string())
+        )
+        .is_err_and(|e| {
+            let inner = e.downcast::<InvalidFieldError>().unwrap();
+            matches!(
+                *inner,
+                InvalidFieldError::EnumMismatch {
+                    field: _,
+                    field_type: _,
+                    value: _,
+                }
+            )
+        }));
+
+        Ok(())
+    }
+    #[test]
+    fn enum_value_validation_from_string() -> Result<(), Box<dyn Error>> {
+        let enum_field_type = FieldType::Enum(vec!["emo".to_string(), "metal".to_string()]);
+        assert!(FieldValue::from_string(
+            &"some_key".to_string(),
+            &enum_field_type,
+            "butt rock".to_string()
+        )
+        .is_err_and(|inner| {
+            matches!(
+                inner,
+                InvalidFieldError::EnumMismatch {
+                    field: _,
+                    field_type: _,
+                    value: _,
+                }
+            )
+        }));
+
+        Ok(())
     }
 }

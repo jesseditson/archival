@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fmt::{Debug, Display};
 use thiserror::Error;
 
@@ -11,12 +12,22 @@ use super::{file::DisplayType, File};
 pub enum InvalidFieldError {
     #[error("unrecognized type {0}")]
     UnrecognizedType(String),
+    #[error("invalid enum {0} - only string enums supported.")]
+    InvalidEnum(String),
     #[error("invalid date {0}")]
     InvalidDate(String),
     #[error(
         "type mismatch for field {field:?} - expected type {field_type:?}, got value {value:?}"
     )]
     TypeMismatch {
+        field: String,
+        field_type: String,
+        value: String,
+    },
+    #[error(
+        "enum mismatch for field {field:?} - expected value {value:?} to be in {field_type:?}"
+    )]
+    EnumMismatch {
         field: String,
         field_type: String,
         value: String,
@@ -59,6 +70,7 @@ pub enum FieldType {
     String,
     Number,
     Date,
+    Enum(Vec<String>),
     Markdown,
     Boolean,
     Image,
@@ -73,19 +85,20 @@ pub enum FieldType {
 }
 
 impl FieldType {
-    pub fn to_str(&self) -> &str {
+    pub fn as_str<'a>(&'a self) -> Cow<'a, str> {
         match self {
-            Self::String => "string",
-            Self::Number => "number",
-            Self::Date => "date",
-            Self::Markdown => "markdown",
-            Self::Boolean => "boolean",
-            Self::Image => "image",
-            Self::Video => "video",
-            Self::Audio => "audio",
-            Self::Upload => "upload",
-            Self::Meta => "meta",
-            Self::Alias(a) => a.0.to_str(),
+            Self::String => "string".into(),
+            Self::Number => "number".into(),
+            Self::Enum(v) => format!("[{}]", v.join(",")).into(),
+            Self::Date => "date".into(),
+            Self::Markdown => "markdown".into(),
+            Self::Boolean => "boolean".into(),
+            Self::Image => "image".into(),
+            Self::Video => "video".into(),
+            Self::Audio => "audio".into(),
+            Self::Upload => "upload".into(),
+            Self::Meta => "meta".into(),
+            Self::Alias(a) => a.0.as_str(),
         }
     }
     pub fn from_str(
@@ -94,6 +107,7 @@ impl FieldType {
     ) -> Result<FieldType, InvalidFieldError> {
         match string {
             "string" => Ok(FieldType::String),
+            // Note that enums are only supported via direct instantiation
             "number" => Ok(FieldType::Number),
             "date" => Ok(FieldType::Date),
             "markdown" => Ok(FieldType::Markdown),
@@ -126,7 +140,7 @@ impl FieldType {
 
 impl Display for FieldType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_str())
+        write!(f, "{}", self.as_str())
     }
 }
 

@@ -44,6 +44,8 @@ export type Meta = Record<string, MetaValue>;
 export type FieldValue = ({
     "String": string;
 } | {
+    "Enum": string;
+} | {
     "Markdown": string;
 } | {
     "Number": F64;

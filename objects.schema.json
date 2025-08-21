@@ -4,7 +4,7 @@
   "type": "object",
   "id": "object_def",
   "patternProperties": {
-    "^[a-zA-Z0-9_-]+$": {
+    "^([a-zA-Z0-9_-]+)$": {
       "anyOf": [
         {
           "type": "string",
@@ -21,6 +21,13 @@
             "upload",
             "meta"
           ]
+        },
+        {
+          "type": "array",
+          "description": "a string enum",
+          "items": {
+            "type": "string"
+          }
         },
         {
           "$ref": "#",

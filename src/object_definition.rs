@@ -58,26 +58,47 @@ impl ObjectDefinition {
             children: BTreeMap::new(),
         };
         for (key, m_value) in definition {
-            if !is_reserved_field(key) {
-                obj_def.field_order.push(key.to_string());
+            if is_reserved_field(key)
+                && !(m_value.as_str().is_some() && key == reserved_fields::TEMPLATE)
+            {
+                return Err(Box::new(ReservedFieldError {
+                    field: reserved_field_from_str(key),
+                }));
             }
-            if let Some(child_table) = m_value.as_table() {
+            let is_ordered_field = if let Some(child_table) = m_value.as_table() {
                 obj_def.children.insert(
                     key.clone(),
                     ObjectDefinition::new(key, child_table, editor_types)?,
                 );
+                true
+            } else if let Some(value) = m_value.as_array() {
+                let string_vals = value
+                    .iter()
+                    .map(|v| {
+                        v.as_str()
+                            .map(|s| s.to_string())
+                            .ok_or_else(|| InvalidFieldError::InvalidEnum(format!("{value:?}")))
+                    })
+                    .collect::<Result<Vec<String>, InvalidFieldError>>()?;
+                obj_def
+                    .fields
+                    .insert(key.clone(), FieldType::Enum(string_vals));
+                true
             } else if let Some(value) = m_value.as_str() {
                 if key == reserved_fields::TEMPLATE {
                     obj_def.template = Some(value.to_string());
-                } else if is_reserved_field(key) {
-                    return Err(Box::new(ReservedFieldError {
-                        field: reserved_field_from_str(key),
-                    }));
+                    false
                 } else {
                     obj_def
                         .fields
                         .insert(key.clone(), FieldType::from_str(value, editor_types)?);
+                    true
                 }
+            } else {
+                false
+            };
+            if is_ordered_field {
+                obj_def.field_order.push(key.to_string());
             }
         }
         Ok(obj_def)
@@ -162,6 +183,7 @@ pub mod tests {
         "[artist]
         name = \"string\"
         meta = \"meta\"
+        genre = [\"emo\", \"metal\"]
         template = \"artist\"
         [artist.tour_dates]
         date = \"date\"
@@ -188,18 +210,24 @@ pub mod tests {
         assert!(defs.contains_key("artist"));
         assert!(defs.contains_key("example"));
         let artist = defs.get("artist").unwrap();
-        assert_eq!(artist.field_order.len(), 5);
+        assert_eq!(artist.field_order.len(), 6);
         assert_eq!(artist.field_order[0], "name".to_string());
         assert_eq!(artist.field_order[1], "meta".to_string());
-        assert_eq!(artist.field_order[2], "tour_dates".to_string());
-        assert_eq!(artist.field_order[3], "videos".to_string());
-        assert_eq!(artist.field_order[4], "numbers".to_string());
+        assert_eq!(artist.field_order[2], "genre".to_string());
+        assert_eq!(artist.field_order[3], "tour_dates".to_string());
+        assert_eq!(artist.field_order[4], "videos".to_string());
+        assert_eq!(artist.field_order[5], "numbers".to_string());
         assert!(!artist.field_order.contains(&"template".to_string()));
         assert!(artist.fields.contains_key("name"));
         assert_eq!(artist.fields.get("name").unwrap(), &FieldType::String);
         assert!(
             !artist.fields.contains_key("template"),
             "did not copy the template reserved field"
+        );
+        assert!(artist.fields.contains_key("name"));
+        assert_eq!(
+            artist.fields.get("genre").unwrap(),
+            &FieldType::Enum(vec!["emo".to_string(), "metal".to_string()])
         );
         assert!(artist.template.is_some());
         assert_eq!(artist.template, Some("artist".to_string()));
