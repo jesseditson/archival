@@ -358,7 +358,7 @@ impl Manifest {
         string: String,
         upload_prefix: Option<&str>,
     ) -> Result<Manifest, Box<dyn Error>> {
-        let mut manifest = Manifest::default(root, "");
+        let mut manifest = Manifest::default(root, "" /* set below */);
         let values: Table = toml::from_str(&string)?;
         let path_or_err = |value: Value, field: &str| -> Result<PathBuf, InvalidManifestError> {
             if let Some(string) = value.as_str() {
@@ -367,7 +367,7 @@ impl Manifest {
             Err(InvalidManifestError::BadPath(value, field.to_string()))
         };
         // Required fields
-        manifest.upload_prefix = if let Some(upload_prefix) = upload_prefix {
+        let upload_prefix = if let Some(upload_prefix) = upload_prefix {
             upload_prefix.to_string()
         } else if let Some(manifest_value) = values.get("upload_prefix") {
             manifest_value
@@ -382,6 +382,7 @@ impl Manifest {
         } else {
             FieldConfig::get_global().upload_prefix.clone()
         };
+        manifest.upload_prefix = upload_prefix;
         // Optional fields
         for (key, value) in values.into_iter() {
             match key.as_str() {

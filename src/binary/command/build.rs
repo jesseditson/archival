@@ -1,5 +1,5 @@
 use super::BinaryCommand;
-use crate::{binary::ExitStatus, file_system_stdlib, site::Site, FileSystemAPI};
+use crate::{binary::ExitStatus, file_system_stdlib, site::Site, FieldConfig, FileSystemAPI};
 use clap::ArgMatches;
 use std::path::Path;
 
@@ -24,6 +24,7 @@ impl BinaryCommand for Command {
             &fs,
             args.get_one::<String>("upload-prefix").map(|s| s.as_str()),
         )?;
+        FieldConfig::set_global(site.get_field_config(None)?);
         println!("Building site: {}", &site);
         let _ = fs.remove_dir_all(&site.manifest.build_dir);
         site.sync_static_files(&mut fs)?;
