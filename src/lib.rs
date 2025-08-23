@@ -64,6 +64,9 @@ pub use file_system_memory::MemoryFileSystem;
 pub use json_schema::{ObjectSchema, ObjectSchemaOptions};
 pub use object_definition::ObjectDefinition;
 
+use crate::fields::FieldType;
+use crate::object::ValuePath;
+
 pub type ArchivalBuildId = u64;
 
 #[derive(Debug, Default)]
@@ -547,6 +550,30 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     }
 
     fn edit_field(&self, event: EditFieldEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+        // TODO: we should probably validate all fields this way
+        if let Some(FieldValue::Enum(enum_val)) = &event.value {
+            let def = self
+                .site
+                .object_definitions
+                .get(&event.object)
+                .ok_or_else(|| {
+                    ArchivalError::new(&format!("object type not found: {}", event.object))
+                })?;
+            let field = event
+                .path
+                .clone()
+                .concat(ValuePath::from_string(&event.field))
+                .get_field_definition(def)?;
+            if let FieldType::Enum(valid_values) = field {
+                if !valid_values.contains(enum_val) {
+                    return Err(ArchivalError::new(&format!(
+                        "Invalid value {enum_val} for enum [{}]",
+                        valid_values.join(",")
+                    ))
+                    .into());
+                }
+            }
+        }
         self.write_object(&event.object, &event.filename, |existing| {
             event
                 .path
@@ -1077,6 +1104,60 @@ mod lib {
         )?;
         // But it should change after rebuilding
         assert_ne!(archival.build_id()?, initial_build_id);
+        Ok(())
+    }
+    #[test]
+    fn edit_enum() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        archival.send_event(
+            ArchivalEvent::EditField(EditFieldEvent {
+                object: "post".to_string(),
+                filename: "a-post".to_string(),
+                path: ValuePath::empty(),
+                field: "state".to_string(),
+                value: Some(FieldValue::Enum("draft".to_string())),
+                source: None,
+            }),
+            Some(BuildOptions::default()),
+        )?;
+        let post_html = archival
+            .fs_mutex
+            .with_fs(|fs| {
+                fs.read_to_string(
+                    &archival
+                        .site
+                        .manifest
+                        .build_dir
+                        .join(Path::new("post/a-post.html")),
+                )
+            })?
+            .unwrap();
+        println!("post: {}", post_html);
+        assert!(post_html.contains("State: draft"));
+        Ok(())
+    }
+    #[test]
+    fn edit_enum_fails_when_invalid() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        assert!(archival
+            .send_event(
+                ArchivalEvent::EditField(EditFieldEvent {
+                    object: "post".to_string(),
+                    filename: "a-post".to_string(),
+                    path: ValuePath::empty(),
+                    field: "state".to_string(),
+                    value: Some(FieldValue::Enum("poopoo".to_string())),
+                    source: None,
+                }),
+                Some(BuildOptions::default()),
+            )
+            .is_err());
         Ok(())
     }
 }
