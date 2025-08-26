@@ -26,6 +26,21 @@ pub enum ValuePathComponent {
     Index(usize),
 }
 
+impl ValuePathComponent {
+    pub fn as_key(&self) -> Option<&String> {
+        match self {
+            ValuePathComponent::Key(k) => Some(k),
+            ValuePathComponent::Index(_) => None,
+        }
+    }
+    pub fn as_index(&self) -> Option<&usize> {
+        match self {
+            ValuePathComponent::Key(_) => None,
+            ValuePathComponent::Index(i) => Some(i),
+        }
+    }
+}
+
 impl From<&String> for ValuePathComponent {
     fn from(value: &String) -> Self {
         ValuePath::key(value)
