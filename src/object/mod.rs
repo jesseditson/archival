@@ -273,14 +273,14 @@ mod tests {
         )?;
         let table: Table = toml::from_str(artist_object_str())?;
         let obj = Object::from_table(
-            defs.get("artist").unwrap(),
+            defs.get("artists").unwrap(),
             Path::new("tormenta-rey"),
             &table,
             &BTreeMap::new(),
             false,
         )?;
         assert_eq!(obj.order, Some(1.));
-        assert_eq!(obj.object_name, "artist");
+        assert_eq!(obj.object_name, "artists");
         assert_eq!(obj.filename, "tormenta-rey");
         assert_eq!(obj.values.len(), 4);
         assert!(obj.values.contains_key("name"));

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use serde_json::json;
 use time::Date;
 
-use crate::{fields::FieldType, ObjectDefinition};
+use crate::{fields::FieldType, object::ValuePath, ObjectDefinition};
 
 pub type ObjectSchema = serde_json::Map<String, serde_json::Value>;
 
@@ -16,6 +16,7 @@ pub struct ObjectSchemaOptions {
     pub set_dates_to: Option<Date>,
     pub name: Option<String>,
     pub property_overrides: HashMap<FieldType, serde_json::Map<String, serde_json::Value>>,
+    pub omit_paths: Option<Vec<ValuePath>>,
 }
 
 impl ObjectSchemaOptions {
@@ -46,6 +47,10 @@ impl ObjectSchemaOptions {
         self.set_dates_to = Some(date);
         self
     }
+    pub fn with_omit_paths(mut self, paths: Option<Vec<ValuePath>>) -> Self {
+        self.omit_paths = paths;
+        self
+    }
 }
 
 pub fn generate_root_json_schema(
@@ -70,7 +75,16 @@ pub fn generate_root_json_schema(
     schema.insert("additionalProperties".into(), false.into());
     let mut properties = serde_json::Map::new();
     for (name, def) in objects {
-        let obj_properties = def.to_json_schema_properties(false, &options);
+        let object_path = ValuePath::empty().append(ValuePath::key(name));
+        // Skip if this object is omitted
+        if options
+            .omit_paths
+            .as_ref()
+            .is_some_and(|op| op.contains(&object_path))
+        {
+            continue;
+        }
+        let obj_properties = def.to_json_schema_properties(false, &options, object_path);
         let required: Vec<String> = if options.all_fields_required {
             obj_properties.keys().map(|k| k.to_string()).collect()
         } else {
@@ -114,7 +128,7 @@ pub fn generate_root_json_schema(
 
 pub fn generate_json_schema(
     id: &str,
-    // title: &str,
+    // name: &str,
     // description: &str,
     definition: &ObjectDefinition,
     options: crate::json_schema::ObjectSchemaOptions,
@@ -125,15 +139,17 @@ pub fn generate_json_schema(
         "https://json-schema.org/draft/2020-12/schema".into(),
     );
     schema.insert("$id".into(), id.into());
-    // schema.insert("title".into(), title.into());
+    // schema.insert("title".into(), name.into());
     // schema.insert("description".into(), description.into());
     schema.insert("type".into(), "object".into());
-    let properties = definition.to_json_schema_properties(false, &options);
+    let object_path = ValuePath::empty();
+    let properties = definition.to_json_schema_properties(false, &options, object_path);
     if options.all_fields_required {
         let keys: Vec<String> = properties.keys().map(|k| k.to_string()).collect();
         schema.insert("required".into(), keys.into());
     }
     schema.insert("properties".into(), properties.into());
+    schema.insert("additionalProperties".into(), false.into());
     schema
 }
 
@@ -146,27 +162,37 @@ pub mod tests {
 
     use crate::{
         json_schema::{generate_json_schema, ObjectSchemaOptions},
+        object::ValuePath,
         ObjectDefinition,
     };
 
     pub fn artist_and_example_definition_str() -> &'static str {
-        "[artist]
-        name = \"string\"
-        meta = \"meta\"
-        genre = [\"emo\",\"metal\"]
-        template = \"artist\"
-        [artist.tour_dates]
-        date = \"date\"
-        ticket_link = \"string\"
-        [artist.videos]
-        video = \"video\"
-        [artist.numbers]
-        number = \"number\"
+        r#"[artists]
+        name = "string"
+        meta = "meta"
+        genre = ["emo","metal"]
+        template = "artist"
+        [artists.tour_dates]
+        date = "date"
+        ticket_link = "string"
+        [artists.videos]
+        video = "video"
+        [artists.numbers]
+        number = "number"
         
         [example]
-        content = \"markdown\"
+        content = "markdown"
         [example.links]
-        url = \"string\""
+        url = "string"
+        [example.children]
+        [example.children.omit_me]
+        foo = "string"
+        [example.omitted]
+        foo = "string"
+
+        [omitted]
+        foo = "string"
+        "#
     }
 
     #[test]
@@ -175,8 +201,8 @@ pub mod tests {
         let defs = ObjectDefinition::from_table(&table, &BTreeMap::new())?;
 
         let schema = generate_json_schema(
-            "artist",
-            defs.get("artist").unwrap(),
+            "artists",
+            defs.get("artists").unwrap(),
             ObjectSchemaOptions::default(),
         );
         println!("SCHEMA: {:#?}", schema);
@@ -200,8 +226,43 @@ pub mod tests {
         let schema_value = &schema.into();
         assert!(jsonschema::is_valid(schema_value, &instance));
         assert!(jsonschema::validate(schema_value, &json!("Hello, world!")).is_err());
-        assert!(jsonschema::validate(schema_value, &instance).is_ok());
+        Ok(())
+    }
 
+    #[test]
+    fn omitted_fields() -> Result<(), Box<dyn Error>> {
+        let table: Table = toml::from_str(artist_and_example_definition_str())?;
+        let defs = ObjectDefinition::from_table(&table, &BTreeMap::new())?;
+
+        let schema = generate_json_schema(
+            "example",
+            defs.get("example").unwrap(),
+            ObjectSchemaOptions::default().with_omit_paths(Some(vec![
+                ValuePath::from_string("omitted"),
+                ValuePath::from_string("child.omit_me"),
+            ])),
+        );
+        println!("SCHEMA: {:#?}", schema);
+        let instance = json!({
+            "children": []
+        });
+
+        let schema_value = &schema.into();
+        assert!(jsonschema::validate(
+            schema_value,
+            &json!({
+                "omitted": { "foo": "bar" }
+            })
+        )
+        .is_err());
+        assert!(jsonschema::validate(
+            schema_value,
+            &json!({
+                "child": { "omitted": {"foo": "bar"} }
+            })
+        )
+        .is_err());
+        assert!(jsonschema::is_valid(schema_value, &instance));
         Ok(())
     }
 }

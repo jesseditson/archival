@@ -1,3 +1,5 @@
+#[cfg(feature = "json-schema")]
+use crate::object::ValuePath;
 use crate::{
     fields::{field_type::InvalidFieldError, FieldType, ObjectValues},
     manifest::EditorTypes,
@@ -135,9 +137,19 @@ impl ObjectDefinition {
         &self,
         is_child: bool,
         options: &crate::json_schema::ObjectSchemaOptions,
+        current_path: ValuePath,
     ) -> crate::json_schema::ObjectSchema {
         let mut properties = serde_json::Map::new();
         for (field, field_type) in &self.fields {
+            let field_path = current_path.clone().append(ValuePath::key(field));
+            // Skip if this path is omitted
+            if options
+                .omit_paths
+                .as_ref()
+                .is_some_and(|op| op.contains(&field_path))
+            {
+                continue;
+            }
             if options.omit_file_types && field_type.is_file_type() {
                 continue;
             }
@@ -153,10 +165,19 @@ impl ObjectDefinition {
             properties.insert("order".into(), json!({"type": "number"}));
         }
         for (name, definition) in &self.children {
+            let child_path = current_path.clone().append(ValuePath::key(name));
+            // Skip if this path is omitted
+            if options
+                .omit_paths
+                .as_ref()
+                .is_some_and(|op| op.contains(&child_path))
+            {
+                continue;
+            }
             let mut child = serde_json::Map::new();
             child.insert("description".into(), name.to_string().into());
             child.insert("type".into(), "array".into());
-            let child_properties = definition.to_json_schema_properties(true, options);
+            let child_properties = definition.to_json_schema_properties(true, options, child_path);
             let mut child_items_type = serde_json::Map::new();
             child_items_type.insert("type".into(), "object".into());
             child_items_type.insert("additionalProperties".into(), false.into());
@@ -180,17 +201,17 @@ pub mod tests {
     use super::*;
 
     pub fn artist_and_example_definition_str() -> &'static str {
-        "[artist]
+        "[artists]
         name = \"string\"
         meta = \"meta\"
         genre = [\"emo\", \"metal\"]
         template = \"artist\"
-        [artist.tour_dates]
+        [artists.tour_dates]
         date = \"date\"
         ticket_link = \"string\"
-        [artist.videos]
+        [artists.videos]
         video = \"video\"
-        [artist.numbers]
+        [artists.numbers]
         number = \"number\"
         
         [example]
@@ -207,9 +228,9 @@ pub mod tests {
         println!("{:?}", defs);
 
         assert_eq!(defs.keys().len(), 2);
-        assert!(defs.contains_key("artist"));
+        assert!(defs.contains_key("artists"));
         assert!(defs.contains_key("example"));
-        let artist = defs.get("artist").unwrap();
+        let artist = defs.get("artists").unwrap();
         assert_eq!(artist.field_order.len(), 6);
         assert_eq!(artist.field_order[0], "name".to_string());
         assert_eq!(artist.field_order[1], "meta".to_string());
