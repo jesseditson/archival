@@ -68,7 +68,11 @@ impl Display for ArchivalEvent {
                     format!("Update order of {} '{}'", evt.object, evt.filename)
                 }
                 ArchivalEvent::AddChild(evt) => {
-                    let child_name = &evt.path.first().to_string();
+                    let child_name = &evt
+                        .path
+                        .first()
+                        .expect("AddChild has no object")
+                        .to_string();
                     format!(
                         "Add {} child to {} '{}'",
                         indefinite(child_name),
@@ -77,7 +81,11 @@ impl Display for ArchivalEvent {
                     )
                 }
                 ArchivalEvent::RemoveChild(evt) => {
-                    let child_name = &evt.path.first().to_string();
+                    let child_name = &evt
+                        .path
+                        .first()
+                        .expect("RemoveChild has no object")
+                        .to_string();
                     format!(
                         "Remove {} child from {} '{}'",
                         indefinite(child_name),

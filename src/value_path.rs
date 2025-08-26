@@ -166,9 +166,8 @@ impl ValuePath {
         self
     }
 
-    pub fn first(&self) -> ValuePath {
-        let first = self.0.first().expect("called .first on an empty ValuePath");
-        ValuePath(vec![first.clone()])
+    pub fn first(&self) -> Option<&ValuePathComponent> {
+        self.0.first()
     }
 
     pub fn unshift(&mut self) -> Option<ValuePathComponent> {
