@@ -157,11 +157,14 @@ pub fn generate_json_schema(
 pub mod tests {
 
     use serde_json::json;
-    use std::{collections::BTreeMap, error::Error};
+    use std::{
+        collections::{BTreeMap, HashSet},
+        error::Error,
+    };
     use toml::Table;
 
     use crate::{
-        json_schema::{generate_json_schema, ObjectSchemaOptions},
+        json_schema::{generate_json_schema, generate_root_json_schema, ObjectSchemaOptions},
         object::ValuePath,
         ObjectDefinition,
     };
@@ -259,6 +262,37 @@ pub mod tests {
             schema_value,
             &json!({
                 "child": { "omitted": {"foo": "bar"} }
+            })
+        )
+        .is_err());
+        assert!(jsonschema::is_valid(schema_value, &instance));
+        Ok(())
+    }
+
+    #[test]
+    fn root_omitted_fields() -> Result<(), Box<dyn Error>> {
+        let table: Table = toml::from_str(artist_and_example_definition_str())?;
+        let defs = ObjectDefinition::from_table(&table, &BTreeMap::new())?;
+
+        let options = ObjectSchemaOptions::default()
+            .with_omit_paths(Some(vec![ValuePath::from_string("omitted")]));
+        let root_objects = defs.keys().cloned().collect::<HashSet<String>>();
+        let schema = generate_root_json_schema(
+            "id",
+            Some("title"),
+            "description",
+            &defs,
+            &root_objects,
+            options,
+        );
+        println!("SCHEMA: {:#?}", schema);
+        let instance = json!({});
+
+        let schema_value = &schema.into();
+        assert!(jsonschema::validate(
+            schema_value,
+            &json!({
+                "omitted": { "foo": "bar" }
             })
         )
         .is_err());
