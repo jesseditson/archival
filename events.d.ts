@@ -6,15 +6,7 @@ export type RenameObjectEvent = {
     "to": string;
 };
 export type F64 = number;
-export type Usize = number;
-export type ValuePathComponent = ({
-    "Key": string;
-} | {
-    "Index": Usize;
-});
-export type ValuePath = {
-    "path": (ValuePathComponent)[];
-};
+export type ValuePath = string;
 export type DateTime = {
     "raw": string;
 };
@@ -93,6 +85,7 @@ export type EditOrderEvent = {
     "order": (F64 | null);
     "source": (string | null);
 };
+export type Usize = number;
 export type AddChildEvent = {
     "object": string;
     "filename": string;

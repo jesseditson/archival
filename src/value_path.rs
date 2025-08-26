@@ -21,7 +21,6 @@ pub enum ValuePathError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
-#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ValuePathComponent {
     Key(String),
     Index(usize),
@@ -65,18 +64,19 @@ impl Display for ValuePathComponent {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
-pub struct ValuePath {
-    path: Vec<ValuePathComponent>,
-}
+#[cfg_attr(feature = "typescript", serde(transparent))]
+pub struct ValuePath(
+    #[cfg_attr(feature = "typescript", type_def(type_of = "String"))] Vec<ValuePathComponent>,
+);
 
 impl Display for ValuePath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
-            self.path
+            self.0
                 .iter()
                 .map(|p| format!("{}", p))
                 .collect::<Vec<String>>()
@@ -101,15 +101,13 @@ impl Display for FoundValue<'_> {
 
 impl FromIterator<ValuePathComponent> for ValuePath {
     fn from_iter<T: IntoIterator<Item = ValuePathComponent>>(iter: T) -> Self {
-        Self {
-            path: iter.into_iter().collect(),
-        }
+        Self(iter.into_iter().collect())
     }
 }
 
 impl ValuePath {
     pub fn empty() -> Self {
-        Self { path: vec![] }
+        Self(vec![])
     }
     pub fn from_string(string: &str) -> Self {
         let mut vpv: Vec<ValuePathComponent> = vec![];
@@ -121,13 +119,13 @@ impl ValuePath {
                 }
             }
         }
-        Self { path: vpv }
+        Self(vpv)
     }
     pub fn is_empty(&self) -> bool {
-        self.path.is_empty()
+        self.0.is_empty()
     }
     pub fn len(&self) -> usize {
-        self.path.len()
+        self.0.len()
     }
 
     pub fn child_name(&self) -> Option<&str> {
@@ -135,7 +133,7 @@ impl ValuePath {
         if len < 2 {
             None
         } else {
-            let last_components = &self.path.as_slice()[len - 2..];
+            let last_components = &self.0.as_slice()[len - 2..];
             if let ValuePathComponent::Key(child_name) = &last_components[0] {
                 if matches!(last_components[1], ValuePathComponent::Index(_)) {
                     Some(child_name)
@@ -149,51 +147,42 @@ impl ValuePath {
     }
 
     pub fn append(mut self, component: ValuePathComponent) -> Self {
-        self.path.push(component);
+        self.0.push(component);
         self
     }
     pub fn concat(mut self, path: ValuePath) -> Self {
-        for p in path.path {
+        for p in path.0 {
             self = self.append(p);
         }
         self
     }
 
     pub fn first(&self) -> ValuePath {
-        let first = self
-            .path
-            .first()
-            .expect("called .first on an empty ValuePath");
-        ValuePath {
-            path: vec![first.clone()],
-        }
+        let first = self.0.first().expect("called .first on an empty ValuePath");
+        ValuePath(vec![first.clone()])
     }
 
     pub fn unshift(&mut self) -> Option<ValuePathComponent> {
-        if !self.path.is_empty() {
-            Some(self.path.remove(0))
+        if !self.0.is_empty() {
+            Some(self.0.remove(0))
         } else {
             None
         }
     }
 
     pub fn without_first(&self) -> ValuePath {
-        ValuePath {
-            path: self.path[1..].to_vec(),
-        }
+        ValuePath(self.0[1..].to_vec())
     }
     pub fn without_last(&self) -> ValuePath {
-        ValuePath {
-            path: self.path[..1].to_vec(),
-        }
+        ValuePath(self.0[..1].to_vec())
     }
 
     pub fn pop(&mut self) -> Option<ValuePathComponent> {
-        self.path.pop()
+        self.0.pop()
     }
 
     pub fn get_in_meta<'a>(&self, meta: &'a Meta) -> Option<&'a MetaValue> {
-        let mut i_path = self.path.iter().map(|v| match v {
+        let mut i_path = self.0.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
         });
@@ -231,7 +220,7 @@ impl ValuePath {
     }
 
     pub fn get_value<'a>(&self, field: &'a FieldValue) -> Result<FoundValue<'a>, ValuePathError> {
-        let mut i_path = self.path.iter().map(|v| match v {
+        let mut i_path = self.0.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
         });
@@ -274,7 +263,7 @@ impl ValuePath {
     }
 
     pub fn get_in_object<'a>(&self, object: &'a Object) -> Option<&'a FieldValue> {
-        let mut i_path = self.path.iter().map(|v| match v {
+        let mut i_path = self.0.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
         });
@@ -307,7 +296,7 @@ impl ValuePath {
     }
 
     pub fn get_children<'a>(&self, object: &'a Object) -> Option<&'a Vec<ObjectValues>> {
-        let mut i_path = self.path.iter().map(|v| match v {
+        let mut i_path = self.0.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
         });
@@ -339,7 +328,7 @@ impl ValuePath {
     }
 
     pub fn get_object_values<'a>(&self, object: &'a Object) -> Option<&'a ObjectValues> {
-        let mut i_path = self.path.iter().map(|v| match v {
+        let mut i_path = self.0.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
         });
@@ -369,7 +358,7 @@ impl ValuePath {
         def: &'a ObjectDefinition,
     ) -> Result<&'a FieldType, ValuePathError> {
         let mut current_def = def;
-        for cmp in self.path.iter() {
+        for cmp in self.0.iter() {
             match cmp {
                 ValuePathComponent::Key(k) => {
                     if let Some(field) = current_def.fields.get(k) {
@@ -402,7 +391,7 @@ impl ValuePath {
         def: &'a ObjectDefinition,
     ) -> Result<&'a ObjectDefinition, ValuePathError> {
         let mut last_val = def;
-        for cmp in self.path.iter() {
+        for cmp in self.0.iter() {
             match cmp {
                 ValuePathComponent::Key(k) => {
                     if let Some(child_def) = last_val.children.get(k) {
@@ -461,7 +450,7 @@ impl ValuePath {
         object: &mut Object,
         modify: impl FnOnce(&mut Vec<ObjectValues>) -> R,
     ) -> Result<R, ValuePathError> {
-        let mut i_path = self.path.iter().map(|v| match v {
+        let mut i_path = self.0.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
         });
@@ -509,9 +498,9 @@ impl ValuePath {
         child: &mut BTreeMap<String, FieldValue>,
         value: Option<FieldValue>,
     ) -> Result<(), ValuePathError> {
-        let mut path = self.path.clone();
+        let mut path = self.0.clone();
         if let ValuePathComponent::Key(key) = path.remove(0) {
-            if self.path.len() == 1 {
+            if self.0.len() == 1 {
                 // On the last node, either remove or set the value
                 if let Some(value) = value {
                     child.insert(key, value);
@@ -538,7 +527,7 @@ impl ValuePath {
         object: &mut Object,
         value: Option<FieldValue>,
     ) -> Result<(), ValuePathError> {
-        let mut i_path = self.path.iter().map(|v| match v {
+        let mut i_path = self.0.iter().map(|v| match v {
             ValuePathComponent::Index(i) => ValuePathComponent::Index(*i),
             ValuePathComponent::Key(k) => ValuePathComponent::Key(k.to_owned()),
         });
@@ -589,7 +578,25 @@ impl From<&str> for ValuePath {
 
 impl From<Vec<ValuePathComponent>> for ValuePath {
     fn from(value: Vec<ValuePathComponent>) -> Self {
-        Self { path: value }
+        Self(value)
+    }
+}
+
+impl serde::Serialize for ValuePath {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.to_string().as_str())
+    }
+}
+impl<'de> Deserialize<'de> for ValuePath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s: String = Deserialize::deserialize(deserializer)?;
+        Ok(Self::from_string(&s))
     }
 }
 
@@ -697,5 +704,21 @@ pub mod tests {
             let val = o.last().unwrap().get("name");
             assert_eq!(val.unwrap(), &new_val);
         }
+    }
+
+    #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+    struct VPHolder {
+        value_path: ValuePath,
+    }
+
+    #[test]
+    fn serialize_deserialize() {
+        let value_path = ValuePath::from_string("children.1.name.0.field");
+        let holder = VPHolder { value_path };
+        let json_string = serde_json::to_string(&holder).expect("serialization failed.");
+        assert_eq!(json_string, r#"{"value_path":"children.1.name.0.field"}"#);
+        let deserialized: VPHolder =
+            serde_json::from_str(&json_string).expect("deserialization failed.");
+        assert_eq!(holder, deserialized);
     }
 }
