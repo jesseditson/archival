@@ -642,16 +642,27 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         })
     }
 
-    /// Deletes all the object files for the given object types.
-    /// This only deletes the files, and does not generate events or rebuild the archival site.
+    /// Deletes all the object files for the given object types, except the ones
+    /// (optionally) specified in the list of keep_objects.
+    /// This only deletes the files, and does not generate events or rebuild the
+    /// archival site.
     pub fn delete_objects(
         &self,
         object_names: impl IntoIterator<Item = impl AsRef<str>>,
+        keep_objects: Option<Vec<ValuePath>>,
     ) -> Result<(), Box<dyn Error>> {
         let objects = self.get_objects()?;
         self.fs_mutex.with_fs(|fs| {
             for on in object_names {
                 let object_name = on.as_ref();
+                let current_path: ValuePath =
+                    ValuePath::empty().append(ValuePath::key(object_name));
+                if keep_objects
+                    .as_ref()
+                    .is_some_and(|ko| ko.contains(&current_path))
+                {
+                    continue;
+                }
                 let entry = objects.get(object_name).ok_or_else(|| {
                     ArchivalError::new(&format!("object {} does not exist", object_name))
                 })?;
@@ -662,6 +673,13 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                     ObjectEntry::List(objects) => objects.iter().map(|o| &o.filename).collect(),
                 };
                 for filename in filenames {
+                    let current_path = current_path.clone().append(ValuePath::key(filename));
+                    if keep_objects
+                        .as_ref()
+                        .is_some_and(|ko| ko.contains(&current_path))
+                    {
+                        continue;
+                    }
                     let path = self.object_path_impl(object_name, filename, fs)?;
                     fs.delete(&path)?;
                     self.site.invalidate_file(&path);
@@ -1061,7 +1079,10 @@ mod lib {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        archival.delete_objects(vec!["section", "site"].into_iter())?;
+        archival.delete_objects(
+            vec!["section", "site"].into_iter(),
+            Some(vec![ValuePath::from_string("section.second")]),
+        )?;
         // This should result in the relevant files being missing
         let sections_dir = archival.site.manifest.objects_dir.join("section");
         let sections = archival.fs_mutex.with_fs(|fs| {
@@ -1069,7 +1090,7 @@ mod lib {
                 .map(|d| d.collect::<Vec<PathBuf>>())
         })?;
         println!("SECTIONS: {:?}", sections);
-        assert_eq!(sections.len(), 0);
+        assert_eq!(sections.len(), 1);
         let site_file_exists = archival
             .fs_mutex
             .with_fs(|fs| fs.exists(&archival.site.manifest.objects_dir.join("site.toml")))?;
