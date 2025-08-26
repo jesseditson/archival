@@ -28,6 +28,9 @@ pub enum ValuePathComponent {
 
 impl ValuePathComponent {
     pub fn key(name: &str) -> Self {
+        if name.contains(".") {
+            panic!("ValuePathComponent Keys may not contain a dot")
+        }
         Self::Key(name.to_string())
     }
     pub fn as_key(self) -> Option<String> {
@@ -46,7 +49,7 @@ impl ValuePathComponent {
 
 impl From<&String> for ValuePathComponent {
     fn from(value: &String) -> Self {
-        ValuePathComponent::Key(value.to_string())
+        ValuePathComponent::key(value)
     }
 }
 impl From<usize> for ValuePathComponent {
