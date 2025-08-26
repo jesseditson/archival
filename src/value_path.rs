@@ -26,30 +26,9 @@ pub enum ValuePathComponent {
     Index(usize),
 }
 
-impl ValuePathComponent {
-    pub fn key(name: &str) -> Self {
-        if name.contains(".") {
-            panic!("ValuePathComponent Keys may not contain a dot")
-        }
-        Self::Key(name.to_string())
-    }
-    pub fn as_key(self) -> Option<String> {
-        match self {
-            ValuePathComponent::Key(k) => Some(k),
-            ValuePathComponent::Index(_) => None,
-        }
-    }
-    pub fn as_index(self) -> Option<usize> {
-        match self {
-            ValuePathComponent::Key(_) => None,
-            ValuePathComponent::Index(i) => Some(i),
-        }
-    }
-}
-
 impl From<&String> for ValuePathComponent {
     fn from(value: &String) -> Self {
-        ValuePathComponent::key(value)
+        ValuePath::key(value)
     }
 }
 impl From<usize> for ValuePathComponent {
@@ -73,6 +52,18 @@ impl Display for ValuePathComponent {
 pub struct ValuePath(
     #[cfg_attr(feature = "typescript", type_def(type_of = "String"))] Vec<ValuePathComponent>,
 );
+
+impl ValuePath {
+    pub fn key(name: &str) -> ValuePathComponent {
+        if name.contains(".") {
+            panic!("ValuePathComponent Keys may not contain a dot")
+        }
+        ValuePathComponent::Key(name.to_string())
+    }
+    pub fn index(index: usize) -> ValuePathComponent {
+        ValuePathComponent::Index(index)
+    }
+}
 
 impl Display for ValuePath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

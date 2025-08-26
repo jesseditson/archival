@@ -4,7 +4,6 @@ use crate::{
     events::{AddChildEvent, AddObjectEvent, ArchivalEvent, ArchivalEventResponse, EditFieldEvent},
     file_system_stdlib,
     object::{ObjectEntry, ValuePath},
-    value_path::ValuePathComponent,
     Archival, FieldValue, FileSystemAPI, ObjectDefinition,
 };
 use clap::{arg, value_parser, ArgMatches};
@@ -385,7 +384,7 @@ impl Command {
                             )
                         })?;
                     if let ArchivalEventResponse::Index(i) = r {
-                        current_path = current_path.append(ValuePathComponent::Index(i));
+                        current_path = current_path.append(ValuePath::index(i));
                     } else {
                         panic!("archival did not return an index for an inserted child");
                     }

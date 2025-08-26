@@ -1,4 +1,4 @@
-pub use crate::value_path::{ValuePath, ValuePathComponent};
+pub use crate::value_path::ValuePath;
 use crate::{
     events::AddObjectValue,
     fields::{FieldType, FieldValue, InvalidFieldError, ObjectValues},

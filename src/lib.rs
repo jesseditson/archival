@@ -683,11 +683,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
 mod lib {
     use std::error::Error;
 
-    use crate::{
-        file_system::unpack_zip,
-        test_utils::as_path_str,
-        value_path::{ValuePath, ValuePathComponent},
-    };
+    use crate::{file_system::unpack_zip, test_utils::as_path_str, value_path::ValuePath};
     use events::AddObjectValue;
     use tracing_test::traced_test;
 
@@ -945,7 +941,7 @@ mod lib {
                 ArchivalEvent::AddChild(AddChildEvent {
                     object: "post".to_string(),
                     filename: "a-post".to_string(),
-                    path: ValuePath::default().append(ValuePathComponent::key("links")),
+                    path: ValuePath::default().append(ValuePath::key("links")),
                     values: vec![
                         AddObjectValue {
                             path: ValuePath::from_string("url"),
@@ -1011,8 +1007,8 @@ mod lib {
                     object: "post".to_string(),
                     filename: "a-post".to_string(),
                     path: ValuePath::default()
-                        .append(ValuePathComponent::key("links"))
-                        .append(ValuePathComponent::Index(0)),
+                        .append(ValuePath::key("links"))
+                        .append(ValuePath::index(0)),
                     source: None,
                 }),
                 Some(BuildOptions::default()),
