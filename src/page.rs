@@ -10,6 +10,7 @@ use regex::Regex;
 use std::{
     borrow::Cow,
     collections::BTreeMap,
+    env,
     error::Error,
     fmt,
     path::{Path, PathBuf},
@@ -110,26 +111,42 @@ pub struct Page<'a> {
 pub(crate) fn debug_context(object: &liquid::Object, lp: usize) -> String {
     let mut debug_str = String::default();
     fn to_str(val: &Value, lp: usize) -> String {
+        let include_values = env::var("ARCHIVAL_CONTEXT_VALUES").is_ok();
         match val {
             Value::Object(o) => debug_context(o, lp + 1),
             Value::Array(a) => {
-                format!(
-                    "\n{}↘︎[{} items]{}\n{}⎼⎼⎼",
-                    "  ".repeat(lp),
-                    a.len(),
-                    if a.is_empty() {
-                        "".to_string()
-                    } else {
-                        a.iter()
-                            .map(|v| to_str(v, lp + 1))
-                            .collect::<Vec<String>>()
-                            .join(&format!("\n{}--", "  ".repeat(lp + 2)))
-                    },
-                    "  ".repeat(lp),
-                )
+                if include_values {
+                    format!(
+                        "\n{}↘︎[{} items]{}\n{}⎼⎼⎼",
+                        "  ".repeat(lp),
+                        a.len(),
+                        if a.is_empty() {
+                            "".to_string()
+                        } else {
+                            a.iter()
+                                .map(|v| to_str(v, lp + 1))
+                                .collect::<Vec<String>>()
+                                .join(&format!("\n{}--", "  ".repeat(lp + 2)))
+                        },
+                        "  ".repeat(lp),
+                    )
+                } else {
+                    format!(
+                        "\n{}↘︎[{} items]{}",
+                        "  ".repeat(lp),
+                        a.len(),
+                        a.first().map(|v| to_str(v, lp + 1)).unwrap_or_default()
+                    )
+                }
             }
             Value::Nil => " (nil)".to_string(),
-            Value::Scalar(s) => format!(" ({}: {:?})", val.type_name(), s.as_view()),
+            Value::Scalar(s) => {
+                if include_values {
+                    format!(" ({}: {:?})", val.type_name(), s.as_view())
+                } else {
+                    format!(": ({})", val.type_name())
+                }
+            }
             _ => format!(": ({})", val.type_name()),
         }
     }
