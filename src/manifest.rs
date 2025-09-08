@@ -200,6 +200,7 @@ pub struct Manifest {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "binary", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "binary", value(rename_all = "snake_case"))]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum ManifestField {
     UploadPrefix,
@@ -214,7 +215,7 @@ pub enum ManifestField {
     StaticDir,
     SchemasDir,
     LayoutDir,
-    CdnUrl,
+    UploadsUrl,
     EditorTypes,
 }
 
@@ -233,7 +234,7 @@ impl ManifestField {
             ManifestField::StaticDir => "static_dir",
             ManifestField::SchemasDir => "schemas_dir",
             ManifestField::LayoutDir => "layout_dir",
-            ManifestField::CdnUrl => "uploads_url",
+            ManifestField::UploadsUrl => "uploads_url",
             ManifestField::EditorTypes => "editor_types",
         }
     }
@@ -436,7 +437,7 @@ impl Manifest {
             ManifestField::ObjectDefinitionFile => Some(Value::String(
                 self.object_definition_file.to_string_lossy().to_string(),
             )),
-            ManifestField::CdnUrl => self.uploads_url.to_owned().map(Value::String),
+            ManifestField::UploadsUrl => self.uploads_url.to_owned().map(Value::String),
             ManifestField::Prebuild => {
                 if self.prebuild.is_empty() {
                     None
@@ -580,7 +581,7 @@ impl Manifest {
             }
             ManifestField::SiteUrl => self.site_url = Some(value),
             ManifestField::SiteName => self.site_name = Some(value),
-            ManifestField::CdnUrl => self.uploads_url = Some(value),
+            ManifestField::UploadsUrl => self.uploads_url = Some(value),
             ManifestField::Prebuild => {
                 panic!("Prebuild is not modifiable via events")
             }
@@ -612,7 +613,7 @@ impl Manifest {
         vec![
             ManifestField::ArchivalVersion,
             ManifestField::SiteUrl,
-            ManifestField::CdnUrl,
+            ManifestField::UploadsUrl,
             ManifestField::Prebuild,
             ManifestField::ObjectDefinitionFile,
             ManifestField::PagesDir,
