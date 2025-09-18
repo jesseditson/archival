@@ -15,12 +15,12 @@ use crate::{
 use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::{RefCell, RefMut},
     cmp::Ordering,
     collections::{BTreeMap, HashMap, HashSet},
     error::Error,
     hash::Hasher,
     path::{Path, PathBuf},
+    sync::RwLock,
 };
 use thiserror::Error;
 use tracing::{debug, error, instrument, trace_span, warn};
@@ -49,15 +49,15 @@ pub enum BuildError {
     PageRenderError(String, String),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Site {
     pub object_definitions: ObjectDefinitions,
     pub manifest: Manifest,
 
     #[serde(skip)]
-    obj_cache: RefCell<HashMap<PathBuf, Object>>,
+    obj_cache: RwLock<HashMap<PathBuf, Object>>,
     #[serde(skip)]
-    static_file_cache: RefCell<HashMap<PathBuf, u64>>,
+    static_file_cache: RwLock<HashMap<PathBuf, u64>>,
 }
 
 impl std::fmt::Display for Site {
@@ -133,8 +133,8 @@ impl Site {
         Ok(Site {
             manifest,
             object_definitions: objects,
-            obj_cache: RefCell::new(HashMap::new()),
-            static_file_cache: RefCell::new(HashMap::new()),
+            obj_cache: RwLock::new(HashMap::new()),
+            static_file_cache: RwLock::new(HashMap::new()),
         })
     }
 
@@ -242,7 +242,7 @@ impl Site {
     pub fn invalidate_file(&self, file: &Path) {
         #[cfg(feature = "verbose-logging")]
         debug!("invalidate {}", file.display());
-        self.obj_cache.borrow_mut().remove(file);
+        self.obj_cache.write().unwrap().remove(file);
     }
 
     #[instrument(skip(fs, modify))]
@@ -271,7 +271,7 @@ impl Site {
             .object_definitions
             .get(object_name)
             .ok_or_else(|| InvalidFileError::UnknownObject(object_name.to_string()))?;
-        let mut cache = self.obj_cache.borrow_mut();
+        let mut cache = self.obj_cache.write().unwrap();
         if let Some(filename) = filename {
             let root_path = self.path_for_object(object_name, None);
             if filename == object_name && fs.exists(&root_path)? {
@@ -304,7 +304,7 @@ impl Site {
         for (object_name, object_def) in self.object_definitions.iter() {
             let object_files_path = objects_dir.join(object_name);
             let object_file_path = objects_dir.join(format!("{}.toml", object_name));
-            let mut cache = self.obj_cache.borrow_mut();
+            let mut cache = self.obj_cache.write().unwrap();
             if fs.is_dir(&object_files_path)? {
                 if fs.exists(&object_file_path)? {
                     return Err(InvalidFileError::DuplicateObjectDefinition(
@@ -360,7 +360,7 @@ impl Site {
         &self,
         path: &Path,
         object_def: &ObjectDefinition,
-        cache: &mut RefMut<HashMap<PathBuf, Object>>,
+        cache: &mut HashMap<PathBuf, Object>,
         fs: &T,
     ) -> Result<Object, Box<dyn Error>> {
         let ext = path
@@ -403,7 +403,7 @@ impl Site {
         if !fs.exists(build_dir)? {
             fs.create_dir_all(build_dir)?;
         }
-        let mut hashes = self.static_file_cache.borrow_mut();
+        let mut hashes = self.static_file_cache.write().unwrap();
         let last_dist_paths: Vec<PathBuf> = hashes.keys().cloned().collect();
         let mut copied_paths: HashSet<PathBuf> = HashSet::new();
         // Copy static files

@@ -6,7 +6,7 @@ use std::{
 #[cfg(feature = "verbose-logging")]
 use tracing::debug;
 
-pub trait FileSystemAPI {
+pub trait FileSystemAPI: Send + Sync {
     fn root_dir(&self) -> &Path;
     fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
     fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>>;

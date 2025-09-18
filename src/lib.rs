@@ -31,13 +31,13 @@ use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use site::Site;
-use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hasher;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use tracing::{debug, error};
 #[cfg(feature = "binary")]
 pub mod binary;
@@ -119,7 +119,7 @@ pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
 pub struct Archival<F: FileSystemAPI + Clone + Debug> {
     fs_mutex: FileSystemMutex<F>,
     pub site: site::Site,
-    last_build_id: Cell<ArchivalBuildId>,
+    last_build_id: AtomicU64,
 }
 
 impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
@@ -142,7 +142,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(Self {
             fs_mutex,
             site,
-            last_build_id: Cell::new(0),
+            last_build_id: AtomicU64::new(0),
         })
     }
     pub fn new_with_upload_prefix(fs: F, upload_prefix: &str) -> Result<Self, Box<dyn Error>> {
@@ -152,7 +152,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(Self {
             fs_mutex,
             site,
-            last_build_id: Cell::new(0),
+            last_build_id: AtomicU64::new(0),
         })
     }
     pub fn new_with_field_config(fs: F, field_config: FieldConfig) -> Result<Self, Box<dyn Error>> {
@@ -162,7 +162,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(Self {
             fs_mutex,
             site,
-            last_build_id: Cell::new(0),
+            last_build_id: AtomicU64::new(0),
         })
     }
     pub fn build(&self, options: BuildOptions) -> Result<ArchivalBuildId, Box<dyn Error>> {
@@ -172,13 +172,17 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 self.site.sync_static_files(fs)?;
             }
             let build_id = self.fs_id(fs)?;
-            if self.last_build_id.get() != build_id {
+            if self.last_build_id.load(AtomicOrdering::Relaxed) != build_id {
                 self.site.build(fs)?;
             }
             Ok(build_id)
         })?;
-        self.last_build_id.replace(build_id);
-        Ok(build_id)
+        self.last_build_id
+            .fetch_update(AtomicOrdering::Relaxed, AtomicOrdering::Relaxed, |_| {
+                Some(build_id)
+            })
+            .unwrap();
+        Ok(self.last_build_id.load(AtomicOrdering::Relaxed))
     }
     #[cfg(feature = "json-schema")]
     pub fn dump_schemas(&self) -> Result<(), Box<dyn Error>> {
