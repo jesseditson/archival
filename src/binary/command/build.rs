@@ -1,7 +1,7 @@
 use super::BinaryCommand;
-use crate::{binary::ExitStatus, file_system_stdlib, site::Site, FieldConfig, FileSystemAPI};
-use clap::ArgMatches;
-use std::path::Path;
+use crate::{binary::ExitStatus, file_system_stdlib, site::Site, FieldConfig};
+use clap::{arg, value_parser, ArgMatches};
+use std::path::{Path, PathBuf};
 
 pub struct Command {}
 impl BinaryCommand for Command {
@@ -9,24 +9,30 @@ impl BinaryCommand for Command {
         "build"
     }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("builds an archival site")
+        cmd.about("builds an archival site").arg(
+            arg!(-b --build_dir <build_dir> "Override the directory to build to (defaults to the manifest's build_dir)")
+                .value_parser(value_parser!(PathBuf)),
+        )
     }
     fn uses_uploads(&self) -> bool {
         true
     }
     fn handler(
         &self,
-        build_dir: &Path,
+        root_dir: &Path,
         args: &ArgMatches,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
-        let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
-        let site = Site::load(
+        let mut fs = file_system_stdlib::NativeFileSystem::new(root_dir);
+        let mut site = Site::load(
             &fs,
-            args.get_one::<String>("upload-prefix").map(|s| s.as_str()),
+            args.get_one::<String>("upload_prefix").map(|s| s.as_str()),
         )?;
         FieldConfig::set_global(site.get_field_config(None)?);
         println!("Building site: {}", &site);
-        let _ = fs.remove_dir_all(&site.manifest.build_dir);
+        if let Some(build_dir_arg) = args.get_one::<PathBuf>("build_dir") {
+            let cwd = std::env::current_dir().unwrap();
+            site.manifest.build_dir = cwd.join(build_dir_arg);
+        }
         site.sync_static_files(&mut fs)?;
         site.build(&mut fs)?;
         Ok(ExitStatus::Ok)

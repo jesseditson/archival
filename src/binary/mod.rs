@@ -14,7 +14,7 @@ pub fn binary(args: impl Iterator<Item = String>) -> Result<ExitStatus, Box<dyn 
         if command.uses_uploads() {
             subcommand = subcommand.arg(
                 // NOTE: weird long form quoting due to https://github.com/clap-rs/clap/issues/3586
-                arg!(-u --"upload-prefix" <prefix> "override the uploads prefix. If no manifest.toml is present, this is required.")
+                arg!(-u --"upload_prefix" <prefix> "override the uploads prefix. If no manifest.toml is present, this is required.")
                     .value_parser(value_parser!(String)),
             )
         }

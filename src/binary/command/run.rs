@@ -39,7 +39,7 @@ impl BinaryCommand for Command {
         let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let site = Site::load(
             &fs,
-            args.get_one::<String>("upload-prefix").map(|s| s.as_str()),
+            args.get_one::<String>("upload_prefix").map(|s| s.as_str()),
         )?;
         FieldConfig::set_global(site.get_field_config(None)?);
         let _ = fs.remove_dir_all(&site.manifest.build_dir);

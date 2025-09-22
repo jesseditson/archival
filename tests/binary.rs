@@ -36,7 +36,7 @@ mod binary_tests {
         archival::binary::binary(get_args(vec![
             "build",
             "tests/fixtures/website",
-            "--upload-prefix",
+            "--upload_prefix",
             "test",
         ]))
         .unwrap();
