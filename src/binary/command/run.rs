@@ -1,6 +1,6 @@
 use super::BinaryCommand;
+use crate::FieldConfig;
 use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, server, site::Site};
-use crate::{FieldConfig, FileSystemAPI};
 use clap::{arg, value_parser, ArgMatches};
 use std::time::Duration;
 use std::{
@@ -42,7 +42,6 @@ impl BinaryCommand for Command {
             args.get_one::<String>("upload_prefix").map(|s| s.as_str()),
         )?;
         FieldConfig::set_global(site.get_field_config(None)?);
-        let _ = fs.remove_dir_all(&site.manifest.build_dir);
         site.sync_static_files(&mut fs)?;
         if let Err(e) = site.build(&mut fs) {
             println!("Initial build failed: {}", e);
