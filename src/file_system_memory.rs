@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
+    fmt::Debug,
     hash::Hash,
     ops::Deref,
     path::{Path, PathBuf},
@@ -101,10 +102,29 @@ impl FileGraphNode {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Clone)]
 pub struct MemoryFileSystem {
     fs: BTreeMap<String, Vec<u8>>,
     tree: BTreeMap<String, FileGraphNode>,
+}
+impl Debug for MemoryFileSystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[derive(Debug)]
+        #[allow(dead_code)]
+        struct DisplayMemoryFileSystem<'a> {
+            files: Vec<&'a String>,
+            tree: &'a BTreeMap<String, FileGraphNode>,
+        }
+        let Self { fs, tree } = self;
+
+        Debug::fmt(
+            &DisplayMemoryFileSystem {
+                files: fs.keys().collect(),
+                tree,
+            },
+            f,
+        )
+    }
 }
 
 impl FileSystemAPI for MemoryFileSystem {
