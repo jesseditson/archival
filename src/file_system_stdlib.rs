@@ -3,6 +3,7 @@ use crate::{
     ArchivalError,
 };
 use notify::{RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     fs,
@@ -13,7 +14,7 @@ use tracing::debug;
 use tracing::warn;
 use walkdir::WalkDir;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NativeFileSystem {
     pub root: PathBuf,
 }

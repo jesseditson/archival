@@ -67,7 +67,7 @@ impl Deref for DirEntry {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FileGraphNode {
     path: PathBuf,
     pub(crate) files: BTreeSet<DirEntry>,
@@ -102,7 +102,7 @@ impl FileGraphNode {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MemoryFileSystem {
     fs: BTreeMap<String, Vec<u8>>,
     tree: BTreeMap<String, FileGraphNode>,
