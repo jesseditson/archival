@@ -14,7 +14,7 @@ use tracing::debug;
 use tracing::warn;
 use walkdir::WalkDir;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NativeFileSystem {
     pub root: PathBuf,
 }

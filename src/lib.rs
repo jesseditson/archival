@@ -246,7 +246,15 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn build_id(&self) -> Result<u64, Box<dyn Error>> {
         self.fs_mutex.with_fs(|fs| self.fs_id(fs))
     }
-    fn fs_id(&self, fs: &F) -> Result<u64, Box<dyn Error>> {
+    pub fn list_build_files(
+        &self,
+    ) -> Result<impl Iterator<Item = PathBuf> + use<'_, F>, Box<dyn Error>> {
+        self.fs_mutex.with_fs(|fs| self.list_build_files_for_fs(fs))
+    }
+    fn list_build_files_for_fs(
+        &self,
+        fs: &F,
+    ) -> Result<impl Iterator<Item = PathBuf> + use<'_, F>, Box<dyn Error>> {
         let Manifest {
             object_definition_file,
             pages_dir,
@@ -254,25 +262,27 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             objects_dir,
             ..
         } = &self.site.manifest;
+        let root_files = [
+            Path::new(MANIFEST_FILE_NAME).to_path_buf(),
+            object_definition_file.to_owned(),
+        ];
+        Ok(root_files
+            .into_iter()
+            .chain(fs.walk_dir(pages_dir, false)?.map(|p| pages_dir.join(p)))
+            .chain(fs.walk_dir(layout_dir, false)?.map(|p| layout_dir.join(p)))
+            .chain(
+                fs.walk_dir(objects_dir, false)?
+                    .map(|p| objects_dir.join(p)),
+            ))
+    }
+    fn fs_id(&self, fs: &F) -> Result<u64, Box<dyn Error>> {
         let mut hasher = SeaHasher::new();
-        let mut maybe_hash = |path: &PathBuf| -> Result<(), Box<dyn Error>> {
-            if let Some(file) = fs.read(path)? {
+        for path in self.list_build_files_for_fs(fs)? {
+            if let Some(file) = fs.read(&path)? {
                 hasher.write(&file);
             } else {
                 debug!("no content found for {}", path.display());
             }
-            Ok(())
-        };
-        maybe_hash(&Path::new(MANIFEST_FILE_NAME).into())?;
-        maybe_hash(object_definition_file)?;
-        for page in fs.walk_dir(pages_dir, false)? {
-            maybe_hash(&pages_dir.join(page))?;
-        }
-        for layout in fs.walk_dir(layout_dir, false)? {
-            maybe_hash(&layout_dir.join(layout))?;
-        }
-        for object in fs.walk_dir(objects_dir, false)? {
-            maybe_hash(&objects_dir.join(object))?;
         }
         Ok(hasher.finish())
     }
