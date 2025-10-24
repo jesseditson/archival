@@ -119,7 +119,7 @@ impl BinaryCommand for Command {
         // Set up an archival site to make sure we're able to modify fields
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let archival = if let Some(upload_prefix) =
-            args.get_one::<String>("upload_prefix").map(|s| s.as_str())
+            args.get_one::<String>("upload-prefix").map(|s| s.as_str())
         {
             Archival::new_with_upload_prefix(fs, upload_prefix)?
         } else {

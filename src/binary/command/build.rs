@@ -10,7 +10,8 @@ impl BinaryCommand for Command {
     }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
         cmd.about("builds an archival site").arg(
-            arg!(-b --build_dir <build_dir> "Override the directory to build to (defaults to the manifest's build_dir)")
+            // NOTE: weird long form quoting due to https://github.com/clap-rs/clap/issues/3586
+            arg!(-b --"build-dir" <build_dir> "Override the directory to build to (defaults to the manifest's build_dir)")
                 .value_parser(value_parser!(PathBuf)),
         )
     }
@@ -25,11 +26,11 @@ impl BinaryCommand for Command {
         let mut fs = file_system_stdlib::NativeFileSystem::new(root_dir);
         let mut site = Site::load(
             &fs,
-            args.get_one::<String>("upload_prefix").map(|s| s.as_str()),
+            args.get_one::<String>("upload-prefix").map(|s| s.as_str()),
         )?;
         FieldConfig::set_global(site.get_field_config(None)?);
         println!("Building site: {}", &site);
-        if let Some(build_dir_arg) = args.get_one::<PathBuf>("build_dir") {
+        if let Some(build_dir_arg) = args.get_one::<PathBuf>("build-dir") {
             let cwd = std::env::current_dir().unwrap();
             site.manifest.build_dir = cwd.join(build_dir_arg);
         }
