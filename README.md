@@ -1,4 +1,3 @@
-
 <a href="https://archival.dev">
 <p align="center">
   <img src="https://archival.dev/img/header.png" alt="archival" height="200px">
@@ -15,16 +14,15 @@ Learn more at [archival.dev](https://archival.dev).
 
 ## Examples
 
-Lots of websites are built on archival, including https://archival.dev and https://editor.archival.dev - the former being the official documentation and the latter a WASM-based rust application that runs via a service worker. You can see the code for each here:
+Lots of websites are built on archival, including https://archival.dev, which you can check out here:
 
 - https://github.com/jesseditson/archival-docs
-- https://github.com/jesseditson/archival-editor
 
 Another example of a super simple website is a blog:
 
 https://github.com/jesseditson/jesseditson.com
 
-Most websites built on archival start with a template - all of our templates can be browsed here:
+Most websites built on archival are built with our editor:
 
 https://editor.archival.dev/new
 

@@ -13,14 +13,9 @@ archival is intentionally a very small tool, but since it runs in lots of differ
 - Check out the [open issues](https://github.com/jesseditson/archival/issues) to see if anything looks fun to fix. We use the tag [good first issue](https://github.com/jesseditson/archival/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) to indicate ones that are good for folks who haven't contributed yet.
 - Join the [discord](https://archival.dev/chat.html) and ask questions, get the latest updates, and chat with us about your projects.
 
-The editor and documentation sites are also open source, and while the editor is our product, it's also an example of how to build complex things with archival. If you find issues in either, please file an issue or a PR!
-
-- https://github.com/jesseditson/archival-docs
-- https://github.com/jesseditson/archival-editor
-
 ### Reporting new issues
 
-The public issue tracker is [here on github](https://github.com/jesseditson/archival/issues) - when reporting an issue, please do your best to put it in the right repo - for instance, if you're experiencing issues with the editor, file it in the [editor repo](https://github.com/jesseditson/archival-editor/issues). For template issues, use the [template repo](https://github.com/jesseditson/archival-website/issues). For documentation issues, use the [documentation repo](https://github.com/jesseditson/archival-docs/issues).
+The public issue tracker is [here on github](https://github.com/jesseditson/archival/issues). For documentation issues, use the [documentation repo](https://github.com/jesseditson/archival-docs/issues).
 
 ### Installation
 

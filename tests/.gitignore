@@ -2,3 +2,5 @@
 # running zip-website.sh in this folder without having to delete the
 # intermediate folder.
 archival-website
+
+tmp
