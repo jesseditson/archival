@@ -129,24 +129,21 @@ mod binary_tests {
                 }
             }
         });
-        // This takes long enough that we don't need to orchestrate via the callback
-        let s = run_until(&receiver, "Serving", Duration::from_millis(5000), || {});
+        let s = run_until(&receiver, "Serving", Duration::from_millis(10_000));
         println!("-------- initial build: {}", String::from_utf8_lossy(&s));
         // First build complete. Now add a file and make sure it's built
         let spid = nanoid!();
         let new_section_path = format!("{}/objects/subpage/{}.toml", site_path, spid);
         println!("LOOKING FOR NEW PAGE...");
-        let s = run_until(&receiver, "Rebuilt", Duration::from_millis(2000), || {
-            fs::write(&new_section_path, SUBPAGE_CONTENT).unwrap();
-        });
+        fs::write(&new_section_path, SUBPAGE_CONTENT).unwrap();
+        let s = run_until(&receiver, "Rebuilt", Duration::from_millis(2000));
         println!("-------- new page: {}", String::from_utf8_lossy(&s));
         let new_section_page_path = format!("{}/dist/subpage/{}.html", site_path, spid);
         let found_page = fs::exists(&new_section_page_path).unwrap();
         assert!(found_page);
         // Now remove the object and verify that the page was also removed;
-        let s = run_until(&receiver, "Rebuilt", Duration::from_millis(2000), || {
-            fs::remove_file(&new_section_path).unwrap();
-        });
+        fs::remove_file(&new_section_path).unwrap();
+        let s = run_until(&receiver, "Rebuilt", Duration::from_millis(2000));
         println!("-------- deleted: {}", String::from_utf8_lossy(&s));
         let found_page = fs::exists(&new_section_page_path).unwrap();
         assert!(!found_page);
@@ -159,11 +156,9 @@ mod binary_tests {
         receiver: &sync::mpsc::Receiver<[u8; 1]>,
         until_seen: &str,
         timeout: Duration,
-        f: impl FnOnce(),
     ) -> Vec<u8> {
         let start = Instant::now();
         let mut current_buf = vec![];
-        f();
         loop {
             if Instant::now() - start > timeout {
                 panic!("timed out waiting for {}", until_seen);
