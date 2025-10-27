@@ -3,3 +3,7 @@
 [section]
 name = "string"
 body = "markdown"
+
+[subpage]
+name = "string"
+template = "subpage"

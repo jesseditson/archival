@@ -5,7 +5,11 @@ use crate::{
 };
 use clap::ArgMatches;
 use liquid_core::Value;
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 pub struct Command {}
 impl BinaryCommand for Command {
@@ -19,6 +23,7 @@ impl BinaryCommand for Command {
         &self,
         build_dir: &Path,
         _args: &ArgMatches,
+        _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let site = Site::load(&fs, Some(""))?;

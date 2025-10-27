@@ -1,7 +1,10 @@
 use super::BinaryCommand;
 use crate::{binary::ExitStatus, file_system_stdlib, site::Site, FieldConfig};
 use clap::{arg, value_parser, ArgMatches};
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::{atomic::AtomicBool, Arc},
+};
 
 pub struct Command {}
 impl BinaryCommand for Command {
@@ -22,6 +25,7 @@ impl BinaryCommand for Command {
         &self,
         root_dir: &Path,
         args: &ArgMatches,
+        _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let mut fs = file_system_stdlib::NativeFileSystem::new(root_dir);
         let mut site = Site::load(

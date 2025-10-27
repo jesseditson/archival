@@ -2,7 +2,8 @@ use super::BinaryCommand;
 use crate::FieldConfig;
 use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, server, site::Site};
 use clap::{arg, value_parser, ArgMatches};
-use std::time::Duration;
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 use std::{
     path::Path,
     process::exit,
@@ -35,6 +36,7 @@ impl BinaryCommand for Command {
         &self,
         build_dir: &Path,
         args: &ArgMatches,
+        quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let site = Site::load(
@@ -47,7 +49,7 @@ impl BinaryCommand for Command {
             println!("Initial build failed: {}", e);
         }
         println!("Watching site: {}", &site);
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel();
         // This won't leak because the process is ended when we
         // abort anyway
         let kill_watcher = fs.watch(
@@ -76,32 +78,39 @@ impl BinaryCommand for Command {
                 server.serve().unwrap();
             });
         }
-        let aborted = Arc::new(AtomicBool::new(false));
-        let aborted_clone = aborted.clone();
+        let quit_clone = quit.clone();
         ctrlc::set_handler(move || {
-            aborted_clone.store(true, Ordering::SeqCst);
+            quit_clone.store(true, Ordering::SeqCst);
             exit(0);
         })?;
+        let mut last_build = Instant::now();
+        let mut changed = false;
         loop {
-            if let Ok(path) = rx.try_recv() {
-                // Batch changes every 500ms
-                thread::sleep(Duration::from_millis(500));
-                while rx.try_recv().is_ok() {
-                    // Flush events
+            match rx.try_recv() {
+                Ok(path) => {
+                    site.invalidate_file(path.strip_prefix(build_dir).unwrap());
+                    changed = true;
                 }
-                let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
+                Err(mpsc::TryRecvError::Empty) => {}
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    panic!("Build Channel Disconnected.")
+                }
+            }
+            if quit.load(Ordering::SeqCst) {
+                kill_watcher();
+                exit(0);
+            }
+            // Batch changes every 200ms
+            if changed && Instant::now() - last_build > Duration::from_millis(200) {
+                last_build = Instant::now();
                 println!("Rebuilding");
-                site.invalidate_file(path.strip_prefix(build_dir)?);
-                site.sync_static_files(&mut fs)?;
+                let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
+                site.sync_static_files(&mut fs).unwrap();
                 if let Err(e) = site.build(&mut fs) {
                     println!("Build failed: {}", e);
                 } else {
-                    println!("Rebuilt.");
+                    println!("Rebuilt in {:?}", Instant::now() - last_build);
                 }
-            }
-            if aborted.load(Ordering::SeqCst) {
-                kill_watcher();
-                exit(0);
             }
         }
     }

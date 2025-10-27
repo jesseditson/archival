@@ -1,7 +1,10 @@
 use super::BinaryCommand;
 use crate::{binary::ExitStatus, file_system_stdlib, manifest::ManifestField, site::Site};
 use clap::{arg, value_parser, ArgMatches};
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 pub struct Command {}
 impl BinaryCommand for Command {
@@ -19,6 +22,7 @@ impl BinaryCommand for Command {
         &self,
         build_dir: &Path,
         args: &ArgMatches,
+        _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let field = args.get_one::<ManifestField>("field").unwrap();
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);

@@ -82,8 +82,13 @@ impl FileSystemAPI for NativeFileSystem {
                 }
             })
             .filter_map(|e| e.ok())
-            .map(move |de| de.into_path().strip_prefix(&root).map(|p| p.to_path_buf()))
-            .filter_map(|d| d.ok());
+            .filter(|e| !e.file_name().to_string_lossy().starts_with("."))
+            .filter_map(move |e| {
+                e.into_path()
+                    .strip_prefix(&root)
+                    .ok()
+                    .map(|p| p.to_path_buf())
+            });
         Ok(Box::new(iterator))
     }
 }
@@ -105,6 +110,11 @@ impl WatchableFileSystemAPI for NativeFileSystem {
                         .paths
                         .into_iter()
                         .filter(|p| {
+                            if p.file_name()
+                                .is_some_and(|f| f.to_string_lossy().starts_with("."))
+                            {
+                                return false;
+                            }
                             let p = if let Ok(f) = fs::canonicalize(p) {
                                 f
                             } else {

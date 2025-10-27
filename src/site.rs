@@ -58,6 +58,8 @@ pub struct Site {
     obj_cache: RwLock<HashMap<PathBuf, Object>>,
     #[serde(skip)]
     static_file_cache: RwLock<HashMap<PathBuf, u64>>,
+    #[serde(skip)]
+    build_cache: RwLock<HashMap<PathBuf, u64>>,
 }
 
 impl std::fmt::Display for Site {
@@ -135,7 +137,22 @@ impl Site {
             object_definitions: objects,
             obj_cache: RwLock::new(HashMap::new()),
             static_file_cache: RwLock::new(HashMap::new()),
+            build_cache: RwLock::new(HashMap::new()),
         })
+    }
+
+    pub fn build_id(&self) -> u64 {
+        let mut hasher = SeaHasher::new();
+        let hashes = self.build_cache.read().unwrap();
+        if hashes.is_empty() {
+            return 0;
+        }
+        for (path, hash) in hashes.iter() {
+            let hash_slice = hash.to_ne_bytes();
+            println!("HASH: {:?} {:?} {:?}", path, hash, hash_slice);
+            hasher.write(&hash_slice);
+        }
+        hasher.finish()
     }
 
     pub fn schema_prefix(&self) -> String {
@@ -461,6 +478,8 @@ impl Site {
             site_url: site_url.as_ref().map(|v| v.into()).unwrap_or_default(),
         };
 
+        let mut built_hashes = HashMap::new();
+
         // Validate paths
         if !fs.exists(objects_dir)? {
             return Err(ArchivalError::new(&format!(
@@ -523,7 +542,7 @@ impl Site {
                         for object in t_objects.into_iter() {
                             #[cfg(feature = "verbose-logging")]
                             debug!("rendering {}", object.filename);
-                            if let Err(error) = Self::render_template_page(
+                            let (path, hash) = Self::render_template_page(
                                 object,
                                 object_def,
                                 &template_str,
@@ -534,14 +553,16 @@ impl Site {
                                 fs,
                                 &globals,
                                 &liquid_parser,
-                            ) {
-                                return Err(BuildError::TemplateRenderError(
+                                &self.build_cache,
+                            )
+                            .map_err(|error| {
+                                BuildError::TemplateRenderError(
                                     object.filename.to_string(),
                                     template.to_string(),
                                     error.to_string(),
                                 )
-                                .into());
-                            }
+                            })?;
+                            built_hashes.insert(path, hash);
                         }
                     }
                 }
@@ -575,7 +596,7 @@ impl Site {
                         file_path.display(),
                         page_type.extension()
                     );
-                    if let Err(error) = Self::render_page(
+                    let (path, hash) = Self::render_page(
                         &rel_path,
                         &file_path,
                         page_name,
@@ -586,16 +607,25 @@ impl Site {
                         fs,
                         &globals,
                         &liquid_parser,
-                    ) {
-                        return Err(BuildError::PageRenderError(
-                            page_name.to_string(),
-                            error.to_string(),
-                        )
-                        .into());
+                        &self.build_cache,
+                    )
+                    .map_err(|error| {
+                        BuildError::PageRenderError(page_name.to_string(), error.to_string())
+                    })?;
+                    if let Some(path) = path {
+                        built_hashes.insert(path, hash);
                     }
                 }
             }
         }
+
+        let mut current_cache = self.build_cache.write().unwrap();
+        for key in current_cache.keys() {
+            if !built_hashes.contains_key(key) {
+                fs.delete(key)?;
+            }
+        }
+        *current_cache = built_hashes;
         Ok(())
     }
 
@@ -612,7 +642,8 @@ impl Site {
         fs: &mut T,
         globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
-    ) -> Result<(), Box<dyn Error>> {
+        build_cache: &RwLock<HashMap<PathBuf, u64>>,
+    ) -> Result<(PathBuf, u64), Box<dyn Error>> {
         let page = Page::new_with_template(
             object.filename.clone(),
             object_def,
@@ -631,10 +662,21 @@ impl Site {
         let t_dir = build_dir.join(&object_def.name);
         fs.create_dir_all(&t_dir)?;
         let build_path = t_dir.join(render_name);
-        #[cfg(feature = "verbose-logging")]
-        debug!("write {}", build_path.display());
-        fs.write_str(&build_path, rendered)?;
-        Ok(())
+        let hash = hash_file(rendered.as_bytes());
+        let should_write = if let Some(prev_hash) = build_cache.read().unwrap().get(&build_path) {
+            hash != *prev_hash
+        } else {
+            true
+        };
+        if should_write {
+            #[cfg(feature = "verbose-logging")]
+            debug!("write template {}", build_path.display());
+            fs.write_str(&build_path, rendered)?;
+        } else {
+            #[cfg(feature = "verbose-logging")]
+            debug!("template no-op {}", build_path.display());
+        }
+        Ok((build_path, hash))
     }
 
     #[instrument(skip(all_objects, fs, liquid_parser))]
@@ -650,7 +692,8 @@ impl Site {
         fs: &mut T,
         globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
-    ) -> Result<(), Box<dyn Error>> {
+        build_cache: &RwLock<HashMap<PathBuf, u64>>,
+    ) -> Result<(Option<PathBuf>, u64), Box<dyn Error>> {
         if let Some(template_str) = fs.read_to_string(file_path)? {
             let page = Page::new(
                 page_name.to_string(),
@@ -670,13 +713,26 @@ impl Site {
                 fs.create_dir_all(&render_dir)?;
             }
             let render_path = render_dir.join(format!("{}.{}", page_name, page_type.extension()));
-            #[cfg(feature = "verbose-logging")]
-            debug!("write {}", render_path.display());
-            fs.write_str(&render_path, rendered)?;
+            let hash = hash_file(rendered.as_bytes());
+            let should_write =
+                if let Some(prev_hash) = build_cache.read().unwrap().get(&render_path) {
+                    hash != *prev_hash
+                } else {
+                    true
+                };
+            if should_write {
+                #[cfg(feature = "verbose-logging")]
+                debug!("write page {}", render_path.display());
+                fs.write_str(&render_path, rendered)?;
+            } else {
+                #[cfg(feature = "verbose-logging")]
+                debug!("page no-op {}", render_path.display());
+            }
+            Ok((Some(render_path), hash))
         } else {
             warn!("page not found: {}", file_path.display());
+            Ok((None, hash_file(&[])))
         }
-        Ok(())
     }
 }
 

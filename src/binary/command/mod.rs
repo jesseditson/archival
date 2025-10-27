@@ -1,5 +1,9 @@
 use clap::{ArgMatches, Command};
-use std::{error::Error, path::Path};
+use std::{
+    error::Error,
+    path::Path,
+    sync::{atomic::AtomicBool, Arc},
+};
 mod build;
 mod compat;
 mod import;
@@ -34,7 +38,12 @@ pub trait BinaryCommand {
         false
     }
     fn cli(&self, cmd: Command) -> Command;
-    fn handler(&self, build_dir: &Path, args: &ArgMatches) -> Result<ExitStatus, Box<dyn Error>>;
+    fn handler(
+        &self,
+        build_dir: &Path,
+        args: &ArgMatches,
+        quit: Arc<AtomicBool>,
+    ) -> Result<ExitStatus, Box<dyn Error>>;
 }
 
 pub const COMMANDS: [&dyn BinaryCommand; 10] = [

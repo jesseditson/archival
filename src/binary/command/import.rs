@@ -15,6 +15,7 @@ use std::{
     fs::{self, File},
     io::{self, BufReader, Read},
     path::{Path, PathBuf},
+    sync::{atomic::AtomicBool, Arc},
 };
 use thiserror::Error;
 
@@ -180,6 +181,7 @@ impl BinaryCommand for Command {
         &self,
         build_dir: &Path,
         args: &ArgMatches,
+        _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         // Fail fast if file doesn't exist
         let file_path = args.get_one::<PathBuf>("file");

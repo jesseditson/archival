@@ -19,6 +19,7 @@ use serde_json::json;
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::{atomic::AtomicBool, Arc},
 };
 use thiserror::Error;
 
@@ -87,6 +88,7 @@ impl BinaryCommand for Command {
         &self,
         build_dir: &Path,
         args: &ArgMatches,
+        _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         // Fail fast if we aren't logged in
         let config = ArchivalConfig::get();

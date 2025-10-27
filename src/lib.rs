@@ -166,14 +166,17 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         })
     }
     pub fn build(&self, options: BuildOptions) -> Result<ArchivalBuildId, Box<dyn Error>> {
-        debug!("build {} {:#?}", self.site, options);
         let build_id = self.fs_mutex.with_fs(|fs| {
             if !options.skip_static {
                 self.site.sync_static_files(fs)?;
             }
-            let build_id = self.fs_id(fs)?;
-            if self.last_build_id.load(AtomicOrdering::Relaxed) != build_id {
+            let build_id = self.site.build_id();
+            if build_id == 0 || self.last_build_id.load(AtomicOrdering::Relaxed) != build_id {
+                debug!("build {} {:#?}", self.site, options);
                 self.site.build(fs)?;
+            } else {
+                #[cfg(feature = "verbose-logging")]
+                debug!("skipping duplicate build");
             }
             Ok(build_id)
         })?;
@@ -243,8 +246,11 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             .with_fs(|fs| Ok(self.object_path_impl(obj_type, filename, fs).unwrap()))
             .unwrap()
     }
-    pub fn build_id(&self) -> Result<u64, Box<dyn Error>> {
-        self.fs_mutex.with_fs(|fs| self.fs_id(fs))
+    pub fn build_id(&self) -> u64 {
+        self.site.build_id()
+    }
+    pub fn fs_id(&self) -> Result<u64, Box<dyn Error>> {
+        self.fs_mutex.with_fs(|fs| self.fs_id_for_fs(fs))
     }
     pub fn list_build_files(
         &self,
@@ -275,7 +281,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                     .map(|p| objects_dir.join(p)),
             ))
     }
-    fn fs_id(&self, fs: &F) -> Result<u64, Box<dyn Error>> {
+    fn fs_id_for_fs(&self, fs: &F) -> Result<u64, Box<dyn Error>> {
         let mut hasher = SeaHasher::new();
         for path in self.list_build_files_for_fs(fs)? {
             if let Some(file) = fs.read(&path)? {
@@ -946,6 +952,7 @@ mod lib {
     }
 
     #[test]
+    #[traced_test]
     fn add_child() -> Result<(), Box<dyn Error>> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
@@ -986,7 +993,7 @@ mod lib {
                     ],
                     index: None,
                 }),
-                Some(BuildOptions::default()),
+                Some(BuildOptions::no_static()),
             )
             .unwrap();
         let objects = archival.get_objects()?;
@@ -1113,15 +1120,22 @@ mod lib {
     }
 
     #[test]
+    #[traced_test]
     fn build_ids() -> Result<(), Box<dyn Error>> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
-        let initial_build_id = archival.build_id()?;
+        let initial_fs_id = archival.fs_id()?;
+        debug!("INITIAL FS ID: {:?}", initial_fs_id);
+        archival.build(BuildOptions::default())?;
+        let initial_build_id = archival.build_id();
         debug!("INITIAL BUILD ID: {:?}", initial_build_id);
-        // Build ID should not change if we didn't make changes to the fs
-        assert_eq!(archival.build_id()?, initial_build_id);
+        assert_eq!(
+            archival.fs_id()?,
+            initial_fs_id,
+            "fs id changed but there was no change"
+        );
         archival.send_event(
             ArchivalEvent::EditField(EditFieldEvent {
                 object: "section".to_string(),
@@ -1131,10 +1145,24 @@ mod lib {
                 value: Some(FieldValue::String("This is the new name".to_string())),
                 source: None,
             }),
-            Some(BuildOptions::default()),
+            None,
         )?;
-        // But it should change after rebuilding
-        assert_ne!(archival.build_id()?, initial_build_id);
+        assert_ne!(
+            archival.fs_id()?,
+            initial_fs_id,
+            "fs id did not change after file changes"
+        );
+        assert_eq!(
+            archival.build_id(),
+            initial_build_id,
+            "build id changed without a dist change"
+        );
+        archival.build(BuildOptions::default())?;
+        assert_ne!(
+            archival.build_id(),
+            initial_build_id,
+            "build id did not change after build"
+        );
         Ok(())
     }
     #[test]

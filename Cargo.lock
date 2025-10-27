@@ -146,7 +146,6 @@ dependencies = [
  "thiserror 2.0.16",
  "time",
  "tiny_http",
- "tokio",
  "toml",
  "toml_datetime",
  "tracing",

@@ -1,7 +1,10 @@
 use super::BinaryCommand;
 use crate::{binary::ExitStatus, check_compatibility};
 use clap::{arg, value_parser, ArgMatches};
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 pub struct Command {}
 impl BinaryCommand for Command {
@@ -23,6 +26,7 @@ impl BinaryCommand for Command {
         &self,
         _build_dir: &Path,
         args: &ArgMatches,
+        _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let (compat, message) = check_compatibility(args.get_one::<String>("version").unwrap());
         println!("{}", message);

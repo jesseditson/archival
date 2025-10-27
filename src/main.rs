@@ -37,7 +37,7 @@ mod binary {
         ts.init();
         let span = span!(Level::TRACE, "binary");
         let span_guard = span.enter();
-        let e = binary::binary(std::env::args());
+        let e = binary::binary(std::env::args(), None);
         #[cfg(feature = "gen-traces")]
         drop(guard);
         drop(span_guard);

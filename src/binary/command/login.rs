@@ -9,7 +9,13 @@ use indicatif::{ProgressBar, ProgressStyle};
 use nanoid::nanoid;
 use reqwest::StatusCode;
 use rsa::{pkcs8::DecodePublicKey, sha2::Sha256, Oaep, RsaPublicKey};
-use std::{fs, path::Path, thread, time::Duration};
+use std::{
+    fs,
+    path::Path,
+    sync::{atomic::AtomicBool, Arc},
+    thread,
+    time::Duration,
+};
 
 pub struct Command {}
 impl BinaryCommand for Command {
@@ -26,6 +32,7 @@ impl BinaryCommand for Command {
         &self,
         _build_dir: &Path,
         _args: &ArgMatches,
+        _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let config_file_path = ArchivalConfig::location();
         let secret_client_id = nanoid!(21);
