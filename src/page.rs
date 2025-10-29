@@ -392,7 +392,6 @@ here is a liquid variable: {{site_url}}
                 "tour_dates".to_string(),
                 ObjectDefinition {
                     name: "tour_dates".to_string(),
-                    field_order: vec!["date".to_string(), "ticket_link".to_string()],
                     fields: tour_dates_fields,
                     template: None,
                     children: OrderMap::new(),
@@ -402,7 +401,6 @@ here is a liquid variable: {{site_url}}
                 "numbers".to_string(),
                 ObjectDefinition {
                     name: "numbers".to_string(),
-                    field_order: vec![],
                     fields: numbers_fields,
                     template: None,
                     children: OrderMap::new(),
@@ -411,11 +409,6 @@ here is a liquid variable: {{site_url}}
         ]);
         ObjectDefinition {
             name: "artist".to_string(),
-            field_order: vec![
-                "name".to_string(),
-                "tour_dates".to_string(),
-                "numbers".to_string(),
-            ],
             fields: artist_def_fields,
             template: Some("artist".to_string()),
             children: artist_children,
@@ -429,7 +422,6 @@ here is a liquid variable: {{site_url}}
                 "c".to_string(),
                 ObjectDefinition {
                     name: "c".to_string(),
-                    field_order: vec!["name".to_string(), "content".to_string()],
                     fields: OrderMap::from([
                         ("name".to_string(), FieldType::String),
                         ("content".to_string(), FieldType::Markdown),
@@ -439,7 +431,6 @@ here is a liquid variable: {{site_url}}
                         "links".to_string(),
                         ObjectDefinition {
                             name: "links".to_string(),
-                            field_order: vec!["url".to_string()],
                             fields: OrderMap::from([("url".to_string(), FieldType::String)]),
                             template: None,
                             children: OrderMap::new(),

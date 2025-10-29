@@ -45,7 +45,6 @@ pub struct ObjectDefinition {
         type_def(type_of = "typedefs::ObjectDefinitionFieldsDef")
     )]
     pub fields: OrderMap<String, FieldType, RandomState>,
-    pub field_order: Vec<String>,
     pub template: Option<String>,
     #[cfg_attr(
         feature = "typescript",
@@ -66,7 +65,6 @@ impl ObjectDefinition {
         let mut obj_def = ObjectDefinition {
             name: name.to_string(),
             fields: OrderMap::new(),
-            field_order: vec![],
             template: None,
             children: OrderMap::new(),
         };
@@ -78,12 +76,11 @@ impl ObjectDefinition {
                     field: reserved_field_from_str(key),
                 }));
             }
-            let is_ordered_field = if let Some(child_table) = m_value.as_table() {
+            if let Some(child_table) = m_value.as_table() {
                 obj_def.children.insert(
                     key.clone(),
                     ObjectDefinition::new(key, child_table, editor_types)?,
                 );
-                true
             } else if let Some(value) = m_value.as_array() {
                 let string_vals = value
                     .iter()
@@ -96,22 +93,14 @@ impl ObjectDefinition {
                 obj_def
                     .fields
                     .insert(key.clone(), FieldType::Enum(string_vals));
-                true
             } else if let Some(value) = m_value.as_str() {
                 if key == reserved_fields::TEMPLATE {
                     obj_def.template = Some(value.to_string());
-                    false
                 } else {
                     obj_def
                         .fields
                         .insert(key.clone(), FieldType::from_str(value, editor_types)?);
-                    true
                 }
-            } else {
-                false
-            };
-            if is_ordered_field {
-                obj_def.field_order.push(key.to_string());
             }
         }
         Ok(obj_def)
@@ -240,14 +229,16 @@ pub mod tests {
         assert!(defs.contains_key("artists"));
         assert!(defs.contains_key("example"));
         let artist = defs.get("artists").unwrap();
-        assert_eq!(artist.field_order.len(), 6);
-        assert_eq!(artist.field_order[0], "name".to_string());
-        assert_eq!(artist.field_order[1], "meta".to_string());
-        assert_eq!(artist.field_order[1], "genre".to_string());
-        assert_eq!(artist.field_order[3], "tour_dates".to_string());
-        assert_eq!(artist.field_order[4], "videos".to_string());
-        assert_eq!(artist.field_order[5], "numbers".to_string());
-        assert!(!artist.field_order.contains(&"template".to_string()));
+        let fields = artist.fields.keys();
+        assert_eq!(fields.len(), 3);
+        assert_eq!(fields[0], "name".to_string());
+        assert_eq!(fields[1], "meta".to_string());
+        assert_eq!(fields[2], "genre".to_string());
+        let children = artist.children.keys();
+        assert_eq!(children.len(), 3);
+        assert_eq!(children[0], "tour_dates".to_string());
+        assert_eq!(children[1], "videos".to_string());
+        assert_eq!(children[2], "numbers".to_string());
         assert!(artist.fields.contains_key("name"));
         assert_eq!(artist.fields.get("name").unwrap(), &FieldType::String);
         assert!(
