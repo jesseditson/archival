@@ -69,6 +69,11 @@ use crate::object::ValuePath;
 
 pub type ArchivalBuildId = u64;
 
+#[cfg(feature = "typescript")]
+pub mod typedefs {
+    pub use crate::object_definition::typedefs::*;
+}
+
 #[derive(Debug, Default)]
 pub struct BuildOptions {
     pub skip_static: bool,

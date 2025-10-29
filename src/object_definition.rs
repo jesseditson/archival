@@ -15,21 +15,20 @@ use toml::Table;
 use tracing::instrument;
 
 pub type ObjectDefinitions = OrderMap<String, ObjectDefinition>;
-
 #[cfg(feature = "typescript")]
-mod typedefs {
+pub mod typedefs {
     use typescript_type_def::{
         type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
         TypeDef,
     };
-    pub struct ObjectDefinitionChildrenDef;
-    impl TypeDef for ObjectDefinitionChildrenDef {
+    pub struct ObjectDefinitionsDef;
+    impl TypeDef for ObjectDefinitionsDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
             r#ref: TypeExpr::ident(Ident("Record<string, ObjectDefinition>")),
         });
     }
-    pub struct ObjectDefinitionFieldsDef;
-    impl TypeDef for ObjectDefinitionFieldsDef {
+    pub struct FieldsMapDef;
+    impl TypeDef for FieldsMapDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
             r#ref: TypeExpr::ident(Ident("Record<string, FieldType>")),
         });
@@ -42,15 +41,13 @@ pub type FieldsMap = OrderMap<String, FieldType>;
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ObjectDefinition {
     pub name: String,
-    #[cfg_attr(
-        feature = "typescript",
-        type_def(type_of = "typedefs::ObjectDefinitionFieldsDef")
-    )]
+    #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::FieldsMapDef"))]
     pub fields: FieldsMap,
     pub template: Option<String>,
+
     #[cfg_attr(
         feature = "typescript",
-        type_def(type_of = "typedefs::ObjectDefinitionChildrenDef")
+        type_def(type_of = "typedefs::ObjectDefinitionsDef")
     )]
     pub children: ObjectDefinitions,
 }
@@ -66,9 +63,9 @@ impl ObjectDefinition {
         }
         let mut obj_def = ObjectDefinition {
             name: name.to_string(),
-            fields: OrderMap::new(),
+            fields: FieldsMap::new(),
             template: None,
-            children: OrderMap::new(),
+            children: ObjectDefinitions::new(),
         };
         for (key, m_value) in definition {
             if is_reserved_field(key)
@@ -111,7 +108,7 @@ impl ObjectDefinition {
         table: &Table,
         editor_types: &EditorTypes,
     ) -> Result<ObjectDefinitions, Box<dyn Error>> {
-        let mut objects: ObjectDefinitions = OrderMap::new();
+        let mut objects = ObjectDefinitions::new();
         for (name, m_def) in table.into_iter() {
             if let Some(def) = m_def.as_table() {
                 objects.insert(
