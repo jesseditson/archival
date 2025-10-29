@@ -1,6 +1,7 @@
 use liquid_core::model;
+use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt::Display, hash::Hash};
+use std::{fmt::Display, hash::Hash};
 
 use crate::util::integer_decode;
 
@@ -29,7 +30,10 @@ mod typedefs {
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
-pub struct Meta(pub BTreeMap<String, MetaValue>);
+pub struct Meta(
+    #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::MetaTypeDef"))]
+    pub  OrderMap<String, MetaValue>,
+);
 
 impl Display for Meta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -210,7 +214,7 @@ impl From<&toml::Value> for MetaValue {
 
 impl From<&toml::map::Map<String, toml::Value>> for Meta {
     fn from(value: &toml::map::Map<String, toml::Value>) -> Self {
-        let mut meta = BTreeMap::new();
+        let mut meta = OrderMap::new();
         for (k, v) in value {
             meta.insert(k.to_string(), MetaValue::from(v));
         }

@@ -5,14 +5,15 @@ use crate::{
 use liquid::{model::ScalarCow, ValueView};
 use liquid_core::Value;
 use once_cell::sync::Lazy;
+use ordermap::OrderMap;
 use pluralizer::pluralize;
 use regex::Regex;
 use std::{
     borrow::Cow,
-    collections::BTreeMap,
     env,
     error::Error,
     fmt,
+    hash::RandomState,
     path::{Path, PathBuf},
 };
 
@@ -203,8 +204,8 @@ impl<'a> Page<'a> {
     pub fn render(
         &self,
         parser: &liquid::Parser,
-        objects_map: &BTreeMap<String, ObjectEntry>,
-        definitions: &BTreeMap<String, ObjectDefinition>,
+        objects_map: &OrderMap<String, ObjectEntry, RandomState>,
+        definitions: &OrderMap<String, ObjectDefinition, RandomState>,
     ) -> Result<String, Box<dyn Error>> {
         #[cfg(feature = "verbose-logging")]
         tracing::debug!("rendering {}", self.name);
@@ -303,7 +304,7 @@ here is a liquid variable: {{site_url}}
         .to_string()
     }
 
-    fn get_objects_map() -> BTreeMap<String, ObjectEntry> {
+    fn get_objects_map() -> OrderMap<String, ObjectEntry, RandomState> {
         let tour_dates_objects = vec![ObjectValues::from([
             (
                 "date".to_string(),
@@ -325,11 +326,11 @@ here is a liquid variable: {{site_url}}
             ),
             (
                 "meta".to_string(),
-                FieldValue::Meta(Meta(BTreeMap::from([
+                FieldValue::Meta(Meta(OrderMap::from([
                     ("number".to_string(), MetaValue::Number(42.26)),
                     (
                         "deep".to_string(),
-                        MetaValue::Map(Meta(BTreeMap::from([(
+                        MetaValue::Map(Meta(OrderMap::from([(
                             "deep".to_string(),
                             MetaValue::Array(vec![MetaValue::String("HELLO!".to_string())]),
                         )]))),
@@ -370,7 +371,7 @@ here is a liquid variable: {{site_url}}
             values: c_values,
         };
 
-        BTreeMap::from([
+        OrderMap::from([
             (
                 "artist".to_string(),
                 ObjectEntry::from_vec(vec![artist.clone(), artist]),
@@ -380,13 +381,13 @@ here is a liquid variable: {{site_url}}
     }
 
     fn artist_definition() -> ObjectDefinition {
-        let artist_def_fields = BTreeMap::from([("name".to_string(), FieldType::String)]);
-        let tour_dates_fields = BTreeMap::from([
+        let artist_def_fields = OrderMap::from([("name".to_string(), FieldType::String)]);
+        let tour_dates_fields = OrderMap::from([
             ("date".to_string(), FieldType::Date),
             ("ticket_link".to_string(), FieldType::String),
         ]);
-        let numbers_fields = BTreeMap::from([("number".to_string(), FieldType::Number)]);
-        let artist_children = BTreeMap::from([
+        let numbers_fields = OrderMap::from([("number".to_string(), FieldType::Number)]);
+        let artist_children = OrderMap::from([
             (
                 "tour_dates".to_string(),
                 ObjectDefinition {
@@ -394,7 +395,7 @@ here is a liquid variable: {{site_url}}
                     field_order: vec!["date".to_string(), "ticket_link".to_string()],
                     fields: tour_dates_fields,
                     template: None,
-                    children: BTreeMap::new(),
+                    children: OrderMap::new(),
                 },
             ),
             (
@@ -404,7 +405,7 @@ here is a liquid variable: {{site_url}}
                     field_order: vec![],
                     fields: numbers_fields,
                     template: None,
-                    children: BTreeMap::new(),
+                    children: OrderMap::new(),
                 },
             ),
         ]);
@@ -421,27 +422,27 @@ here is a liquid variable: {{site_url}}
         }
     }
 
-    fn get_definition_map() -> BTreeMap<String, ObjectDefinition> {
-        BTreeMap::from([
+    fn get_definition_map() -> OrderMap<String, ObjectDefinition> {
+        OrderMap::from([
             ("artist".to_string(), artist_definition()),
             (
                 "c".to_string(),
                 ObjectDefinition {
                     name: "c".to_string(),
                     field_order: vec!["name".to_string(), "content".to_string()],
-                    fields: BTreeMap::from([
+                    fields: OrderMap::from([
                         ("name".to_string(), FieldType::String),
                         ("content".to_string(), FieldType::Markdown),
                     ]),
                     template: None,
-                    children: BTreeMap::from([(
+                    children: OrderMap::from([(
                         "links".to_string(),
                         ObjectDefinition {
                             name: "links".to_string(),
                             field_order: vec!["url".to_string()],
-                            fields: BTreeMap::from([("url".to_string(), FieldType::String)]),
+                            fields: OrderMap::from([("url".to_string(), FieldType::String)]),
                             template: None,
-                            children: BTreeMap::new(),
+                            children: OrderMap::new(),
                         },
                     )]),
                 },

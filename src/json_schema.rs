@@ -1,5 +1,6 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
+use ordermap::OrderMap;
 use serde_json::json;
 use time::Date;
 
@@ -57,7 +58,7 @@ pub fn generate_root_json_schema(
     id: &str,
     title: Option<&str>,
     description: &str,
-    objects: &BTreeMap<String, ObjectDefinition>,
+    objects: &OrderMap<String, ObjectDefinition>,
     root_objects: &HashSet<String>,
     options: ObjectSchemaOptions,
 ) -> ObjectSchema {
@@ -156,11 +157,9 @@ pub fn generate_json_schema(
 #[cfg(test)]
 pub mod tests {
 
+    use ordermap::OrderMap;
     use serde_json::json;
-    use std::{
-        collections::{BTreeMap, HashSet},
-        error::Error,
-    };
+    use std::{collections::HashSet, error::Error};
     use toml::Table;
 
     use crate::{
@@ -201,7 +200,7 @@ pub mod tests {
     #[test]
     fn json_schema_generation() -> Result<(), Box<dyn Error>> {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table, &BTreeMap::new())?;
+        let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
 
         let schema = generate_json_schema(
             "artists",
@@ -235,7 +234,7 @@ pub mod tests {
     #[test]
     fn omitted_fields() -> Result<(), Box<dyn Error>> {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table, &BTreeMap::new())?;
+        let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
 
         let schema = generate_json_schema(
             "example",
@@ -272,7 +271,7 @@ pub mod tests {
     #[test]
     fn root_omitted_fields() -> Result<(), Box<dyn Error>> {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table, &BTreeMap::new())?;
+        let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
 
         let options = ObjectSchemaOptions::default()
             .with_omit_paths(Some(vec![ValuePath::from_string("omitted")]));

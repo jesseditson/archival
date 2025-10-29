@@ -1,10 +1,10 @@
+use ordermap::OrderMap;
 use regex::Regex;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::{
-    collections::BTreeMap,
     error::Error,
     fmt::{self, Display},
-    hash::Hash,
+    hash::{Hash, RandomState},
     ops::Deref,
     path::{Path, PathBuf},
 };
@@ -175,7 +175,21 @@ impl From<&ManifestEditorType> for toml::Value {
     }
 }
 
-pub type EditorTypes = BTreeMap<String, ManifestEditorType>;
+#[cfg(feature = "typescript")]
+mod typedefs {
+    use typescript_type_def::{
+        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
+        TypeDef,
+    };
+    pub struct EditorTypesDef;
+    impl TypeDef for EditorTypesDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::ident(Ident("Record<string, ManifestEditorType>")),
+        });
+    }
+}
+
+pub type EditorTypes = OrderMap<String, ManifestEditorType, RandomState>;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
@@ -195,6 +209,7 @@ pub struct Manifest {
     pub static_dir: PathBuf,
     pub layout_dir: PathBuf,
     pub uploads_url: Option<String>,
+    #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::EditorTypesDef"))]
     pub editor_types: EditorTypes,
 }
 
@@ -322,7 +337,7 @@ impl Manifest {
             build_dir: root.join(BUILD_DIR_NAME),
             static_dir: root.join(STATIC_DIR_NAME),
             layout_dir: root.join(LAYOUT_DIR_NAME),
-            editor_types: BTreeMap::new(),
+            editor_types: OrderMap::new(),
         }
     }
     fn is_default(&self, field: &ManifestField) -> bool {
@@ -483,7 +498,7 @@ impl Manifest {
             toml::Value::Table(t) => t,
             _ => return Err(InvalidManifestError::FailedParsing),
         };
-        let mut editor_types = BTreeMap::new();
+        let mut editor_types = OrderMap::new();
         for (type_name, info) in types {
             let mut editor_type = ManifestEditorType::default();
             let info_map = match info {

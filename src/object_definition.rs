@@ -6,14 +6,15 @@ use crate::{
     reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
     FieldValue,
 };
+use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "json-schema")]
 use serde_json::json;
-use std::{collections::BTreeMap, error::Error, fmt::Debug};
+use std::{error::Error, fmt::Debug, hash::RandomState};
 use toml::Table;
 use tracing::instrument;
 
-pub type ObjectDefinitions = BTreeMap<String, ObjectDefinition>;
+pub type ObjectDefinitions = OrderMap<String, ObjectDefinition, RandomState>;
 
 #[cfg(feature = "typescript")]
 mod typedefs {
@@ -27,20 +28,30 @@ mod typedefs {
             r#ref: TypeExpr::ident(Ident("Record<string, ObjectDefinition>")),
         });
     }
+    pub struct ObjectDefinitionFieldsDef;
+    impl TypeDef for ObjectDefinitionFieldsDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::ident(Ident("Record<string, FieldType>")),
+        });
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ObjectDefinition {
     pub name: String,
-    pub fields: BTreeMap<String, FieldType>,
+    #[cfg_attr(
+        feature = "typescript",
+        type_def(type_of = "typedefs::ObjectDefinitionFieldsDef")
+    )]
+    pub fields: OrderMap<String, FieldType, RandomState>,
     pub field_order: Vec<String>,
     pub template: Option<String>,
     #[cfg_attr(
         feature = "typescript",
         type_def(type_of = "typedefs::ObjectDefinitionChildrenDef")
     )]
-    pub children: BTreeMap<String, ObjectDefinition>,
+    pub children: OrderMap<String, ObjectDefinition, RandomState>,
 }
 
 impl ObjectDefinition {
@@ -54,10 +65,10 @@ impl ObjectDefinition {
         }
         let mut obj_def = ObjectDefinition {
             name: name.to_string(),
-            fields: BTreeMap::new(),
+            fields: OrderMap::new(),
             field_order: vec![],
             template: None,
-            children: BTreeMap::new(),
+            children: OrderMap::new(),
         };
         for (key, m_value) in definition {
             if is_reserved_field(key)
@@ -109,7 +120,7 @@ impl ObjectDefinition {
         table: &Table,
         editor_types: &EditorTypes,
     ) -> Result<ObjectDefinitions, Box<dyn Error>> {
-        let mut objects: ObjectDefinitions = BTreeMap::new();
+        let mut objects: ObjectDefinitions = OrderMap::new();
         for (name, m_def) in table.into_iter() {
             if let Some(def) = m_def.as_table() {
                 objects.insert(
@@ -196,8 +207,6 @@ impl ObjectDefinition {
 #[cfg(test)]
 pub mod tests {
 
-    use std::collections::BTreeMap;
-
     use super::*;
 
     pub fn artist_and_example_definition_str() -> &'static str {
@@ -223,7 +232,7 @@ pub mod tests {
     #[test]
     fn parsing() -> Result<(), Box<dyn Error>> {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table, &BTreeMap::new())?;
+        let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
 
         println!("{:?}", defs);
 
@@ -234,7 +243,7 @@ pub mod tests {
         assert_eq!(artist.field_order.len(), 6);
         assert_eq!(artist.field_order[0], "name".to_string());
         assert_eq!(artist.field_order[1], "meta".to_string());
-        assert_eq!(artist.field_order[2], "genre".to_string());
+        assert_eq!(artist.field_order[1], "genre".to_string());
         assert_eq!(artist.field_order[3], "tour_dates".to_string());
         assert_eq!(artist.field_order[4], "videos".to_string());
         assert_eq!(artist.field_order[5], "numbers".to_string());

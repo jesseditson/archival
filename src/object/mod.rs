@@ -11,8 +11,9 @@ use liquid::{
     model::{KString, Value},
     ObjectView, ValueView,
 };
+use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, error::Error, fmt::Debug, hash::Hash, path::Path};
+use std::{error::Error, fmt::Debug, hash::Hash, path::Path};
 use to_liquid::object_to_liquid;
 use toml::Table;
 use tracing::{instrument, warn};
@@ -190,7 +191,7 @@ impl Object {
     ) -> Result<Self, Box<dyn Error>> {
         let path = Path::new(&definition.name).join(filename);
         let values =
-            Object::values_from_table(&path, &Table::new(), definition, &BTreeMap::new(), true)?;
+            Object::values_from_table(&path, &Table::new(), definition, &OrderMap::new(), true)?;
         let mut object = Self {
             filename: filename.to_owned(),
             object_name: definition.name.clone(),
@@ -269,14 +270,14 @@ mod tests {
     fn object_parsing() -> Result<(), Box<dyn Error>> {
         let defs = ObjectDefinition::from_table(
             &toml::from_str(artist_and_example_definition_str())?,
-            &BTreeMap::new(),
+            &OrderMap::new(),
         )?;
         let table: Table = toml::from_str(artist_object_str())?;
         let obj = Object::from_table(
             defs.get("artists").unwrap(),
             Path::new("tormenta-rey"),
             &table,
-            &BTreeMap::new(),
+            &OrderMap::new(),
             false,
         )?;
         assert_eq!(obj.order, Some(1.));

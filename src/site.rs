@@ -12,13 +12,14 @@ use crate::{
     tags::layout,
     ArchivalError, FieldConfig, FileSystemAPI,
 };
+use ordermap::OrderMap;
 use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     error::Error,
-    hash::Hasher,
+    hash::{Hasher, RandomState},
     path::{Path, PathBuf},
     sync::RwLock,
 };
@@ -245,7 +246,7 @@ impl Site {
     pub fn get_objects<T: FileSystemAPI>(
         &self,
         fs: &T,
-    ) -> Result<BTreeMap<String, ObjectEntry>, Box<dyn Error>> {
+    ) -> Result<OrderMap<String, ObjectEntry>, Box<dyn Error>> {
         self.get_objects_sorted(
             fs,
             Some(|a: &_, b: &_| get_order(a).partial_cmp(&get_order(b)).unwrap()),
@@ -312,8 +313,8 @@ impl Site {
         &self,
         fs: &T,
         sort: Option<impl Fn(&Object, &Object) -> Ordering>,
-    ) -> Result<BTreeMap<String, ObjectEntry>, Box<dyn Error>> {
-        let mut all_objects: BTreeMap<String, ObjectEntry> = BTreeMap::new();
+    ) -> Result<OrderMap<String, ObjectEntry>, Box<dyn Error>> {
+        let mut all_objects: OrderMap<String, ObjectEntry, RandomState> = OrderMap::new();
         let objects_dir = &self.manifest.objects_dir;
         for (object_name, object_def) in self.object_definitions.iter() {
             let object_files_path = objects_dir.join(object_name);
@@ -634,8 +635,8 @@ impl Site {
         template_str: &String,
         template_path: &PathBuf,
         build_dir: &PathBuf,
-        object_definitions: &BTreeMap<String, ObjectDefinition>,
-        all_objects: &BTreeMap<String, ObjectEntry>,
+        object_definitions: &OrderMap<String, ObjectDefinition>,
+        all_objects: &OrderMap<String, ObjectEntry>,
         fs: &mut T,
         globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
@@ -684,8 +685,8 @@ impl Site {
         page_name: &str,
         page_type: TemplateType,
         build_dir: &PathBuf,
-        object_definitions: &BTreeMap<String, ObjectDefinition>,
-        all_objects: &BTreeMap<String, ObjectEntry>,
+        object_definitions: &OrderMap<String, ObjectDefinition, RandomState>,
+        all_objects: &OrderMap<String, ObjectEntry, RandomState>,
         fs: &mut T,
         globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
