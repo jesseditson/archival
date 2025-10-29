@@ -301,7 +301,9 @@ mod tests {
             assert!(date.contains_key("ticket_link"));
             assert_eq!(
                 date.get("date").unwrap().liquid_date(),
-                FieldValue::Date(DateTime::from_ymd(2022, 12, 22)).liquid_date()
+                DateTime::from("12/22/2022 00:00:00")
+                    .unwrap()
+                    .as_liquid_datetime()
             );
             assert_eq!(
                 date.get("ticket_link").unwrap(),

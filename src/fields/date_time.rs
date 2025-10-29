@@ -107,11 +107,18 @@ impl DateTime {
             date_str = format!("{} 00:00:00", date_str);
         }
         // Append local offset if available
-        if let Ok(offset) = UtcOffset::current_local_offset() {
-            let fmt = format_description::parse("[offset_hour sign:mandatory][offset_minute]")?;
-            date_str = format!("{} {}", date_str, offset.format(&fmt)?);
+        if let Some(offset) = Self::maybe_local_offset_str() {
+            date_str = format!("{} {}", date_str, offset);
         }
         Ok(date_str)
+    }
+
+    pub fn maybe_local_offset_str() -> Option<String> {
+        UtcOffset::current_local_offset().ok().and_then(|offset| {
+            let fmt =
+                format_description::parse("[offset_hour sign:mandatory][offset_minute]").ok()?;
+            offset.format(&fmt).ok()
+        })
     }
 
     pub fn bounce(&mut self) {
@@ -194,7 +201,14 @@ fn parse_date_time(s: &str) -> Option<DateTimeImpl> {
 
         let offset_re = Regex::new(r"[+-][01][0-9]{3}$").unwrap();
 
-        let offset = if offset_re.is_match(&s) { "" } else { " +0000" };
+        let offset = if offset_re.is_match(&s) {
+            ""
+        } else {
+            &format!(
+                " {}",
+                DateTime::maybe_local_offset_str().unwrap_or_else(|| "+0000".to_string())
+            )
+        };
         let s = s + offset;
 
         USER_FORMATS
@@ -223,13 +237,20 @@ const DATE_TIME_FORMAT_SUBSEC: &[time::format_description::FormatItem<'static>] 
     "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond] [offset_hour sign:mandatory][offset_minute]"
 );
 
+#[cfg(test)]
 mod test {
+    use time::UtcOffset;
+
     use super::DateTime;
     impl DateTime {
-        #[cfg(test)]
         fn unix_timestamp(&self) -> i64 {
             self.as_liquid_datetime().unix_timestamp()
         }
+    }
+    fn remove_current_offset(d: i64) -> i64 {
+        UtcOffset::current_local_offset()
+            .map(|offset| d - (offset.whole_seconds() as i64))
+            .unwrap_or(d)
     }
 
     #[test]
@@ -276,7 +297,10 @@ mod test {
 
         let input = "2016-02-16 10:00:00"; // default format no offset
         let actual = DateTime::from(input);
-        assert_eq!(actual.unwrap().unix_timestamp(), 1455616800);
+        assert_eq!(
+            actual.unwrap().unix_timestamp(),
+            remove_current_offset(1455616800)
+        );
     }
 
     #[test]
@@ -291,7 +315,10 @@ mod test {
 
         let input = "16 February 2016 10:00:00"; // day_month format no offset
         let actual = DateTime::from(input);
-        assert_eq!(actual.unwrap().unix_timestamp(), 1455616800);
+        assert_eq!(
+            actual.unwrap().unix_timestamp(),
+            remove_current_offset(1455616800)
+        );
     }
 
     #[test]
@@ -306,7 +333,10 @@ mod test {
 
         let input = "16 Feb 2016 10:00:00"; // day_mon format no offset
         let actual = DateTime::from(input);
-        assert_eq!(actual.unwrap().unix_timestamp(), 1455616800);
+        assert_eq!(
+            actual.unwrap().unix_timestamp(),
+            remove_current_offset(1455616800)
+        );
     }
 
     #[test]
@@ -321,7 +351,10 @@ mod test {
 
         let input = "02/16/2016 10:00:00"; // mdy format no offset
         let actual = DateTime::from(input);
-        assert_eq!(actual.unwrap().unix_timestamp(), 1455616800);
+        assert_eq!(
+            actual.unwrap().unix_timestamp(),
+            remove_current_offset(1455616800)
+        );
     }
     #[test]
     fn parse_date_time_short_mdy_format() {
@@ -335,7 +368,10 @@ mod test {
 
         let input = "2/16/16 10:00:00"; // mdy format no offset
         let actual = DateTime::from(input);
-        assert_eq!(actual.unwrap().unix_timestamp(), 1455616800);
+        assert_eq!(
+            actual.unwrap().unix_timestamp(),
+            remove_current_offset(1455616800)
+        );
     }
 
     #[test]
@@ -350,6 +386,9 @@ mod test {
 
         let input = "Tue Feb 16 10:00:00 2016"; // dow_mon format no offset
         let actual = DateTime::from(input);
-        assert_eq!(actual.unwrap().unix_timestamp(), 1455616800);
+        assert_eq!(
+            actual.unwrap().unix_timestamp(),
+            remove_current_offset(1455616800)
+        );
     }
 }
