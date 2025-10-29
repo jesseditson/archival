@@ -10,11 +10,11 @@ use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "json-schema")]
 use serde_json::json;
-use std::{error::Error, fmt::Debug, hash::RandomState};
+use std::{error::Error, fmt::Debug};
 use toml::Table;
 use tracing::instrument;
 
-pub type ObjectDefinitions = OrderMap<String, ObjectDefinition, RandomState>;
+pub type ObjectDefinitions = OrderMap<String, ObjectDefinition>;
 
 #[cfg(feature = "typescript")]
 mod typedefs {
@@ -36,6 +36,8 @@ mod typedefs {
     }
 }
 
+pub type FieldsMap = OrderMap<String, FieldType>;
+
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct ObjectDefinition {
@@ -44,13 +46,13 @@ pub struct ObjectDefinition {
         feature = "typescript",
         type_def(type_of = "typedefs::ObjectDefinitionFieldsDef")
     )]
-    pub fields: OrderMap<String, FieldType, RandomState>,
+    pub fields: FieldsMap,
     pub template: Option<String>,
     #[cfg_attr(
         feature = "typescript",
         type_def(type_of = "typedefs::ObjectDefinitionChildrenDef")
     )]
-    pub children: OrderMap<String, ObjectDefinition, RandomState>,
+    pub children: ObjectDefinitions,
 }
 
 impl ObjectDefinition {

@@ -49,7 +49,6 @@ mod json_schema;
 mod server;
 use file_system_mutex::FileSystemMutex;
 use object::{Object, ObjectEntry};
-use ordermap::OrderMap;
 use semver::{Version, VersionReq};
 
 // Re-exports
@@ -62,7 +61,8 @@ pub use file_system::FileSystemAPI;
 pub use file_system_memory::MemoryFileSystem;
 #[cfg(feature = "json-schema")]
 pub use json_schema::{ObjectSchema, ObjectSchemaOptions};
-pub use object_definition::ObjectDefinition;
+pub use object::ObjectMap;
+pub use object_definition::{ObjectDefinition, ObjectDefinitions};
 
 use crate::fields::FieldType;
 use crate::object::ValuePath;
@@ -552,7 +552,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         self.fs_mutex.with_fs(|fs| self.site.manifest_content(fs))
     }
 
-    pub fn get_objects(&self) -> Result<OrderMap<String, ObjectEntry>, Box<dyn Error>> {
+    pub fn get_objects(&self) -> Result<ObjectMap, Box<dyn Error>> {
         self.fs_mutex.with_fs(|fs| self.site.get_objects(fs))
     }
 
@@ -564,7 +564,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn get_objects_sorted(
         &self,
         sort: impl Fn(&Object, &Object) -> Ordering,
-    ) -> Result<OrderMap<String, ObjectEntry>, Box<dyn Error>> {
+    ) -> Result<ObjectMap, Box<dyn Error>> {
         self.fs_mutex
             .with_fs(|fs| self.site.get_objects_sorted(fs, Some(sort)))
     }

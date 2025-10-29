@@ -4,7 +4,7 @@ use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::{
     error::Error,
     fmt::{self, Display},
-    hash::{Hash, RandomState},
+    hash::Hash,
     ops::Deref,
     path::{Path, PathBuf},
 };
@@ -189,7 +189,7 @@ mod typedefs {
     }
 }
 
-pub type EditorTypes = OrderMap<String, ManifestEditorType, RandomState>;
+pub type EditorTypes = OrderMap<String, ManifestEditorType>;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]

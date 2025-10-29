@@ -21,6 +21,8 @@ mod object_entry;
 pub(crate) mod to_liquid;
 pub use object_entry::ObjectEntry;
 
+pub type ObjectMap = OrderMap<String, ObjectEntry>;
+
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Object {

@@ -10,16 +10,15 @@ use crate::{
     page::{Page, RenderGlobals, TemplateType},
     read_toml::read_toml,
     tags::layout,
-    ArchivalError, FieldConfig, FileSystemAPI,
+    ArchivalError, FieldConfig, FileSystemAPI, ObjectMap,
 };
-use ordermap::OrderMap;
 use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
     error::Error,
-    hash::{Hasher, RandomState},
+    hash::Hasher,
     path::{Path, PathBuf},
     sync::RwLock,
 };
@@ -243,10 +242,7 @@ impl Site {
     }
 
     #[instrument(skip(fs))]
-    pub fn get_objects<T: FileSystemAPI>(
-        &self,
-        fs: &T,
-    ) -> Result<OrderMap<String, ObjectEntry>, Box<dyn Error>> {
+    pub fn get_objects<T: FileSystemAPI>(&self, fs: &T) -> Result<ObjectMap, Box<dyn Error>> {
         self.get_objects_sorted(
             fs,
             Some(|a: &_, b: &_| get_order(a).partial_cmp(&get_order(b)).unwrap()),
@@ -313,8 +309,8 @@ impl Site {
         &self,
         fs: &T,
         sort: Option<impl Fn(&Object, &Object) -> Ordering>,
-    ) -> Result<OrderMap<String, ObjectEntry>, Box<dyn Error>> {
-        let mut all_objects: OrderMap<String, ObjectEntry, RandomState> = OrderMap::new();
+    ) -> Result<ObjectMap, Box<dyn Error>> {
+        let mut all_objects: ObjectMap = ObjectMap::new();
         let objects_dir = &self.manifest.objects_dir;
         for (object_name, object_def) in self.object_definitions.iter() {
             let object_files_path = objects_dir.join(object_name);
@@ -635,8 +631,8 @@ impl Site {
         template_str: &String,
         template_path: &PathBuf,
         build_dir: &PathBuf,
-        object_definitions: &OrderMap<String, ObjectDefinition>,
-        all_objects: &OrderMap<String, ObjectEntry>,
+        object_definitions: &ObjectDefinitions,
+        all_objects: &ObjectMap,
         fs: &mut T,
         globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
@@ -685,8 +681,8 @@ impl Site {
         page_name: &str,
         page_type: TemplateType,
         build_dir: &PathBuf,
-        object_definitions: &OrderMap<String, ObjectDefinition, RandomState>,
-        all_objects: &OrderMap<String, ObjectEntry, RandomState>,
+        object_definitions: &ObjectDefinitions,
+        all_objects: &ObjectMap,
         fs: &mut T,
         globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,

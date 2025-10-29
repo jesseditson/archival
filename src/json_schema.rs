@@ -1,10 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use ordermap::OrderMap;
 use serde_json::json;
 use time::Date;
 
-use crate::{fields::FieldType, object::ValuePath, ObjectDefinition};
+use crate::{fields::FieldType, object::ValuePath, ObjectDefinition, ObjectDefinitions};
 
 pub type ObjectSchema = serde_json::Map<String, serde_json::Value>;
 
@@ -58,7 +57,7 @@ pub fn generate_root_json_schema(
     id: &str,
     title: Option<&str>,
     description: &str,
-    objects: &OrderMap<String, ObjectDefinition>,
+    objects: &ObjectDefinitions,
     root_objects: &HashSet<String>,
     options: ObjectSchemaOptions,
 ) -> ObjectSchema {

@@ -1,11 +1,11 @@
 use crate::{
     object::{Object, ObjectEntry},
     object_definition::ObjectDefinition,
+    ObjectDefinitions, ObjectMap,
 };
 use liquid::{model::ScalarCow, ValueView};
 use liquid_core::Value;
 use once_cell::sync::Lazy;
-use ordermap::OrderMap;
 use pluralizer::pluralize;
 use regex::Regex;
 use std::{
@@ -13,7 +13,6 @@ use std::{
     env,
     error::Error,
     fmt,
-    hash::RandomState,
     path::{Path, PathBuf},
 };
 
@@ -204,8 +203,8 @@ impl<'a> Page<'a> {
     pub fn render(
         &self,
         parser: &liquid::Parser,
-        objects_map: &OrderMap<String, ObjectEntry, RandomState>,
-        definitions: &OrderMap<String, ObjectDefinition, RandomState>,
+        objects_map: &ObjectMap,
+        definitions: &ObjectDefinitions,
     ) -> Result<String, Box<dyn Error>> {
         #[cfg(feature = "verbose-logging")]
         tracing::debug!("rendering {}", self.name);
@@ -288,8 +287,13 @@ impl<'a> Page<'a> {
 mod tests {
 
     use crate::{
-        fields::{meta::Meta, DateTime, FieldType, FieldValue, MetaValue, ObjectValues},
-        liquid_parser, MemoryFileSystem,
+        fields::{
+            meta::{Meta, MetaMap},
+            DateTime, FieldType, FieldValue, MetaValue, ObjectValues,
+        },
+        liquid_parser,
+        object_definition::FieldsMap,
+        MemoryFileSystem, ObjectMap,
     };
 
     use super::*;
@@ -304,7 +308,7 @@ here is a liquid variable: {{site_url}}
         .to_string()
     }
 
-    fn get_objects_map() -> OrderMap<String, ObjectEntry, RandomState> {
+    fn get_objects_map() -> ObjectMap {
         let tour_dates_objects = vec![ObjectValues::from([
             (
                 "date".to_string(),
@@ -326,11 +330,11 @@ here is a liquid variable: {{site_url}}
             ),
             (
                 "meta".to_string(),
-                FieldValue::Meta(Meta(OrderMap::from([
+                FieldValue::Meta(Meta(MetaMap::from([
                     ("number".to_string(), MetaValue::Number(42.26)),
                     (
                         "deep".to_string(),
-                        MetaValue::Map(Meta(OrderMap::from([(
+                        MetaValue::Map(Meta(MetaMap::from([(
                             "deep".to_string(),
                             MetaValue::Array(vec![MetaValue::String("HELLO!".to_string())]),
                         )]))),
@@ -371,7 +375,7 @@ here is a liquid variable: {{site_url}}
             values: c_values,
         };
 
-        OrderMap::from([
+        ObjectMap::from([
             (
                 "artist".to_string(),
                 ObjectEntry::from_vec(vec![artist.clone(), artist]),
@@ -381,20 +385,20 @@ here is a liquid variable: {{site_url}}
     }
 
     fn artist_definition() -> ObjectDefinition {
-        let artist_def_fields = OrderMap::from([("name".to_string(), FieldType::String)]);
-        let tour_dates_fields = OrderMap::from([
+        let artist_def_fields = FieldsMap::from([("name".to_string(), FieldType::String)]);
+        let tour_dates_fields = FieldsMap::from([
             ("date".to_string(), FieldType::Date),
             ("ticket_link".to_string(), FieldType::String),
         ]);
-        let numbers_fields = OrderMap::from([("number".to_string(), FieldType::Number)]);
-        let artist_children = OrderMap::from([
+        let numbers_fields = FieldsMap::from([("number".to_string(), FieldType::Number)]);
+        let artist_children = ObjectDefinitions::from([
             (
                 "tour_dates".to_string(),
                 ObjectDefinition {
                     name: "tour_dates".to_string(),
                     fields: tour_dates_fields,
                     template: None,
-                    children: OrderMap::new(),
+                    children: ObjectDefinitions::new(),
                 },
             ),
             (
@@ -403,7 +407,7 @@ here is a liquid variable: {{site_url}}
                     name: "numbers".to_string(),
                     fields: numbers_fields,
                     template: None,
-                    children: OrderMap::new(),
+                    children: ObjectDefinitions::new(),
                 },
             ),
         ]);
@@ -415,25 +419,25 @@ here is a liquid variable: {{site_url}}
         }
     }
 
-    fn get_definition_map() -> OrderMap<String, ObjectDefinition> {
-        OrderMap::from([
+    fn get_definition_map() -> ObjectDefinitions {
+        ObjectDefinitions::from([
             ("artist".to_string(), artist_definition()),
             (
                 "c".to_string(),
                 ObjectDefinition {
                     name: "c".to_string(),
-                    fields: OrderMap::from([
+                    fields: FieldsMap::from([
                         ("name".to_string(), FieldType::String),
                         ("content".to_string(), FieldType::Markdown),
                     ]),
                     template: None,
-                    children: OrderMap::from([(
+                    children: ObjectDefinitions::from([(
                         "links".to_string(),
                         ObjectDefinition {
                             name: "links".to_string(),
-                            fields: OrderMap::from([("url".to_string(), FieldType::String)]),
+                            fields: FieldsMap::from([("url".to_string(), FieldType::String)]),
                             template: None,
-                            children: OrderMap::new(),
+                            children: ObjectDefinitions::new(),
                         },
                     )]),
                 },

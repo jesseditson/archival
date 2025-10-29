@@ -28,11 +28,12 @@ mod typedefs {
     }
 }
 
+pub type MetaMap = OrderMap<String, MetaValue>;
+
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Meta(
-    #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::MetaTypeDef"))]
-    pub  OrderMap<String, MetaValue>,
+    #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::MetaTypeDef"))] pub MetaMap,
 );
 
 impl Display for Meta {
