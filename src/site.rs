@@ -147,9 +147,8 @@ impl Site {
         if hashes.is_empty() {
             return 0;
         }
-        for (path, hash) in hashes.iter() {
+        for hash in hashes.values() {
             let hash_slice = hash.to_ne_bytes();
-            println!("HASH: {:?} {:?} {:?}", path, hash, hash_slice);
             hasher.write(&hash_slice);
         }
         hasher.finish()
@@ -200,8 +199,7 @@ impl Site {
                 ObjectSchemaOptions::default(),
             );
             fs.write_str(
-                &self
-                    .manifest
+                self.manifest
                     .schemas_dir
                     .join(format!("{}.schema.json", name)),
                 serde_json::to_string_pretty(&schema).unwrap(),
@@ -228,8 +226,7 @@ impl Site {
             ObjectSchemaOptions::default(),
         );
         fs.write_str(
-            &self
-                .manifest
+            self.manifest
                 .schemas_dir
                 .join(format!("{}.schema.json", object)),
             serde_json::to_string_pretty(&schema).unwrap(),

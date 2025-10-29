@@ -8,21 +8,46 @@ use tracing::debug;
 
 pub trait FileSystemAPI: Send + Sync + Default {
     fn root_dir(&self) -> &Path;
-    fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
-    fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>>;
-    fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
-    fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
-    fn read(&self, path: &Path) -> Result<Option<Vec<u8>>, Box<dyn Error>>;
-    fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>>;
-    fn delete(&mut self, path: &Path) -> Result<(), Box<dyn Error>>;
-    fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>>;
-    fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>>;
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>>;
+    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>>;
+    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>>;
+    fn create_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>>;
+    fn read(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>, Box<dyn Error>>;
+    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>, Box<dyn Error>>;
+    fn delete(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>>;
+    fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<(), Box<dyn Error>>;
+    fn write_str(&mut self, path: impl AsRef<Path>, contents: String)
+        -> Result<(), Box<dyn Error>>;
     fn walk_dir(
         &self,
-        path: &Path,
+        path: impl AsRef<Path>,
         include_dirs: bool,
     ) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>>;
 }
+
+// Orphan rules prevent this blanket impl so it must be implemented for each
+// struct individually
+// impl<T> std::fmt::Display for T
+// where
+//     T: FileSystemAPI,
+// {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self.walk_dir("", false) {
+//             Ok(paths) => {
+//                 write!(
+//                     f,
+//                     "{}:\n\t{}",
+//                     self.root_dir().display(),
+//                     paths
+//                         .map(|p| p.display().to_string())
+//                         .collect::<Vec<_>>()
+//                         .join("\n\t")
+//                 )
+//             }
+//             Err(e) => write!(f, "{}: {}", self.root_dir().display(), e),
+//         }
+//     }
+// }
 
 #[cfg(feature = "binary")]
 pub trait WatchableFileSystemAPI {

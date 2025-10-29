@@ -26,7 +26,7 @@ impl NativeFileSystem {
         }
     }
 
-    fn get_path(&self, rel: &Path) -> PathBuf {
+    fn get_path(&self, rel: impl AsRef<Path>) -> PathBuf {
         self.root.join(rel)
     }
 }
@@ -35,39 +35,43 @@ impl FileSystemAPI for NativeFileSystem {
     fn root_dir(&self) -> &Path {
         &self.root
     }
-    fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>> {
         Ok(fs::metadata(self.get_path(path)).is_ok())
     }
-    fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
+    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>> {
         Ok(self.get_path(path).is_dir())
     }
-    fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
         Ok(fs::remove_dir_all(self.get_path(path))?)
     }
-    fn create_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+    fn create_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
         Ok(fs::create_dir_all(self.get_path(path))?)
     }
-    fn read(&self, path: &Path) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
         Ok(Some(fs::read(self.get_path(path))?))
     }
-    fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
+    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>, Box<dyn Error>> {
         Ok(Some(fs::read_to_string(self.get_path(path))?))
     }
-    fn delete(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
-        if self.is_dir(path)? {
+    fn delete(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+        if self.is_dir(&path)? {
             return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
         }
         Ok(fs::remove_file(self.get_path(path))?)
     }
-    fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
+    fn write_str(
+        &mut self,
+        path: impl AsRef<Path>,
+        contents: String,
+    ) -> Result<(), Box<dyn Error>> {
         Ok(fs::write(self.get_path(path), contents)?)
     }
-    fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
+    fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
         Ok(fs::write(self.get_path(path), contents)?)
     }
     fn walk_dir(
         &self,
-        path: &Path,
+        path: impl AsRef<Path>,
         include_dirs: bool,
     ) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
         let root = self.get_path(path);
@@ -159,5 +163,24 @@ impl WatchableFileSystemAPI for NativeFileSystem {
             watcher.unwatch(&path).unwrap();
         };
         Ok(Box::new(unwatch))
+    }
+}
+
+impl std::fmt::Display for NativeFileSystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.walk_dir("", false) {
+            Ok(paths) => {
+                write!(
+                    f,
+                    "{}:\n\t{}",
+                    self.root_dir().display(),
+                    paths
+                        .map(|p| p.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n\t")
+                )
+            }
+            Err(e) => write!(f, "{}: {}", self.root_dir().display(), e),
+        }
     }
 }

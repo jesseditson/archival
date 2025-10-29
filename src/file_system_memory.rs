@@ -46,9 +46,9 @@ impl Hash for DirEntry {
 }
 
 impl DirEntry {
-    fn new(path: &Path, is_file: bool) -> Self {
+    fn new(path: impl AsRef<Path>, is_file: bool) -> Self {
         Self {
-            path: path.to_path_buf(),
+            path: path.as_ref().to_path_buf(),
             is_file,
         }
     }
@@ -74,22 +74,22 @@ pub struct FileGraphNode {
 }
 
 impl FileGraphNode {
-    pub fn new(path: &Path) -> Self {
+    pub fn new(path: impl AsRef<Path>) -> Self {
         Self {
-            path: path.to_path_buf(),
+            path: path.as_ref().to_path_buf(),
             files: BTreeSet::new(),
         }
     }
-    pub fn key(path: &Path) -> String {
-        path.to_string_lossy().to_lowercase()
+    pub fn key(path: impl AsRef<Path>) -> String {
+        path.as_ref().to_string_lossy().to_lowercase()
     }
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()
     }
-    pub fn add(&mut self, path: &Path, is_file: bool) {
+    pub fn add(&mut self, path: impl AsRef<Path>, is_file: bool) {
         self.files.insert(DirEntry::new(path, is_file));
     }
-    pub fn remove(&mut self, path: &Path) {
+    pub fn remove(&mut self, path: impl AsRef<Path>) {
         // Since we impl Ord (which is what BTreeSet uses for comparison),
         // is_file doesn't matter for comparison
         self.files.remove(&DirEntry::new(path, false));
@@ -131,57 +131,64 @@ impl FileSystemAPI for MemoryFileSystem {
     fn root_dir(&self) -> &Path {
         Path::new("<memory>")
     }
-    fn exists(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
-        if self.fs.contains_key(&path.to_string_lossy().to_lowercase()) || self.is_dir(path)? {
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>> {
+        if self
+            .fs
+            .contains_key(&path.as_ref().to_string_lossy().to_lowercase())
+            || self.is_dir(path)?
+        {
             Ok(true)
         } else {
             Ok(false)
         }
     }
-    fn is_dir(&self, path: &Path) -> Result<bool, Box<dyn Error>> {
+    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>> {
         Ok(self.tree.contains_key(&FileGraphNode::key(path)))
     }
-    fn remove_dir_all(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
+    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
         self.remove_from_graph(path);
         Ok(())
     }
-    fn create_dir_all(&mut self, _path: &Path) -> Result<(), Box<dyn Error>> {
+    fn create_dir_all(&mut self, _path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
         // dirs are implicitly created when files are created in them
         Ok(())
     }
-    fn read(&self, path: &Path) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
         Ok(self.read_file(path))
     }
-    fn read_to_string(&self, path: &Path) -> Result<Option<String>, Box<dyn Error>> {
+    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>, Box<dyn Error>> {
         if let Some(file) = self.read_file(path) {
             Ok(Some(std::str::from_utf8(&file)?.to_string()))
         } else {
             Ok(None)
         }
     }
-    fn delete(&mut self, path: &Path) -> Result<(), Box<dyn Error>> {
-        if self.is_dir(path)? {
+    fn delete(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+        if self.is_dir(&path)? {
             return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
         }
         self.delete_file(path);
         Ok(())
     }
-    fn write(&mut self, path: &Path, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
-        if self.is_dir(path)? {
+    fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
+        if self.is_dir(&path)? {
             return Err(ArchivalError::new("cannot write to a folder").into());
         }
         self.write_file(path, contents);
         Ok(())
     }
-    fn write_str(&mut self, path: &Path, contents: String) -> Result<(), Box<dyn Error>> {
+    fn write_str(
+        &mut self,
+        path: impl AsRef<Path>,
+        contents: String,
+    ) -> Result<(), Box<dyn Error>> {
         self.write(path, contents.as_bytes().to_vec())
     }
     fn walk_dir(
         &self,
-        path: &Path,
+        path: impl AsRef<Path>,
         include_dirs: bool,
     ) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
-        let path = path.to_path_buf();
         let children = self.all_children(&path);
         let mut all_files: Vec<PathBuf> = vec![];
         for child in children {
@@ -197,7 +204,11 @@ impl FileSystemAPI for MemoryFileSystem {
                         match de.path.strip_prefix(&path) {
                             Ok(path) => Some(path.to_owned()),
                             Err(e) => {
-                                error!("Ignorning invalid path {} ({})", path.display(), e);
+                                error!(
+                                    "Ignorning invalid path {} ({})",
+                                    path.as_ref().display(),
+                                    e
+                                );
                                 None
                             }
                         }
@@ -210,21 +221,22 @@ impl FileSystemAPI for MemoryFileSystem {
 }
 
 impl MemoryFileSystem {
-    fn write_file(&mut self, path: &Path, data: Vec<u8>) {
+    fn write_file(&mut self, path: impl AsRef<Path>, data: Vec<u8>) {
         #[cfg(feature = "verbose-logging")]
-        debug!("write: {}", path.display());
-        self.fs.insert(path.to_string_lossy().to_lowercase(), data);
+        debug!("write: {}", path.as_ref().display());
+        self.fs
+            .insert(path.as_ref().to_string_lossy().to_lowercase(), data);
         self.write_to_graph(path, true);
     }
 
-    fn write_to_graph(&mut self, path: &Path, is_file: bool) {
+    fn write_to_graph(&mut self, path: impl AsRef<Path>, is_file: bool) {
         // Traverse up the path and add each file to its parent's node
         let mut last_path: PathBuf = PathBuf::new();
         let mut is_file = is_file;
-        for ancestor in path.ancestors() {
+        for ancestor in path.as_ref().ancestors() {
             let a_path = ancestor.to_path_buf();
             // Skip the actual file path, since only directories are nodes
-            if a_path.to_string_lossy() != path.to_string_lossy() {
+            if a_path.to_string_lossy() != path.as_ref().to_string_lossy() {
                 let mut node = self.get_node(&a_path);
                 node.add(&last_path, is_file);
                 // After we add the first file, everything else will be directories.
@@ -235,14 +247,14 @@ impl MemoryFileSystem {
         }
     }
 
-    fn get_node(&self, path: &Path) -> FileGraphNode {
-        match self.tree.get(&FileGraphNode::key(path)) {
+    fn get_node(&self, path: impl AsRef<Path>) -> FileGraphNode {
+        match self.tree.get(&FileGraphNode::key(&path)) {
             Some(n) => n.copy(),
             None => FileGraphNode::new(path),
         }
     }
 
-    fn all_children(&self, path: &Path) -> Vec<PathBuf> {
+    fn all_children(&self, path: impl AsRef<Path>) -> Vec<PathBuf> {
         // All children of this directory will use keys prefixed with this
         // directory's key.
         let node_key = FileGraphNode::key(path);
@@ -253,21 +265,21 @@ impl MemoryFileSystem {
             .collect()
     }
 
-    fn remove_from_graph(&mut self, path: &Path) {
+    fn remove_from_graph(&mut self, path: impl AsRef<Path>) {
         // If this is a directory, remove it and its children from the graph
-        let node = self.get_node(path);
+        let node = self.get_node(&path);
         if !node.is_empty() {
-            for path in self.all_children(path) {
+            for path in self.all_children(&path) {
                 // delete the node and object
                 self.tree.remove(&FileGraphNode::key(&path));
                 self.delete_file_only(&path);
             }
         }
 
-        let mut last_path: PathBuf = path.to_path_buf();
-        for ancestor in path.ancestors() {
+        let mut last_path = path.as_ref().to_path_buf();
+        for ancestor in path.as_ref().ancestors() {
             let a_path = ancestor.to_path_buf();
-            if a_path.to_string_lossy() == path.to_string_lossy() {
+            if a_path.to_string_lossy() == path.as_ref().to_string_lossy() {
                 // We've handled the leaf above
                 continue;
             }
@@ -286,20 +298,40 @@ impl MemoryFileSystem {
         }
     }
 
-    fn delete_file_only(&mut self, path: &Path) {
-        self.fs.remove(&path.to_string_lossy().to_lowercase());
+    fn delete_file_only(&mut self, path: impl AsRef<Path>) {
+        self.fs
+            .remove(&path.as_ref().to_string_lossy().to_lowercase());
     }
 
-    fn delete_file(&mut self, path: &Path) {
-        self.delete_file_only(path);
+    fn delete_file(&mut self, path: impl AsRef<Path>) {
+        self.delete_file_only(&path);
         self.remove_from_graph(path);
     }
 
-    fn read_file(&self, path: &Path) -> Option<Vec<u8>> {
+    fn read_file(&self, path: impl AsRef<Path>) -> Option<Vec<u8>> {
         #[cfg(feature = "verbose-logging")]
-        debug!("read {}", path.display());
+        debug!("read {}", path.as_ref().display());
         self.fs
-            .get(&path.to_string_lossy().to_lowercase())
+            .get(&path.as_ref().to_string_lossy().to_lowercase())
             .map(|v| v.to_vec())
+    }
+}
+
+impl std::fmt::Display for MemoryFileSystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.walk_dir("", false) {
+            Ok(paths) => {
+                write!(
+                    f,
+                    "{}:\n\t{}",
+                    self.root_dir().display(),
+                    paths
+                        .map(|p| p.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n\t")
+                )
+            }
+            Err(e) => write!(f, "{}: {}", self.root_dir().display(), e),
+        }
     }
 }

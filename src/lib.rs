@@ -228,7 +228,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             .with_fs(|fs| {
                 let build_dir = &self.site.manifest.build_dir;
                 for file in fs.walk_dir(build_dir, true)? {
-                    if let Some(data) = fs.read(&build_dir.join(&file)).unwrap_or(None) {
+                    if let Some(data) = fs.read(build_dir.join(&file)).unwrap_or(None) {
                         files.push(DistFile::new(file, data));
                     }
                 }
@@ -775,7 +775,7 @@ mod lib {
         let post_html = archival
             .fs_mutex
             .with_fs(|fs| {
-                fs.read_to_string(&archival.site.manifest.build_dir.join("post/a-post.html"))
+                fs.read_to_string(archival.site.manifest.build_dir.join("post/a-post.html"))
             })?
             .unwrap();
         println!("{}", post_html);
@@ -813,11 +813,11 @@ mod lib {
         assert_eq!(sections.len(), 3);
         let section_toml = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&sections_dir.join("my-section.toml")));
+            .with_fs(|fs| fs.read_to_string(sections_dir.join("my-section.toml")));
         assert!(section_toml.is_ok());
         let index_html = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
+            .with_fs(|fs| fs.read_to_string(archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         let rendered_sections: Vec<_> = index_html.match_indices("<h2>").collect();
         println!("MATCHED: {:?}", rendered_sections);
@@ -845,7 +845,7 @@ mod lib {
         // Sending an event should result in an updated fs
         let index_html = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
+            .with_fs(|fs| fs.read_to_string(archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
         assert!(index_html.contains("This is the new name"));
@@ -876,7 +876,7 @@ mod lib {
         assert_eq!(sections.len(), 1);
         let index_html = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
+            .with_fs(|fs| fs.read_to_string(archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
         assert!(!index_html.contains("This is the new title"));
@@ -924,7 +924,7 @@ mod lib {
         archival.build(BuildOptions::default())?;
         let index_html = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
+            .with_fs(|fs| fs.read_to_string(archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
         let c1 = index_html.find("1 Some Content").unwrap();
@@ -942,7 +942,7 @@ mod lib {
         // Sending an event should result in an updated fs
         let index_html = archival
             .fs_mutex
-            .with_fs(|fs| fs.read_to_string(&archival.site.manifest.build_dir.join("index.html")))?
+            .with_fs(|fs| fs.read_to_string(archival.site.manifest.build_dir.join("index.html")))?
             .unwrap();
         println!("index: {}", index_html);
         let c1 = index_html.find("12 Some Content").unwrap();
@@ -963,7 +963,7 @@ mod lib {
             .fs_mutex
             .with_fs(|fs| {
                 fs.read_to_string(
-                    &archival
+                    archival
                         .site
                         .manifest
                         .build_dir
@@ -1015,7 +1015,7 @@ mod lib {
             .fs_mutex
             .with_fs(|fs| {
                 fs.read_to_string(
-                    &archival
+                    archival
                         .site
                         .manifest
                         .build_dir
@@ -1058,7 +1058,7 @@ mod lib {
             .fs_mutex
             .with_fs(|fs| {
                 fs.read_to_string(
-                    &archival
+                    archival
                         .site
                         .manifest
                         .build_dir
@@ -1114,7 +1114,7 @@ mod lib {
         assert_eq!(sections.len(), 1);
         let site_file_exists = archival
             .fs_mutex
-            .with_fs(|fs| fs.exists(&archival.site.manifest.objects_dir.join("site.toml")))?;
+            .with_fs(|fs| fs.exists(archival.site.manifest.objects_dir.join("site.toml")))?;
         assert!(!site_file_exists);
         Ok(())
     }
@@ -1186,7 +1186,7 @@ mod lib {
             .fs_mutex
             .with_fs(|fs| {
                 fs.read_to_string(
-                    &archival
+                    archival
                         .site
                         .manifest
                         .build_dir

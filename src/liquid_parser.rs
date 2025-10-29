@@ -28,7 +28,7 @@ impl ArchivalPartialSource {
                     if let Some((template_name, _t)) = TemplateType::parse_path(name) {
                         #[cfg(feature = "verbose-logging")]
                         debug!("adding layout {} ({})", template_name, _t.extension());
-                        if let Some(contents) = fs.read_to_string(&path.join(&file))? {
+                        if let Some(contents) = fs.read_to_string(path.join(&file))? {
                             partials.insert(template_name.to_string(), contents);
                         } else {
                             error!("Failed reading layout {}", file.display());
@@ -54,7 +54,7 @@ impl ArchivalPartialSource {
                         };
                         #[cfg(feature = "verbose-logging")]
                         debug!("adding partial {} ({})", partial_name, _t.extension());
-                        if let Some(contents) = fs.read_to_string(&path.join(&file))? {
+                        if let Some(contents) = fs.read_to_string(path.join(&file))? {
                             partials.insert(partial_name.to_string(), contents);
                         } else {
                             error!("Failed reading partial {}", file.display());
