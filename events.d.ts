@@ -19,6 +19,19 @@ export type File = {
     "display_type": "image"|"audio"|"video"|"upload";
     "url": string;
 };
+export type MetaValue = ({
+    "String": string;
+} | {
+    "Number": F64;
+} | {
+    "Boolean": boolean;
+} | {
+    "DateTime": DateTime;
+} | {
+    "Array": MetaValue[];
+} | {
+    "Map": Record<string, MetaValue>;
+});
 export type Meta = Record<string, MetaValue>;
 export type FieldValue = ({
     "String": string;
@@ -106,17 +119,4 @@ export type ArchivalEvent = ({
     "AddChild": AddChildEvent;
 } | {
     "RemoveChild": RemoveChildEvent;
-});
-export type MetaValue = ({
-    "String": string;
-} | {
-    "Number": F64;
-} | {
-    "Boolean": boolean;
-} | {
-    "DateTime": DateTime;
-} | {
-    "Array": MetaValue[];
-} | {
-    "Map": Record<string, MetaValue>;
 });

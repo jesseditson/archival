@@ -10,20 +10,42 @@ use super::DateTime;
 #[cfg(feature = "typescript")]
 mod typedefs {
     use typescript_type_def::{
-        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
+        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo, TypeName},
         TypeDef,
     };
+
+    use crate::fields::MetaValue;
+
+    // These two types are workarounds for the fact that there's a circular type
+    // in MetaValue. Below, we use MetaMapTypeDef to then define a meta type
+    // that will result in a dependency (which will make sure that types that
+    // have MetaValues will also define MetaValue itself, which will not happen
+    // with the following two types). The underlying issue is tracked here:
+    // https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
     pub struct MetaArrTypeDef;
     impl TypeDef for MetaArrTypeDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
             r#ref: TypeExpr::ident(Ident("MetaValue[]")),
         });
     }
-
     pub struct MetaTypeDef;
     impl TypeDef for MetaTypeDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
             r#ref: TypeExpr::ident(Ident("Record<string, MetaValue>")),
+        });
+    }
+
+    pub struct MetaMapTypeDef;
+    impl TypeDef for MetaMapTypeDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::Name(TypeName {
+                path: &[],
+                name: Ident("Record"),
+                generic_args: &[
+                    TypeExpr::Ref(&String::INFO),
+                    TypeExpr::Ref(&MetaValue::INFO),
+                ],
+            }),
         });
     }
 }
@@ -33,7 +55,7 @@ pub type MetaMap = OrderMap<String, MetaValue>;
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Meta(
-    #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::MetaTypeDef"))] pub MetaMap,
+    #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::MetaMapTypeDef"))] pub MetaMap,
 );
 
 impl Display for Meta {
@@ -135,7 +157,6 @@ pub enum MetaValue {
         #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::MetaArrTypeDef"))]
         Vec<MetaValue>,
     ),
-    // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
     Map(#[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::MetaTypeDef"))] Meta),
 }
 
