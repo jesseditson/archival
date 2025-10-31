@@ -129,7 +129,7 @@ mod binary_tests {
                 }
             }
         });
-        let s = run_until(&receiver, "Serving", Duration::from_millis(20_000));
+        let s = run_until(&receiver, "Serving", Duration::from_millis(60_000));
         println!("-------- initial build: {}", String::from_utf8_lossy(&s));
         // First build complete. Now add a file and make sure it's built
         let spid = nanoid!();

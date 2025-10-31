@@ -14,6 +14,9 @@ name: CI
 jobs:
   lint:
     name: Lint
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
@@ -22,7 +25,8 @@ jobs:
           toolchain: stable
           targets: wasm32-unknown-unknown
           components: rustc-dev, clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: check rustfmt
         run: cargo fmt -- --check --color always
@@ -33,6 +37,9 @@ jobs:
 
   test:
     name: Tests
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       matrix:
         os: [macos-latest, windows-2022, ubuntu-22.04]
@@ -44,7 +51,9 @@ jobs:
           toolchain: stable
           targets: wasm32-unknown-unknown
           components: rustc-dev, clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - run: cargo fetch
       - name: cargo test build
         run: cargo build --tests --release
@@ -53,13 +62,17 @@ jobs:
 
   msrv-check:
     name: Minimum Stable Rust Version Check
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.80.0"
-      - uses: Swatinem/rust-cache@v2
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - run: cargo fetch
       - name: cargo check
         run: cargo check --all-targets
@@ -69,12 +82,16 @@ jobs:
     runs-on: macos-latest
     env:
       TRIPLE: aarch64-apple-darwin
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.TRIPLE }}
-      - uses: Swatinem/rust-cache@v2
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - run: cargo fetch --target ${{ env.TRIPLE }}
       - run: cargo build --release --target ${{ env.TRIPLE }}
 
@@ -99,6 +116,9 @@ jobs:
 
   publish-check:
     name: Publish Check
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     runs-on: ubuntu-22.04
     container: ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge
     strategy:
@@ -110,7 +130,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - run: apt-get update && apt-get --assume-yes install libssl-dev
       - run: cargo fetch
       - name: cargo publish
@@ -118,6 +140,9 @@ jobs:
 
   release:
     name: Release
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     if: startsWith(github.ref, 'refs/tags/')
     strategy:
       matrix:
@@ -145,6 +170,8 @@ jobs:
           sudo apt install -y musl-tools
       - name: Checkout
         uses: actions/checkout@v3
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - name: cargo fetch
         run: cargo fetch --target ${{ matrix.target }}
       - name: Release build
