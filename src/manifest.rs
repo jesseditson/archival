@@ -180,7 +180,7 @@ impl From<&ManifestEditorType> for toml::Value {
 #[cfg(feature = "typescript")]
 mod typedefs {
     use typescript_type_def::{
-        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo, TypeName},
+        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo, TypeName, TypeUnion},
         TypeDef,
     };
 
@@ -201,7 +201,17 @@ mod typedefs {
     pub struct MetadataTypeDef;
     impl TypeDef for MetadataTypeDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
-            r#ref: TypeExpr::ident(Ident("Option<Record<string, string>>")),
+            r#ref: TypeExpr::Union(TypeUnion {
+                docs: None,
+                members: &[
+                    TypeExpr::Name(TypeName {
+                        path: &[],
+                        name: Ident("Record"),
+                        generic_args: &[TypeExpr::Ref(&String::INFO), TypeExpr::Ref(&String::INFO)],
+                    }),
+                    TypeExpr::ident(Ident("null")),
+                ],
+            }),
         });
     }
 }
