@@ -41,6 +41,8 @@ pub enum InvalidManifestError {
     InvalidNestedValidator(String, String),
     #[error("Invalid Manifest value '{1}' for field {0}.")]
     InvalidField(Value, String),
+    #[error("Invalid Metadata value '{1}' for field {0}.")]
+    InvalidMetadata(Value, String),
 }
 
 #[derive(Debug, Clone)]
@@ -187,9 +189,16 @@ mod typedefs {
             r#ref: TypeExpr::ident(Ident("Record<string, ManifestEditorType>")),
         });
     }
+    pub struct MetadataTypeDef;
+    impl TypeDef for MetadataTypeDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::ident(Ident("Option<Record<string, string>>")),
+        });
+    }
 }
 
 pub type EditorTypes = OrderMap<String, ManifestEditorType>;
+pub type MetadataType = OrderMap<String, String>;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
@@ -211,6 +220,11 @@ pub struct Manifest {
     pub uploads_url: Option<String>,
     #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::EditorTypesDef"))]
     pub editor_types: EditorTypes,
+    #[cfg_attr(
+        feature = "typescript",
+        type_def(type_of = "typedefs::MetadataTypeDef")
+    )]
+    pub metadata: Option<MetadataType>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -232,6 +246,7 @@ pub enum ManifestField {
     LayoutDir,
     UploadsUrl,
     EditorTypes,
+    Metadata,
 }
 
 impl ManifestField {
@@ -251,6 +266,7 @@ impl ManifestField {
             ManifestField::LayoutDir => "layout_dir",
             ManifestField::UploadsUrl => "uploads_url",
             ManifestField::EditorTypes => "editor_types",
+            ManifestField::Metadata => "metadata",
         }
     }
 }
@@ -269,7 +285,7 @@ impl fmt::Display for Manifest {
         pages: {}
         static files: {}
         layout dir: {}
-        build dir: {}
+        build dir: {}{}
         {}
         "#,
             self.upload_prefix,
@@ -286,6 +302,18 @@ impl fmt::Display for Manifest {
             self.static_dir.display(),
             self.layout_dir.display(),
             self.build_dir.display(),
+            self.metadata
+                .as_ref()
+                .map(|m| {
+                    format!(
+                        "\n\t\t\tmetadata:\t\t\t\t{}",
+                        m.iter()
+                            .map(|(k, v)| format!("{}:{}", k, v))
+                            .collect::<Vec<_>>()
+                            .join("\n\t\t\t\t")
+                    )
+                })
+                .unwrap_or_default(),
             if !self.editor_types.is_empty() {
                 format!(
                     "editor types:\n{}",
@@ -337,7 +365,8 @@ impl Manifest {
             build_dir: root.join(BUILD_DIR_NAME),
             static_dir: root.join(STATIC_DIR_NAME),
             layout_dir: root.join(LAYOUT_DIR_NAME),
-            editor_types: OrderMap::new(),
+            editor_types: EditorTypes::new(),
+            metadata: None,
         }
     }
     fn is_default(&self, field: &ManifestField) -> bool {
@@ -425,6 +454,7 @@ impl Manifest {
                     manifest.object_definition_file = path_or_err(value, "object_file")?
                 }
                 "editor_types" => manifest.parse_editor_types(value).unwrap(),
+                "metadata" => manifest.parse_metadata(value).unwrap(),
                 _ => {}
             }
         }
@@ -483,6 +513,13 @@ impl Manifest {
             ManifestField::LayoutDir => {
                 Some(Value::String(self.layout_dir.to_string_lossy().to_string()))
             }
+            ManifestField::Metadata => self.metadata.as_ref().map(|metadata| {
+                let mut map = toml::map::Map::new();
+                for (key, v) in metadata {
+                    map.insert(key.into(), Value::String(v.to_string()));
+                }
+                Value::Table(map)
+            }),
             ManifestField::EditorTypes => {
                 let mut map = toml::map::Map::new();
                 for (type_name, type_val) in &self.editor_types {
@@ -493,12 +530,29 @@ impl Manifest {
         }
     }
 
+    fn parse_metadata(&mut self, types: toml::Value) -> Result<(), InvalidManifestError> {
+        let metadata_table = match types {
+            toml::Value::Table(t) => t,
+            _ => return Err(InvalidManifestError::FailedParsing),
+        };
+        let mut metadata = MetadataType::new();
+        for (type_name, value) in metadata_table {
+            if let Some(val) = value.as_str() {
+                metadata.insert(type_name, val.to_string());
+            } else {
+                return Err(InvalidManifestError::InvalidMetadata(value, type_name));
+            }
+        }
+        self.metadata = Some(metadata);
+        Ok(())
+    }
+
     fn parse_editor_types(&mut self, types: toml::Value) -> Result<(), InvalidManifestError> {
         let types = match types {
             toml::Value::Table(t) => t,
             _ => return Err(InvalidManifestError::FailedParsing),
         };
-        let mut editor_types = OrderMap::new();
+        let mut editor_types = EditorTypes::new();
         for (type_name, info) in types {
             let mut editor_type = ManifestEditorType::default();
             let info_map = match info {
@@ -606,6 +660,9 @@ impl Manifest {
             ManifestField::StaticDir => self.static_dir = PathBuf::from(value),
             ManifestField::SchemasDir => self.schemas_dir = PathBuf::from(value),
             ManifestField::LayoutDir => self.layout_dir = PathBuf::from(value),
+            ManifestField::Metadata => {
+                panic!("Metadata is not modifiable via events")
+            }
             ManifestField::EditorTypes => {
                 panic!("EditorTypes are not modifiable via events")
             }
@@ -637,6 +694,7 @@ impl Manifest {
             ManifestField::StaticDir,
             ManifestField::ObjectsDir,
             ManifestField::EditorTypes,
+            ManifestField::Metadata,
         ]
     }
 
