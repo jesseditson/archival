@@ -180,13 +180,22 @@ impl From<&ManifestEditorType> for toml::Value {
 #[cfg(feature = "typescript")]
 mod typedefs {
     use typescript_type_def::{
-        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
+        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo, TypeName},
         TypeDef,
     };
+
+    use crate::manifest::ManifestEditorType;
     pub struct EditorTypesDef;
     impl TypeDef for EditorTypesDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
-            r#ref: TypeExpr::ident(Ident("Record<string, ManifestEditorType>")),
+            r#ref: TypeExpr::Name(TypeName {
+                path: &[],
+                name: Ident("Record"),
+                generic_args: &[
+                    TypeExpr::Ref(&String::INFO),
+                    TypeExpr::Ref(&ManifestEditorType::INFO),
+                ],
+            }),
         });
     }
     pub struct MetadataTypeDef;
