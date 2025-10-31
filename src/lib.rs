@@ -71,6 +71,7 @@ pub type ArchivalBuildId = u64;
 
 #[cfg(feature = "typescript")]
 pub mod typedefs {
+    pub use crate::object::typedefs::*;
     pub use crate::object_definition::typedefs::*;
 }
 

@@ -18,19 +18,42 @@ pub type ObjectDefinitions = OrderMap<String, ObjectDefinition>;
 #[cfg(feature = "typescript")]
 pub mod typedefs {
     use typescript_type_def::{
-        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
+        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo, TypeName},
         TypeDef,
     };
+
+    use crate::{fields::FieldType, ObjectDefinition};
     pub struct ObjectDefinitionsDef;
     impl TypeDef for ObjectDefinitionsDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
-            r#ref: TypeExpr::ident(Ident("Record<string, ObjectDefinition>")),
+            r#ref: TypeExpr::Name(TypeName {
+                path: &[],
+                name: Ident("Record"),
+                generic_args: &[
+                    TypeExpr::Ref(&String::INFO),
+                    TypeExpr::Ref(&ObjectDefinition::INFO),
+                ],
+            }),
         });
     }
     pub struct FieldsMapDef;
     impl TypeDef for FieldsMapDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
-            r#ref: TypeExpr::ident(Ident("Record<string, FieldType>")),
+            r#ref: TypeExpr::Name(TypeName {
+                path: &[],
+                name: Ident("Record"),
+                generic_args: &[
+                    TypeExpr::Ref(&String::INFO),
+                    TypeExpr::Ref(&FieldType::INFO),
+                ],
+            }),
+        });
+    }
+
+    pub struct ChildrenDef;
+    impl TypeDef for ChildrenDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::ident(Ident("Record<string, ObjectDefinition>")),
         });
     }
 }
@@ -45,10 +68,7 @@ pub struct ObjectDefinition {
     pub fields: FieldsMap,
     pub template: Option<String>,
 
-    #[cfg_attr(
-        feature = "typescript",
-        type_def(type_of = "typedefs::ObjectDefinitionsDef")
-    )]
+    #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::ChildrenDef"))]
     pub children: ObjectDefinitions,
 }
 

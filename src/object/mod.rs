@@ -23,6 +23,29 @@ pub use object_entry::ObjectEntry;
 
 pub type ObjectMap = OrderMap<String, ObjectEntry>;
 
+#[cfg(feature = "typescript")]
+pub mod typedefs {
+    use typescript_type_def::{
+        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo, TypeName},
+        TypeDef,
+    };
+
+    use crate::object::ObjectEntry;
+    pub struct ObjectMapDef;
+    impl TypeDef for ObjectMapDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::Name(TypeName {
+                path: &[],
+                name: Ident("Record"),
+                generic_args: &[
+                    TypeExpr::Ref(&String::INFO),
+                    TypeExpr::Ref(&ObjectEntry::INFO),
+                ],
+            }),
+        });
+    }
+}
+
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct Object {
