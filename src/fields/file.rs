@@ -1,8 +1,9 @@
 use crate::fields::FieldConfig;
 use liquid::{ObjectView, ValueView};
 use mime_guess::{mime::FromStrError, Mime, MimeGuess};
+use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display, str::FromStr};
+use std::{fmt::Display, str::FromStr};
 use thiserror::Error;
 use tracing::warn;
 
@@ -75,16 +76,16 @@ mod typedefs {
 )]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct File {
-    pub sha: String,
-    pub name: Option<String>,
-    pub description: Option<String>,
-    pub filename: String,
-    pub mime: String,
     #[cfg_attr(
         feature = "typescript",
         type_def(type_of = "typedefs::DisplayTypeType")
     )]
     pub display_type: String,
+    pub filename: String,
+    pub sha: String,
+    pub mime: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
     pub url: String,
 }
 
@@ -268,18 +269,19 @@ impl File {
     pub fn url(&self) -> String {
         Self::_url(&self.sha, &self.filename)
     }
-    pub fn to_map(&self, include_url: bool) -> HashMap<&str, &String> {
-        let mut m = HashMap::new();
+    pub fn to_map(&self, include_url: bool) -> OrderMap<&str, &String> {
+        // NOTE: order matters here, and should match the layout above
+        let mut m = OrderMap::new();
+        m.insert("display_type", &self.display_type);
+        m.insert("filename", &self.filename);
         m.insert("sha", &self.sha);
+        m.insert("mime", &self.mime);
         if let Some(name) = &self.name {
             m.insert("name", name);
         }
         if let Some(description) = &self.description {
             m.insert("description", description);
         }
-        m.insert("filename", &self.filename);
-        m.insert("mime", &self.mime);
-        m.insert("display_type", &self.display_type);
         if include_url {
             m.insert("url", &self.url);
         }

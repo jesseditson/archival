@@ -11,12 +11,12 @@ export type DateTime = {
     "raw": string;
 };
 export type File = {
+    "display_type": "image"|"audio"|"video"|"upload";
+    "filename": string;
     "sha": string;
+    "mime": string;
     "name": (string | null);
     "description": (string | null);
-    "filename": string;
-    "mime": string;
-    "display_type": "image"|"audio"|"video"|"upload";
     "url": string;
 };
 export type MetaValue = ({

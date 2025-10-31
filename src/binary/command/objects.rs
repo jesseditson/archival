@@ -5,8 +5,8 @@ use crate::{
 };
 use clap::ArgMatches;
 use liquid_core::Value;
+use ordermap::OrderMap;
 use std::{
-    collections::HashMap,
     path::Path,
     sync::{atomic::AtomicBool, Arc},
 };
@@ -28,7 +28,7 @@ impl BinaryCommand for Command {
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let site = Site::load(&fs, Some(""))?;
         FieldConfig::set_global(site.get_field_config(None)?);
-        let mut objects: HashMap<String, liquid::model::Value> = HashMap::new();
+        let mut objects: OrderMap<String, liquid::model::Value> = OrderMap::new();
         let definitions = &site.object_definitions;
         for (name, obj_entry) in site.get_objects(&fs)? {
             let definition = definitions
