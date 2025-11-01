@@ -42,7 +42,7 @@ runs:
         if_false: ${{ inputs.archival-bin }}
     - name: Set Build Dir
       id: dist
-      run: echo "dist=$(${{ steps.archival-bin.outputs.value }} manifest build-dir)" >> $GITHUB_OUTPUT
+      run: echo "dist=$(${{ steps.archival-bin.outputs.value }} manifest build_dir)" >> $GITHUB_OUTPUT
       shell: bash
     - name: Archival Prebuild
       run: ${{ steps.archival-bin.outputs.value }} prebuild
