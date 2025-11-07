@@ -6,6 +6,7 @@ use std::{
 };
 mod build;
 mod compat;
+mod format;
 mod import;
 mod login;
 mod manifest;
@@ -46,9 +47,10 @@ pub trait BinaryCommand {
     ) -> Result<ExitStatus, Box<dyn Error>>;
 }
 
-pub const COMMANDS: [&dyn BinaryCommand; 10] = [
+pub const COMMANDS: [&dyn BinaryCommand; 11] = [
     &build::Command {},
     &run::Command {},
+    &format::Command {},
     &manifest::Command {},
     &prebuild::Command {},
     &login::Command {},

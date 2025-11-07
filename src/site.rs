@@ -263,11 +263,11 @@ impl Site {
         modify: impl FnOnce(&mut Manifest),
     ) -> Result<(), Box<dyn Error>> {
         modify(&mut self.manifest);
-        fs.write_str(Path::new(MANIFEST_FILE_NAME), self.manifest.to_toml()?)
+        fs.write_str(MANIFEST_FILE_NAME, self.manifest.to_toml()?)
     }
 
     pub fn manifest_content<T: FileSystemAPI>(&self, fs: &T) -> Result<String, Box<dyn Error>> {
-        fs.read_to_string(Path::new(MANIFEST_FILE_NAME))
+        fs.read_to_string(MANIFEST_FILE_NAME)
             .map(|m| m.unwrap_or_default())
     }
 

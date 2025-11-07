@@ -1,0 +1,60 @@
+use super::BinaryCommand;
+use crate::{
+    binary::ExitStatus, file_system_stdlib, Archival, ArchivalError, FileSystemAPI,
+    MANIFEST_FILE_NAME,
+};
+use clap::ArgMatches;
+use std::{
+    error::Error,
+    path::Path,
+    sync::{atomic::AtomicBool, Arc},
+};
+
+impl Archival<file_system_stdlib::NativeFileSystem> {
+    fn format_objects(&self) -> Result<(), Box<dyn Error>> {
+        self.fs_mutex.with_fs(|fs| {
+            let all_objects = self.site.get_objects(fs)?;
+            let definitions = &self.site.object_definitions;
+            for (obj_type, objects) in &all_objects {
+                for object in objects {
+                    let path = self.object_path_impl(obj_type, &object.filename, fs)?;
+                    let def = definitions.get(obj_type).ok_or_else(|| {
+                        ArchivalError::new(&format!("missing object definition: {obj_type}"))
+                    })?;
+                    let contents = object.to_toml(def)?;
+                    fs.write_str(&path, contents)?;
+                }
+            }
+            Ok(())
+        })
+    }
+    fn format_manifest(&self) -> Result<(), Box<dyn Error>> {
+        self.fs_mutex
+            .with_fs(|fs| fs.write_str(MANIFEST_FILE_NAME, self.site.manifest.to_toml()?))
+    }
+}
+
+pub struct Command {}
+impl BinaryCommand for Command {
+    fn name(&self) -> &str {
+        "format"
+    }
+    fn cli(&self, cmd: clap::Command) -> clap::Command {
+        cmd.about("formats toml files in an archival site")
+    }
+    fn uses_uploads(&self) -> bool {
+        false
+    }
+    fn handler(
+        &self,
+        root_dir: &Path,
+        _args: &ArgMatches,
+        _quit: Arc<AtomicBool>,
+    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+        let fs = file_system_stdlib::NativeFileSystem::new(root_dir);
+        let archival = Archival::new(fs)?;
+        archival.format_objects()?;
+        archival.format_manifest()?;
+        Ok(ExitStatus::Ok)
+    }
+}
