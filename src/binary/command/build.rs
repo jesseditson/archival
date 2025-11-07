@@ -28,11 +28,9 @@ impl BinaryCommand for Command {
         _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let mut fs = file_system_stdlib::NativeFileSystem::new(root_dir);
-        let mut site = Site::load(
-            &fs,
-            args.get_one::<String>("upload-prefix").map(|s| s.as_str()),
-        )?;
-        FieldConfig::set_global(site.get_field_config(None)?);
+        let upload_prefix = args.get_one::<String>("upload-prefix").map(|s| s.as_str());
+        let mut site = Site::load(&fs, upload_prefix)?;
+        FieldConfig::set_global(site.get_field_config(upload_prefix)?);
         println!("Building site: {}", &site);
         if let Some(build_dir_arg) = args.get_one::<PathBuf>("build-dir") {
             let cwd = std::env::current_dir().unwrap();
