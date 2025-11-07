@@ -232,7 +232,7 @@ impl Object {
         Ok(object)
     }
 
-    pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
+    pub fn to_toml(&self, definition: &ObjectDefinition) -> Result<String, toml::ser::Error> {
         let mut write_obj = Table::new();
         if let Some(order) = self.order {
             write_obj.insert(
@@ -244,9 +244,18 @@ impl Object {
                 },
             );
         }
-        for (key, val) in &self.values {
-            if let Some(val) = val.into() {
-                write_obj.insert(key.to_string(), val);
+        for key in definition.fields.keys() {
+            if let Some(value) = self.values.get(key) {
+                if let Some(val) = value.into() {
+                    write_obj.insert(key.to_string(), val);
+                }
+            }
+        }
+        for key in definition.children.keys() {
+            if let Some(value) = self.values.get(key) {
+                if let Some(val) = value.into() {
+                    write_obj.insert(key.to_string(), val);
+                }
             }
         }
         toml::to_string_pretty(&write_obj)

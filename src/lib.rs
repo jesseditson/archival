@@ -373,10 +373,14 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         fs: &F,
     ) -> Result<String, Box<dyn Error>> {
         let mut all_objects = self.site.get_objects(fs)?;
+        let definitions = &self.site.object_definitions;
         if let Some(objects) = all_objects.get_mut(obj_type) {
             if let Some(object) = objects.iter_mut().find(|o| o.filename == filename) {
                 let object = obj_cb(object)?;
-                Ok(object.to_toml()?)
+                let def = definitions.get(obj_type).ok_or_else(|| {
+                    ArchivalError::new(&format!("missing object definition: {obj_type}"))
+                })?;
+                Ok(object.to_toml(def)?)
             } else {
                 Err(ArchivalError::new(&format!("filename not found: {}", filename)).into())
             }
@@ -445,7 +449,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 .into());
             }
             let object = Object::from_def(obj_def, &event.object, None, event.values)?;
-            fs.write_str(&path, object.to_toml()?)?;
+            fs.write_str(&path, object.to_toml(obj_def)?)?;
             self.site.invalidate_file(&path);
             Ok(())
         })?;
@@ -489,9 +493,10 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 .into());
             }
             let object = Object::from_def(obj_def, &event.filename, event.order, event.values)?;
-            fs.write_str(&path, object.to_toml()?).map_err(|error| {
-                ArchivalError::new(&format!("failed writing to {}: {}", path.display(), error))
-            })?;
+            fs.write_str(&path, object.to_toml(obj_def)?)
+                .map_err(|error| {
+                    ArchivalError::new(&format!("failed writing to {}: {}", path.display(), error))
+                })?;
             self.site.invalidate_file(&path);
             Ok(())
         })?;
