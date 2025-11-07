@@ -9,8 +9,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-#[cfg(feature = "verbose-logging")]
-use tracing::debug;
 use tracing::warn;
 use walkdir::WalkDir;
 
@@ -119,13 +117,6 @@ impl WatchableFileSystemAPI for NativeFileSystem {
                             {
                                 return false;
                             }
-                            let p = if let Ok(f) = fs::canonicalize(p) {
-                                f
-                            } else {
-                                #[cfg(feature = "verbose-logging")]
-                                debug!("Invalid path {}", p.display());
-                                return false;
-                            };
                             if let Ok(rel) = p.strip_prefix(&root) {
                                 for dir in &watch_paths {
                                     let mut dir = dir.to_string();

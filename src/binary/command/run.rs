@@ -103,6 +103,7 @@ impl BinaryCommand for Command {
             // Batch changes every 200ms
             if changed && Instant::now() - last_build > Duration::from_millis(200) {
                 last_build = Instant::now();
+                changed = false;
                 println!("Rebuilding");
                 let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
                 site.sync_static_files(&mut fs).unwrap();
