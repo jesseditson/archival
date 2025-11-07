@@ -112,6 +112,7 @@ dependencies = [
  "base64",
  "clap",
  "comrak",
+ "console",
  "csv",
  "ctrlc",
  "data-encoding",
