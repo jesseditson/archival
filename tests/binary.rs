@@ -66,7 +66,7 @@ mod binary_tests {
     #[traced_test]
     fn compatiblity_ok() -> Result<(), Box<dyn Error>> {
         assert!(matches!(
-            archival::binary::binary(get_args(vec!["compat", "0.10.0"]), None)?,
+            archival::binary::binary(get_args(vec!["compat", "0.12.0"]), None)?,
             ExitStatus::Ok
         ));
         Ok(())
