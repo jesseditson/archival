@@ -6,7 +6,7 @@ pub(crate) mod meta;
 pub use date_time::DateTime;
 pub use field_type::{FieldType, InvalidFieldError};
 pub use field_value::{FieldValue, ObjectValues};
-pub use file::File;
+pub use file::{DisplayType, File};
 pub use meta::MetaValue;
 use once_cell::sync::Lazy;
 use std::sync::{Mutex, MutexGuard};

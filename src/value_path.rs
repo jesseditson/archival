@@ -69,7 +69,8 @@ pub struct ValuePath(
 );
 
 impl ValuePath {
-    pub fn key(name: &str) -> ValuePathComponent {
+    pub fn key(name: impl AsRef<str>) -> ValuePathComponent {
+        let name = name.as_ref();
         if name.contains(".") {
             panic!("ValuePathComponent Keys may not contain a dot")
         }
@@ -580,6 +581,11 @@ impl ValuePath {
 
 impl From<&str> for ValuePath {
     fn from(value: &str) -> Self {
+        Self::from_string(value)
+    }
+}
+impl From<&String> for ValuePath {
+    fn from(value: &String) -> Self {
         Self::from_string(value)
     }
 }
