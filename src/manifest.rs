@@ -168,11 +168,14 @@ pub struct ManifestEditorType {
 impl From<&ManifestEditorType> for toml::Value {
     fn from(value: &ManifestEditorType) -> Self {
         let mut map = toml::map::Map::new();
+        map.insert("type".into(), value.alias_of.to_string().into());
         map.insert(
             "validate".into(),
             toml::Value::Array(value.validate.iter().map(|v| v.into()).collect()),
         );
-        map.insert("editor_url".into(), value.editor_url.to_string().into());
+        if !value.editor_url.is_empty() {
+            map.insert("editor_url".into(), value.editor_url.to_string().into());
+        }
         map.into()
     }
 }
@@ -704,14 +707,15 @@ impl Manifest {
         vec![
             ManifestField::ArchivalVersion,
             ManifestField::SiteUrl,
+            ManifestField::UploadPrefix,
             ManifestField::UploadsUrl,
             ManifestField::Prebuild,
             ManifestField::ObjectDefinitionFile,
+            ManifestField::StaticDir,
+            ManifestField::BuildDir,
             ManifestField::PagesDir,
             ManifestField::ObjectsDir,
-            ManifestField::BuildDir,
-            ManifestField::StaticDir,
-            ManifestField::ObjectsDir,
+            ManifestField::LayoutDir,
             ManifestField::EditorTypes,
             ManifestField::Metadata,
         ]
@@ -749,31 +753,41 @@ mod tests {
 
     use super::*;
 
+    use pretty_assertions::assert_eq;
+
     fn full_manifest_content() -> &'static str {
-        "archival_version = '0.8.0'
-        upload_prefix = 'site-repo-doid/'
-        site_url = 'https://jesse.onarchival.dev'
-        object_file = 'm_objects.toml'
-        prebuild = ['echo \"HELLO!\"']
-        objects = 'm_objects'
-        pages = 'm_pages'
-        build_dir = 'm_dist'
-        static_dir = 'm_public'
-        layout_dir = 'm_layout'
-        uploads_url = 'https://uploads.archival.dev'
-        [editor_types.day]
-        type = 'date'
-        validate = ['\\d{2}/\\d{2}/\\d{4}']
-        [editor_types.custom]
-        type = 'meta'
-        editor_url = 'https://editor.archival.dev/editors/json/editor.html'
-        [[editor_types.custom.validate]]
-        path = 'field_a'
-        validate = '.+'
-        [[editor_types.custom.validate]]
-        path = 'field_b'
-        validate = '.+'
-        "
+        r#"archival_version = "0.8.0"
+site_url = "https://jesse.onarchival.dev"
+upload_prefix = "site-repo-doid/"
+uploads_url = "https://uploads.archival.dev"
+prebuild = ['echo "HELLO!"']
+object_file = "m_objects.toml"
+static_dir = "m_public"
+build_dir = "m_dist"
+pages = "m_pages"
+objects = "m_objects"
+layout_dir = "m_layout"
+
+[editor_types.day]
+type = "date"
+validate = ['\d{2}/\d{2}/\d{4}']
+
+[editor_types.custom]
+type = "meta"
+editor_url = "https://editor.archival.dev/editors/json/editor.html"
+
+[[editor_types.custom.validate]]
+path = "field_a"
+validate = ".+"
+
+[[editor_types.custom.validate]]
+path = "field_b"
+validate = ".+"
+
+[metadata]
+foo = "bar"
+baz = "hello!"
+"#
     }
 
     #[test]
@@ -834,8 +848,14 @@ mod tests {
         println!("MTOML {}", manifest_output);
         assert!(manifest_output.contains("[editor_types.day]"));
         assert!(manifest_output.contains("[editor_types.custom]"));
-        assert!(manifest_output.contains("editor_url = \""));
+        assert!(manifest_output
+            .contains("editor_url = \"https://editor.archival.dev/editors/json/editor.html\""));
         assert!(manifest_output.contains("[[editor_types.custom.validate]]"));
+
+        assert_eq!(full_manifest_content(), manifest_output);
+
+        let parsed = Manifest::from_string(Path::new(""), manifest_output, None)?;
+        assert_eq!(parsed, m);
         Ok(())
     }
 }
