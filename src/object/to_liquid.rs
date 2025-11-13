@@ -1,10 +1,11 @@
-use crate::{fields::ObjectValues, FieldValue, ObjectDefinition};
+use crate::{fields::ObjectValues, FieldConfig, FieldValue, ObjectDefinition};
 use liquid::model::{KString, ObjectIndex};
 use liquid_core::{Value, ValueView};
 
 pub fn object_to_liquid(
     object_values: &ObjectValues,
     definition: &ObjectDefinition,
+    field_config: &FieldConfig,
 ) -> liquid::model::Object {
     let mut values: Vec<(KString, Value)> = definition
         .fields
@@ -14,7 +15,10 @@ pub fn object_to_liquid(
                 KString::from_ref(k.as_index()),
                 object_values
                     .get(k)
-                    .map(|v| v.to_value())
+                    .map(|v| match v {
+                        FieldValue::File(file) => file.to_liquid(field_config),
+                        _ => v.to_value(),
+                    })
                     .unwrap_or_else(|| Value::Nil),
             )
         })
@@ -27,7 +31,7 @@ pub fn object_to_liquid(
                 KString::from_ref(k.as_index()),
                 object_values
                     .get(k)
-                    .map(|v| v.typed_objects(child_def))
+                    .map(|v| v.typed_objects(child_def, field_config))
                     .unwrap_or_else(|| Value::Array(vec![])),
             )
         })

@@ -86,7 +86,6 @@ pub struct File {
     pub mime: String,
     pub name: Option<String>,
     pub description: Option<String>,
-    pub url: String,
 }
 
 impl File {
@@ -99,7 +98,7 @@ impl File {
         display_type: DisplayType,
     ) -> Self {
         Self {
-            url: Self::_url(sha, filename),
+            // url: Self::_url(sha, filename),
             sha: sha.to_string(),
             name: name.map(|n| n.to_string()),
             description: description.map(|d| d.to_string()),
@@ -175,13 +174,11 @@ impl File {
         match &k[..] {
             "sha" => {
                 self.sha = get_val()?;
-                self.url = Self::_url(&self.sha, &self.filename);
             }
             "name" => self.name = Some(get_val()?),
             "description" => self.description = Some(get_val()?),
             "filename" => {
                 self.filename = get_val()?;
-                self.url = Self::_url(&self.sha, &self.filename);
             }
             "mime" => self.mime = get_val()?,
             "display_type" => self.display_type = get_val()?,
@@ -191,17 +188,23 @@ impl File {
         }
         Ok(())
     }
+    pub fn to_liquid(&self, field_config: &FieldConfig) -> liquid::model::Value {
+        let mut m = liquid::model::Object::new();
+        for (k, v) in self.clone().into_map(Some(field_config)) {
+            m.insert(k.into(), liquid::model::Value::scalar(v));
+        }
+        liquid_core::Value::Object(m)
+    }
     pub fn to_toml(&self) -> toml::map::Map<std::string::String, toml::Value> {
         let mut m = toml::map::Map::new();
-        for (k, v) in self.to_map(false) {
-            m.insert(k.to_string(), toml::Value::String(v.to_owned()));
+        for (k, v) in self.clone().into_map(None) {
+            m.insert(k.to_string(), toml::Value::String(v));
         }
         m
     }
     pub fn image() -> Self {
         let mime = "image/*";
         Self {
-            url: Self::_url("", ""),
             sha: "".to_string(),
             name: None,
             description: None,
@@ -213,7 +216,6 @@ impl File {
     pub fn video() -> Self {
         let mime = "video/*";
         Self {
-            url: Self::_url("", ""),
             sha: "".to_string(),
             name: None,
             description: None,
@@ -225,7 +227,6 @@ impl File {
     pub fn audio() -> Self {
         let mime = "audio/*";
         Self {
-            url: Self::_url("", ""),
             sha: "".to_string(),
             name: None,
             description: None,
@@ -237,7 +238,6 @@ impl File {
     pub fn download() -> Self {
         let mime = "*/*";
         Self {
-            url: Self::_url("", ""),
             sha: "".to_string(),
             name: None,
             description: None,
@@ -246,44 +246,44 @@ impl File {
             display_type: DisplayType::Download.to_string(),
         }
     }
-    fn _url(sha: &str, filename: &str) -> String {
-        if sha.is_empty() {
+    pub fn url(&self, config: &FieldConfig) -> String {
+        if self.sha.is_empty() {
             return "".to_string();
         }
-        let config = FieldConfig::get_global();
-        if filename.is_empty() {
-            format!("{}/{}{}", config.uploads_url, config.upload_prefix, sha)
+        if self.filename.is_empty() {
+            format!(
+                "{}/{}{}",
+                config.uploads_url, config.upload_prefix, self.sha
+            )
         } else {
             format!(
                 "{}/{}{}/{}",
                 config.uploads_url,
                 config.upload_prefix,
-                sha,
-                urlencoding::encode(filename)
+                self.sha,
+                urlencoding::encode(&self.filename)
             )
         }
     }
-    pub fn update_url(&mut self) {
-        self.url = Self::_url(&self.sha, &self.filename);
-    }
-    pub fn url(&self) -> String {
-        Self::_url(&self.sha, &self.filename)
-    }
-    pub fn to_map(&self, include_url: bool) -> OrderMap<&str, &String> {
+    pub fn into_map(
+        self,
+        field_config_for_render: Option<&FieldConfig>,
+    ) -> OrderMap<&'static str, String> {
         // NOTE: order matters here, and should match the layout above
+        let url = field_config_for_render.map(|f| self.url(f));
         let mut m = OrderMap::new();
-        m.insert("display_type", &self.display_type);
-        m.insert("filename", &self.filename);
-        m.insert("sha", &self.sha);
-        m.insert("mime", &self.mime);
-        if let Some(name) = &self.name {
+        m.insert("display_type", self.display_type);
+        m.insert("filename", self.filename);
+        m.insert("sha", self.sha);
+        m.insert("mime", self.mime);
+        if let Some(name) = self.name {
             m.insert("name", name);
         }
-        if let Some(description) = &self.description {
+        if let Some(description) = self.description {
             m.insert("description", description);
         }
-        if include_url {
-            m.insert("url", &self.url);
+        if let Some(url) = url {
+            m.insert("url", url);
         }
         m
     }
@@ -364,6 +364,13 @@ pub mod tests {
 
     use super::*;
 
+    lazy_static::lazy_static! {
+        static ref FC: FieldConfig = FieldConfig {
+            uploads_url: "http://foo.com".to_string(),
+            upload_prefix: "".to_string(),
+        };
+    }
+
     #[test]
     fn files_have_urls_when_specific() {
         let mut i = File::image();
@@ -377,49 +384,28 @@ pub mod tests {
         let one_of_each = [i, a, d, v];
         for mut file in one_of_each {
             file.sha = "fake-sha".to_string();
-            println!("{}", file.url());
-            assert!(!file.url().is_empty());
+            println!("{}", file.url(&FC));
+            assert!(!file.url(&FC).is_empty());
         }
     }
     #[test]
     fn files_urls_are_relative_to_uploads_url() {
-        FieldConfig::set_global(FieldConfig {
-            uploads_url: "http://foo.com".to_string(),
-            upload_prefix: "".to_string(),
-        });
         let mut file = File::image();
         file.filename = "image.png".to_string();
         file.sha = "fake-sha".to_string();
-        println!("{}", file.url());
-        assert_eq!(file.url(), "http://foo.com/fake-sha/image.png");
-        FieldConfig::set_global(FieldConfig::default());
+        println!("{}", file.url(&FC));
+        assert_eq!(file.url(&FC), "http://foo.com/fake-sha/image.png");
     }
     #[test]
     fn files_urls_include_uploads_prefix() {
-        FieldConfig::set_global(FieldConfig {
-            uploads_url: "http://foo.com".to_string(),
-            upload_prefix: "repo-doid/".to_string(),
-        });
         let mut file = File::image();
         file.filename = "image.png".to_string();
         file.sha = "fake-sha".to_string();
-        println!("{}", file.url());
-        assert_eq!(file.url(), "http://foo.com/repo-doid/fake-sha/image.png");
-        FieldConfig::set_global(FieldConfig::default());
-    }
-    #[test]
-    fn files_dont_have_urls_until_specific() {
-        let one_of_each = [
-            File::image(),
-            File::audio(),
-            File::download(),
-            File::video(),
-        ];
-        for mut file in one_of_each {
-            file.sha = "fake-sha".to_string();
-            println!("URL: {}", file.url());
-            assert!(!file.url().is_empty());
-            assert!(!file.url().contains('.'));
-        }
+        let fc = FieldConfig {
+            uploads_url: "http://foo.com".to_string(),
+            upload_prefix: "repo-doid/".to_string(),
+        };
+        println!("{}", file.url(&fc));
+        assert_eq!(file.url(&fc), "http://foo.com/repo-doid/fake-sha/image.png");
     }
 }

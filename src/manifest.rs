@@ -14,7 +14,6 @@ use crate::{
     constants::{LAYOUT_DIR_NAME, NESTED_TYPES, SCHEMAS_DIR_NAME},
     file_system::FileSystemAPI,
     object::ValuePath,
-    FieldConfig,
 };
 
 use super::constants::{
@@ -315,9 +314,7 @@ impl fmt::Display for Manifest {
                 .as_ref()
                 .unwrap_or(&"unknown".to_owned()),
             self.site_url.as_ref().unwrap_or(&"none".to_owned()),
-            self.uploads_url
-                .as_ref()
-                .unwrap_or(&FieldConfig::get_global().uploads_url.to_string()),
+            self.uploads_url.as_ref().unwrap_or(&"none".to_owned()),
             self.object_definition_file.display(),
             self.objects_dir.display(),
             self.pages_dir.display(),
@@ -447,7 +444,7 @@ impl Manifest {
                 })?
                 .to_string()
         } else {
-            FieldConfig::get_global().upload_prefix.clone()
+            String::default()
         };
         manifest.upload_prefix = upload_prefix;
         // Optional fields

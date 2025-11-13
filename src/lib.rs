@@ -143,7 +143,6 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     }
     pub fn new(fs: F) -> Result<Self, Box<dyn Error>> {
         let site = Site::load(&fs, None)?;
-        FieldConfig::set_global(site.get_field_config(None)?);
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self {
             fs_mutex,
@@ -153,7 +152,6 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     }
     pub fn new_with_upload_prefix(fs: F, upload_prefix: &str) -> Result<Self, Box<dyn Error>> {
         let site = Site::load(&fs, Some(upload_prefix))?;
-        FieldConfig::set_global(site.get_field_config(Some(upload_prefix))?);
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self {
             fs_mutex,
@@ -163,7 +161,6 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     }
     pub fn new_with_field_config(fs: F, field_config: FieldConfig) -> Result<Self, Box<dyn Error>> {
         let site = Site::load(&fs, Some(&field_config.upload_prefix))?;
-        FieldConfig::set_global(field_config);
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self {
             fs_mutex,
@@ -761,12 +758,13 @@ mod lib {
             .get_in_object(fp)
             .unwrap();
         assert!(matches!(m, FieldValue::File(_)));
+        let fc = &archival.site.field_config;
         if let FieldValue::File(img) = m {
             assert_eq!(img.filename, "test.jpg");
             assert_eq!(img.mime, "image/jpg");
             assert_eq!(img.name, Some("Test".to_string()));
             assert_eq!(img.sha, "test-sha");
-            assert_eq!(img.url, "test://uploads-url/test-sha/test.jpg");
+            assert_eq!(img.url(fc), "test://uploads-url/test-sha/test.jpg");
         }
         archival.build(BuildOptions::default())?;
         let dist_files = archival
@@ -964,12 +962,12 @@ mod lib {
 
     #[test]
     #[traced_test]
-    fn add_child() -> Result<(), Box<dyn Error>> {
+    fn add_child() {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
-        unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs)?;
-        archival.build(BuildOptions::default())?;
+        unpack_zip(zip.to_vec(), &mut fs).unwrap();
+        let archival = Archival::new(fs).unwrap();
+        archival.build(BuildOptions::default()).unwrap();
         let post_html = archival
             .fs_mutex
             .with_fs(|fs| {
@@ -980,7 +978,8 @@ mod lib {
                         .build_dir
                         .join(Path::new("post/a-post.html")),
                 )
-            })?
+            })
+            .unwrap()
             .unwrap();
         // println!("post: {}", post_html);
         let rendered_links: Vec<_> = post_html.match_indices("<a href=").collect();
@@ -1007,7 +1006,7 @@ mod lib {
                 Some(BuildOptions::no_static()),
             )
             .unwrap();
-        let objects = archival.get_objects()?;
+        let objects = archival.get_objects().unwrap();
         let posts = objects.get("post").unwrap();
         let mut found = false;
         for post in posts {
@@ -1032,7 +1031,8 @@ mod lib {
                         .build_dir
                         .join(Path::new("post/a-post.html")),
                 )
-            })?
+            })
+            .unwrap()
             .unwrap();
         println!("post: {}", post_html);
         let rendered_links: Vec<_> = post_html.match_indices("<a href=").collect();
@@ -1042,7 +1042,6 @@ mod lib {
         assert_eq!(rendered_link_url.len(), 1);
         let rendered_link_name: Vec<_> = post_html.match_indices("another link").collect();
         assert_eq!(rendered_link_name.len(), 1);
-        Ok(())
     }
 
     #[test]

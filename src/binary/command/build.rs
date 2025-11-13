@@ -1,5 +1,5 @@
 use super::BinaryCommand;
-use crate::{binary::ExitStatus, file_system_stdlib, site::Site, FieldConfig};
+use crate::{binary::ExitStatus, file_system_stdlib, site::Site};
 use clap::{arg, value_parser, ArgMatches};
 use std::{
     path::{Path, PathBuf},
@@ -30,7 +30,6 @@ impl BinaryCommand for Command {
         let mut fs = file_system_stdlib::NativeFileSystem::new(root_dir);
         let upload_prefix = args.get_one::<String>("upload-prefix").map(|s| s.as_str());
         let mut site = Site::load(&fs, upload_prefix)?;
-        FieldConfig::set_global(site.get_field_config(upload_prefix)?);
         println!("Building site: {}", &site);
         if let Some(build_dir_arg) = args.get_one::<PathBuf>("build-dir") {
             let cwd = std::env::current_dir().unwrap();

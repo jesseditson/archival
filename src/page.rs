@@ -1,7 +1,7 @@
 use crate::{
     object::{Object, ObjectEntry},
     object_definition::ObjectDefinition,
-    ObjectDefinitions, ObjectMap,
+    FieldConfig, ObjectDefinitions, ObjectMap,
 };
 use liquid::{model::ScalarCow, ValueView};
 use liquid_core::Value;
@@ -205,6 +205,7 @@ impl<'a> Page<'a> {
         parser: &liquid::Parser,
         objects_map: &ObjectMap,
         definitions: &ObjectDefinitions,
+        field_config: &FieldConfig,
     ) -> Result<String, Box<dyn Error>> {
         #[cfg(feature = "verbose-logging")]
         tracing::debug!("rendering {}", self.name);
@@ -215,8 +216,10 @@ impl<'a> Page<'a> {
                 .get(name)
                 .unwrap_or_else(|| panic!("missing object definition {}", name));
             let values = match obj_entry {
-                ObjectEntry::List(l) => Value::array(l.iter().map(|o| o.liquid_object(definition))),
-                ObjectEntry::Object(o) => o.liquid_object(definition),
+                ObjectEntry::List(l) => {
+                    Value::array(l.iter().map(|o| o.liquid_object(definition, field_config)))
+                }
+                ObjectEntry::Object(o) => o.liquid_object(definition, field_config),
             };
             objects.insert(name.into(), values.clone());
             globals.insert(
@@ -228,7 +231,9 @@ impl<'a> Page<'a> {
         globals.insert("objects".into(), objects.into());
         if let Some(template_info) = &self.template {
             let template = parser.parse(&template_info.content)?;
-            let mut object_vals = match template_info.object.liquid_object(template_info.definition)
+            let mut object_vals = match template_info
+                .object
+                .liquid_object(template_info.definition, field_config)
             {
                 liquid::model::Value::Object(v) => Ok(v),
                 _ => Err(InvalidPageError),
@@ -479,6 +484,10 @@ here is a liquid variable: {{site_url}}
         let globals = RenderGlobals {
             site_url: "https://foo.bar".into(),
         };
+        let field_config = FieldConfig {
+            uploads_url: "https://uploads.foo.bar".into(),
+            upload_prefix: "something/".into(),
+        };
         let objects_map = get_objects_map();
         let definition_map = get_definition_map();
         let page = Page::new(
@@ -488,7 +497,7 @@ here is a liquid variable: {{site_url}}
             &globals,
             Path::new("objects/home.toml"),
         );
-        let rendered = page.render(&liquid_parser, &objects_map, &definition_map)?;
+        let rendered = page.render(&liquid_parser, &objects_map, &definition_map, &field_config)?;
         println!("rendered: {}", rendered);
         assert!(rendered.contains("name: home"), "filtered object");
         assert!(
@@ -524,6 +533,10 @@ here is a liquid variable: {{site_url}}
         let globals = RenderGlobals {
             site_url: "https://foo.bar".into(),
         };
+        let field_config = FieldConfig {
+            uploads_url: "https://uploads.foo.bar".into(),
+            upload_prefix: "something/".into(),
+        };
         let definition_map = get_definition_map();
         let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let objects_map = get_objects_map();
@@ -539,7 +552,7 @@ here is a liquid variable: {{site_url}}
             &globals,
             Path::new("objects/template.toml"),
         );
-        let rendered = page.render(&liquid_parser, &objects_map, &definition_map)?;
+        let rendered = page.render(&liquid_parser, &objects_map, &definition_map, &field_config)?;
         println!("rendered: {}", rendered);
         assert!(rendered.contains("name: Tormenta Rey"), "root field");
         assert!(

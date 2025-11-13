@@ -1,5 +1,4 @@
 use super::BinaryCommand;
-use crate::FieldConfig;
 use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, server, site::Site};
 use clap::{arg, value_parser, ArgMatches};
 use console::{style, Term};
@@ -48,7 +47,6 @@ impl BinaryCommand for Command {
             &fs,
             args.get_one::<String>("upload-prefix").map(|s| s.as_str()),
         )?;
-        FieldConfig::set_global(site.get_field_config(None)?);
         site.sync_static_files(&mut fs)?;
         let initial_build = site.build(&mut fs);
         let mut init_message = format!("Watching site: {}", &site);

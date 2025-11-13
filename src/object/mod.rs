@@ -6,6 +6,7 @@ use crate::{
     object_definition::ObjectDefinition,
     reserved_fields::{self, is_reserved_field},
     util::integer_decode,
+    FieldConfig,
 };
 use liquid::{
     model::{KString, Value},
@@ -261,8 +262,12 @@ impl Object {
         toml::to_string_pretty(&write_obj)
     }
 
-    pub fn liquid_object(&self, definition: &ObjectDefinition) -> Value {
-        let mut values = object_to_liquid(&self.values, definition);
+    pub fn liquid_object(
+        &self,
+        definition: &ObjectDefinition,
+        field_config: &FieldConfig,
+    ) -> Value {
+        let mut values = object_to_liquid(&self.values, definition, field_config);
         // Reserved/special
         if values.contains_key("path") {
             panic!("Objects may not define path key.");
@@ -361,15 +366,18 @@ mod tests {
             let vf = video.get("video").unwrap();
             assert!(matches!(vf, FieldValue::File(_)));
             println!("{:?}", vf);
-            let fc = FieldConfig::get_global();
+            let fc = FieldConfig {
+                uploads_url: "test://foo.com".to_string(),
+                upload_prefix: "butt/".to_string(),
+            };
             if let FieldValue::File(vf) = vf {
                 assert_eq!(vf.sha, "fake-sha");
                 assert_eq!(vf.name, Some("Video Name".to_string()));
                 assert_eq!(vf.filename, "video.mp4");
                 assert_eq!(vf.mime, "video/mpeg4");
                 assert_eq!(
-                    vf.url,
-                    format!("{}{}/fake-sha/video.mp4", fc.upload_prefix, fc.uploads_url)
+                    vf.url(&fc),
+                    format!("{}/{}fake-sha/video.mp4", fc.uploads_url, fc.upload_prefix)
                 );
             }
         }

@@ -1,6 +1,6 @@
 use crate::object::to_liquid::object_to_liquid;
 use crate::util::integer_decode;
-use crate::ObjectDefinition;
+use crate::{FieldConfig, ObjectDefinition};
 
 use super::file::File;
 use super::meta::Meta;
@@ -183,12 +183,18 @@ impl FieldValue {
         })
     }
 
-    pub fn typed_objects(&self, definition: &ObjectDefinition) -> model::Value {
+    pub fn typed_objects(
+        &self,
+        definition: &ObjectDefinition,
+        field_config: &FieldConfig,
+    ) -> model::Value {
         if let FieldValue::Objects(children) = self {
             model::Value::Array(
                 children
                     .iter()
-                    .map(|child| model::Value::Object(object_to_liquid(child, definition)))
+                    .map(|child| {
+                        model::Value::Object(object_to_liquid(child, definition, field_config))
+                    })
                     .collect(),
             )
         } else {
@@ -207,7 +213,7 @@ impl FieldValue {
 
 impl fmt::Display for FieldValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_string())
+        write!(f, "{}", self.as_string(Some(&FieldConfig::default())))
     }
 }
 
@@ -287,7 +293,7 @@ impl ValueView for FieldValue {
     }
     /// Interpret as a string.
     fn to_kstr(&self) -> model::KStringCow<'_> {
-        model::KStringCow::from(self.as_string())
+        model::KStringCow::from(self.as_string(None))
     }
     /// Query the value's state
     fn query_state(&self, state: model::State) -> bool {
@@ -325,7 +331,6 @@ impl ValueView for FieldValue {
     }
     fn as_object(&self) -> Option<&dyn model::ObjectView> {
         match self {
-            FieldValue::File(f) => Some(f),
             FieldValue::Meta(m) => Some(m),
             _ => None,
         }
@@ -340,7 +345,7 @@ impl ValueView for FieldValue {
             FieldValue::Date(_) => self.as_scalar().to_value(),
             FieldValue::Boolean(_) => self.as_scalar().to_value(),
             FieldValue::Objects(_) => self.as_array().to_value(),
-            FieldValue::File(_) => self.as_object().to_value(),
+            FieldValue::File(_) => panic!("files cannot be rendered via value parsing"),
             FieldValue::Meta(_) => self.as_object().to_value(),
             FieldValue::Null => self.as_scalar().to_value(),
         }
@@ -539,7 +544,7 @@ impl FieldValue {
         }
     }
 
-    fn as_string(&self) -> String {
+    fn as_string(&self, config: Option<&FieldConfig>) -> String {
         match self {
             FieldValue::String(s) => s.clone(),
             FieldValue::Enum(s) => s.clone(),
@@ -548,7 +553,12 @@ impl FieldValue {
             FieldValue::Date(d) => d.as_liquid_datetime().to_rfc2822(),
             FieldValue::Boolean(b) => b.to_string(),
             FieldValue::Objects(o) => format!("{:?}", o),
-            FieldValue::File(f) => format!("{:?}", f.to_map(true)),
+            FieldValue::File(f) => format!(
+                "{:?}",
+                config
+                    .map(|c| f.clone().into_map(Some(c)))
+                    .expect("cannot render files without a config")
+            ),
             FieldValue::Meta(m) => format!("{:?}", serde_json::Value::from(m)),
             FieldValue::Null => "null".to_string(),
         }

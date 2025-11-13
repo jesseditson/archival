@@ -1,7 +1,6 @@
 use super::BinaryCommand;
 use crate::{
     binary::ExitStatus, file_system_stdlib, object::ObjectEntry, page::debug_context, site::Site,
-    FieldConfig,
 };
 use clap::ArgMatches;
 use liquid_core::Value;
@@ -27,7 +26,6 @@ impl BinaryCommand for Command {
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let site = Site::load(&fs, Some(""))?;
-        FieldConfig::set_global(site.get_field_config(None)?);
         let mut objects: OrderMap<String, liquid::model::Value> = OrderMap::new();
         let definitions = &site.object_definitions;
         for (name, obj_entry) in site.get_objects(&fs)? {
@@ -35,8 +33,11 @@ impl BinaryCommand for Command {
                 .get(&name)
                 .unwrap_or_else(|| panic!("missing object definition {}", name));
             let values = match obj_entry {
-                ObjectEntry::List(l) => Value::array(l.iter().map(|o| o.liquid_object(definition))),
-                ObjectEntry::Object(o) => o.liquid_object(definition),
+                ObjectEntry::List(l) => Value::array(
+                    l.iter()
+                        .map(|o| o.liquid_object(definition, &site.field_config)),
+                ),
+                ObjectEntry::Object(o) => o.liquid_object(definition, &site.field_config),
             };
             objects.insert(name.to_string(), values);
         }

@@ -52,6 +52,7 @@ pub enum BuildError {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Site {
     pub object_definitions: ObjectDefinitions,
+    pub field_config: FieldConfig,
     pub manifest: Manifest,
 
     #[serde(skip)]
@@ -133,6 +134,7 @@ impl Site {
         let objects = ObjectDefinition::from_table(&objects_table, &manifest.editor_types)?;
 
         Ok(Site {
+            field_config: FieldConfig::from_manifest(Some(&manifest), upload_prefix)?,
             manifest,
             object_definitions: objects,
             obj_cache: RwLock::new(HashMap::new()),
@@ -232,13 +234,6 @@ impl Site {
             serde_json::to_string_pretty(&schema).unwrap(),
         )?;
         Ok(())
-    }
-
-    pub fn get_field_config(
-        &self,
-        upload_prefix: Option<&str>,
-    ) -> Result<FieldConfig, ArchivalError> {
-        FieldConfig::from_manifest(Some(&self.manifest), upload_prefix)
     }
 
     #[instrument(skip(fs))]
@@ -543,6 +538,7 @@ impl Site {
                                 &template_path,
                                 build_dir,
                                 &self.object_definitions,
+                                &self.field_config,
                                 &all_objects,
                                 fs,
                                 &globals,
@@ -597,6 +593,7 @@ impl Site {
                         page_type,
                         build_dir,
                         &self.object_definitions,
+                        &self.field_config,
                         &all_objects,
                         fs,
                         &globals,
@@ -632,6 +629,7 @@ impl Site {
         template_path: &PathBuf,
         build_dir: &PathBuf,
         object_definitions: &ObjectDefinitions,
+        field_config: &FieldConfig,
         all_objects: &ObjectMap,
         fs: &mut T,
         globals: &RenderGlobals,
@@ -647,7 +645,7 @@ impl Site {
             globals,
             template_path,
         );
-        let render_o = page.render(liquid_parser, all_objects, object_definitions);
+        let render_o = page.render(liquid_parser, all_objects, object_definitions, field_config);
         if render_o.is_err() {
             warn!("failed rendering {}", object.filename);
         }
@@ -682,6 +680,7 @@ impl Site {
         page_type: TemplateType,
         build_dir: &PathBuf,
         object_definitions: &ObjectDefinitions,
+        field_config: &FieldConfig,
         all_objects: &ObjectMap,
         fs: &mut T,
         globals: &RenderGlobals,
@@ -696,7 +695,8 @@ impl Site {
                 globals,
                 file_path,
             );
-            let render_o = page.render(liquid_parser, all_objects, object_definitions);
+            let render_o =
+                page.render(liquid_parser, all_objects, object_definitions, field_config);
             if render_o.is_err() {
                 warn!("failed rendering {}", file_path.display());
             }

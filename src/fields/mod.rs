@@ -8,14 +8,11 @@ pub use field_type::{FieldType, InvalidFieldError};
 pub use field_value::{FieldValue, ObjectValues};
 pub use file::{DisplayType, File};
 pub use meta::MetaValue;
-use once_cell::sync::Lazy;
-use std::sync::{Mutex, MutexGuard};
+use serde::{Deserialize, Serialize};
 
 use crate::{constants::UPLOADS_URL, manifest::Manifest, ArchivalError};
 
-static CONFIG: Lazy<Mutex<FieldConfig>> = Lazy::new(|| Mutex::new(FieldConfig::default()));
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldConfig {
     pub uploads_url: String,
     pub upload_prefix: String,
@@ -55,12 +52,5 @@ impl FieldConfig {
             uploads_url,
             upload_prefix: "".to_owned(),
         }
-    }
-    pub(crate) fn get_global<'a>() -> MutexGuard<'a, FieldConfig> {
-        CONFIG.lock().expect("Invalid FieldConfig::get access")
-    }
-    pub(crate) fn set_global(fc: FieldConfig) {
-        let mut c = CONFIG.lock().expect("Invalid FieldConfig::set call");
-        *c = fc;
     }
 }

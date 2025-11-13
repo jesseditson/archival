@@ -17,7 +17,6 @@ export type File = {
     "mime": string;
     "name": (string | null);
     "description": (string | null);
-    "url": string;
 };
 export type MetaValue = ({
     "String": string;

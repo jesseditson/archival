@@ -122,6 +122,7 @@ dependencies = [
  "indefinite",
  "indicatif",
  "jsonschema",
+ "lazy_static",
  "liquid",
  "liquid-core",
  "liquid-lib",

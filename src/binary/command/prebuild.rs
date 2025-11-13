@@ -1,5 +1,5 @@
 use super::BinaryCommand;
-use crate::{binary::ExitStatus, file_system_stdlib, site::Site, FieldConfig};
+use crate::{binary::ExitStatus, file_system_stdlib, site::Site};
 use clap::ArgMatches;
 use std::{
     path::Path,
@@ -22,7 +22,6 @@ impl BinaryCommand for Command {
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
         let site = Site::load(&fs, Some(""))?;
-        FieldConfig::set_global(site.get_field_config(None)?);
         for s in site.manifest.prebuild {
             let cmd_parts: Vec<&str> = s.split_whitespace().collect();
             if !cmd_parts.is_empty() {
