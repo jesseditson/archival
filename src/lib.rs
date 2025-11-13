@@ -159,15 +159,6 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             last_build_id: AtomicU64::new(0),
         })
     }
-    pub fn new_with_field_config(fs: F, field_config: FieldConfig) -> Result<Self, Box<dyn Error>> {
-        let site = Site::load(&fs, Some(&field_config.upload_prefix))?;
-        let fs_mutex = FileSystemMutex::init(fs);
-        Ok(Self {
-            fs_mutex,
-            site,
-            last_build_id: AtomicU64::new(0),
-        })
-    }
     pub fn build(&self, options: BuildOptions) -> Result<ArchivalBuildId, Box<dyn Error>> {
         let build_id = self.fs_mutex.with_fs(|fs| {
             if !options.skip_static {
