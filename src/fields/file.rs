@@ -1,5 +1,5 @@
-use crate::fields::FieldConfig;
-use liquid::{ObjectView, ValueView};
+use crate::{fields::FieldConfig, object::Renderable};
+use liquid::{model, ObjectView, ValueView};
 use mime_guess::{mime::FromStrError, Mime, MimeGuess};
 use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,8 @@ pub enum FileError {
     MissingField(String),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Deserialize, Serialize)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum DisplayType {
     Image,
     Video,
@@ -56,18 +57,64 @@ impl From<&str> for DisplayType {
         }
     }
 }
+impl ValueView for DisplayType {
+    fn as_scalar(&self) -> Option<model::ScalarCow<'_>> {
+        Some(self.to_kstr().into())
+    }
+    fn as_debug(&self) -> &dyn std::fmt::Debug {
+        self
+    }
 
-#[cfg(feature = "typescript")]
-mod typedefs {
-    use typescript_type_def::{
-        type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
-        TypeDef,
-    };
-    pub struct DisplayTypeType;
-    impl TypeDef for DisplayTypeType {
-        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
-            r#ref: TypeExpr::ident(Ident("\"image\"|\"audio\"|\"video\"|\"upload\"")),
-        });
+    fn render(&self) -> liquid::model::DisplayCow<'_> {
+        model::DisplayCow::Owned(Box::new(self))
+    }
+
+    fn source(&self) -> liquid::model::DisplayCow<'_> {
+        model::DisplayCow::Owned(Box::new(self))
+    }
+
+    fn type_name(&self) -> &'static str {
+        "DisplayType"
+    }
+
+    fn query_state(&self, _state: liquid::model::State) -> bool {
+        false
+    }
+
+    fn to_kstr(&self) -> liquid::model::KStringCow<'_> {
+        model::KStringCow::from(self.to_str())
+    }
+
+    fn to_value(&self) -> liquid_core::Value {
+        self.as_scalar().to_value()
+    }
+}
+
+#[derive(
+    Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq, PartialOrd, Hash,
+)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
+pub struct RenderedFile {
+    pub display_type: DisplayType,
+    pub filename: String,
+    pub sha: String,
+    pub mime: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub url: String,
+}
+impl RenderedFile {
+    pub fn from_file(file: File, field_config: &FieldConfig) -> Self {
+        let url = file.url(field_config);
+        Self {
+            display_type: file.display_type,
+            filename: file.filename,
+            sha: file.sha,
+            mime: file.mime,
+            name: file.name,
+            description: file.description,
+            url,
+        }
     }
 }
 
@@ -76,11 +123,7 @@ mod typedefs {
 )]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct File {
-    #[cfg_attr(
-        feature = "typescript",
-        type_def(type_of = "typedefs::DisplayTypeType")
-    )]
-    pub display_type: String,
+    pub display_type: DisplayType,
     pub filename: String,
     pub sha: String,
     pub mime: String,
@@ -104,7 +147,7 @@ impl File {
             description: description.map(|d| d.to_string()),
             filename: filename.to_string(),
             mime: mime.to_string(),
-            display_type: display_type.to_string(),
+            display_type,
         }
     }
     pub fn from_mime(mime_str: &str) -> Result<Self, FromStrError> {
@@ -129,14 +172,14 @@ impl File {
         f.mime = m_type.to_string();
         f
     }
-    pub fn get_key(&self, str: &str) -> Option<&String> {
+    pub fn get_key(&self, str: &str) -> Option<&str> {
         match str {
             "sha" => Some(&self.sha),
-            "name" => self.name.as_ref(),
-            "description" => self.description.as_ref(),
+            "name" => self.name.as_deref(),
+            "description" => self.description.as_deref(),
             "filename" => Some(&self.filename),
             "mime" => Some(&self.mime),
-            "display_type" => Some(&self.display_type),
+            "display_type" => Some(self.display_type.to_str()),
             _ => None,
         }
     }
@@ -181,7 +224,7 @@ impl File {
                 self.filename = get_val()?;
             }
             "mime" => self.mime = get_val()?,
-            "display_type" => self.display_type = get_val()?,
+            "display_type" => self.display_type = DisplayType::from(get_val()?.as_str()),
             _ => {
                 warn!("unknown file field {}", k);
             }
@@ -210,7 +253,7 @@ impl File {
             description: None,
             filename: "".to_string(),
             mime: mime.to_string(),
-            display_type: DisplayType::Image.to_string(),
+            display_type: DisplayType::Image,
         }
     }
     pub fn video() -> Self {
@@ -221,7 +264,7 @@ impl File {
             description: None,
             filename: "".to_string(),
             mime: mime.to_string(),
-            display_type: DisplayType::Video.to_string(),
+            display_type: DisplayType::Video,
         }
     }
     pub fn audio() -> Self {
@@ -232,7 +275,7 @@ impl File {
             description: None,
             filename: "".to_string(),
             mime: mime.to_string(),
-            display_type: DisplayType::Audio.to_string(),
+            display_type: DisplayType::Audio,
         }
     }
     pub fn download() -> Self {
@@ -243,7 +286,7 @@ impl File {
             description: None,
             filename: "".to_string(),
             mime: mime.to_string(),
-            display_type: DisplayType::Download.to_string(),
+            display_type: DisplayType::Download,
         }
     }
     pub fn url(&self, config: &FieldConfig) -> String {
@@ -272,7 +315,7 @@ impl File {
         // NOTE: order matters here, and should match the layout above
         let url = field_config_for_render.map(|f| self.url(f));
         let mut m = OrderMap::new();
-        m.insert("display_type", self.display_type);
+        m.insert("display_type", self.display_type.to_string());
         m.insert("filename", self.filename);
         m.insert("sha", self.sha);
         m.insert("mime", self.mime);
@@ -286,6 +329,13 @@ impl File {
             m.insert("url", url);
         }
         m
+    }
+}
+
+impl Renderable for File {
+    type Output = RenderedFile;
+    fn rendered(self, field_config: &FieldConfig) -> Self::Output {
+        RenderedFile::from_file(self, field_config)
     }
 }
 

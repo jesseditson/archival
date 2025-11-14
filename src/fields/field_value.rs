@@ -1,4 +1,6 @@
+use crate::fields::file::RenderedFile;
 use crate::object::to_liquid::object_to_liquid;
+use crate::object::Renderable;
 use crate::util::integer_decode;
 use crate::{FieldConfig, ObjectDefinition};
 
@@ -27,7 +29,10 @@ pub enum FieldValueError {
     InvalidValue(String, String),
 }
 
+// These are BTrees rather than OrderMaps because we only serialize them when we
+// have access to the definition, which has the field order.
 pub type ObjectValues = BTreeMap<String, FieldValue>;
+pub type RenderedObjectValues = BTreeMap<String, RenderedFieldValue>;
 
 #[cfg(feature = "typescript")]
 mod typedefs {
@@ -35,9 +40,17 @@ mod typedefs {
         type_expr::{Ident, NativeTypeInfo, TypeExpr, TypeInfo},
         TypeDef,
     };
+    pub struct RenderedObjectValuesTypeDef;
+    impl TypeDef for RenderedObjectValuesTypeDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
+            r#ref: TypeExpr::ident(Ident("Record<string, RenderedFieldValue>[]")),
+        });
+    }
     pub struct ObjectValuesTypeDef;
     impl TypeDef for ObjectValuesTypeDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
             r#ref: TypeExpr::ident(Ident("Record<string, FieldValue>[]")),
         });
     }
@@ -60,13 +73,41 @@ macro_rules! compare_values {
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
+pub enum RenderedFieldValue {
+    String(String),
+    Enum(String),
+    Markdown(String),
+    Number(f64),
+    Date(DateTime),
+    Objects(
+        #[cfg_attr(
+            feature = "typescript",
+            type_def(type_of = "typedefs::RenderedObjectValuesTypeDef")
+        )]
+        Vec<RenderedObjectValues>,
+    ),
+    Boolean(bool),
+    File(RenderedFile),
+    Meta(Meta),
+    Null,
+}
+impl Hash for RenderedFieldValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            RenderedFieldValue::Number(n) => integer_decode(*n).hash(state),
+            v => v.hash(state),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldValue {
     String(String),
     Enum(String),
     Markdown(String),
     Number(f64),
     Date(DateTime),
-    // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
     Objects(
         #[cfg_attr(
             feature = "typescript",
@@ -88,6 +129,33 @@ impl Hash for FieldValue {
         match self {
             FieldValue::Number(n) => integer_decode(*n).hash(state),
             v => v.hash(state),
+        }
+    }
+}
+
+impl Renderable for FieldValue {
+    type Output = RenderedFieldValue;
+    fn rendered(self, field_config: &FieldConfig) -> Self::Output {
+        match self {
+            FieldValue::String(s) => RenderedFieldValue::String(s),
+            FieldValue::Enum(e) => RenderedFieldValue::Enum(e),
+            FieldValue::Markdown(m) => RenderedFieldValue::Markdown(m),
+            FieldValue::Number(n) => RenderedFieldValue::Number(n),
+            FieldValue::Date(date) => RenderedFieldValue::Date(date),
+            FieldValue::Objects(obj) => RenderedFieldValue::Objects(
+                obj.into_iter()
+                    .map(|objects| {
+                        objects
+                            .into_iter()
+                            .map(|(k, v)| (k, v.rendered(field_config)))
+                            .collect()
+                    })
+                    .collect(),
+            ),
+            FieldValue::Boolean(b) => RenderedFieldValue::Boolean(b),
+            FieldValue::File(file) => RenderedFieldValue::File(file.rendered(field_config)),
+            FieldValue::Meta(m) => RenderedFieldValue::Meta(m),
+            FieldValue::Null => todo!(),
         }
     }
 }

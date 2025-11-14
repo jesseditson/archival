@@ -5,7 +5,7 @@ use crate::{
     constants::MANIFEST_FILE_NAME,
     liquid_parser::{self, PARTIAL_FILE_NAME_RE},
     manifest::Manifest,
-    object::{Object, ObjectEntry},
+    object::{Object, ObjectEntry, Renderable, RenderedObject, RenderedObjectMap},
     object_definition::{ObjectDefinition, ObjectDefinitions},
     page::{Page, RenderGlobals, TemplateType},
     read_toml::read_toml,
@@ -242,6 +242,35 @@ impl Site {
             fs,
             Some(|a: &_, b: &_| get_order(a).partial_cmp(&get_order(b)).unwrap()),
         )
+    }
+    #[instrument(skip(fs))]
+    pub fn get_rendered_objects<T: FileSystemAPI>(
+        &self,
+        fs: &T,
+    ) -> Result<RenderedObjectMap, Box<dyn Error>> {
+        let objects = self.get_objects(fs)?;
+        Ok(objects.rendered(&self.field_config))
+    }
+
+    #[instrument(skip(fs))]
+    pub fn get_rendered_object<T: FileSystemAPI>(
+        &self,
+        object_name: &str,
+        filename: Option<&str>,
+        fs: &T,
+    ) -> Result<RenderedObject, Box<dyn Error>> {
+        self.get_object(object_name, filename, fs)
+            .map(|o| o.rendered(&self.field_config))
+    }
+
+    #[instrument(skip(fs, sort))]
+    pub fn get_rendered_objects_sorted<T: FileSystemAPI>(
+        &self,
+        fs: &T,
+        sort: Option<impl Fn(&Object, &Object) -> Ordering>,
+    ) -> Result<RenderedObjectMap, Box<dyn Error>> {
+        let objects = self.get_objects_sorted(fs, sort)?;
+        Ok(objects.rendered(&self.field_config))
     }
 
     #[instrument]

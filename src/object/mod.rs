@@ -1,7 +1,9 @@
 pub use crate::value_path::{ValuePath, ValuePathComponent};
 use crate::{
     events::AddObjectValue,
-    fields::{FieldType, FieldValue, InvalidFieldError, ObjectValues},
+    fields::{
+        field_value::RenderedObjectValues, FieldType, FieldValue, InvalidFieldError, ObjectValues,
+    },
     manifest::{EditorTypes, ManifestEditorTypeValidator},
     object_definition::ObjectDefinition,
     reserved_fields::{self, is_reserved_field},
@@ -20,9 +22,24 @@ use toml::Table;
 use tracing::{instrument, warn};
 mod object_entry;
 pub(crate) mod to_liquid;
-pub use object_entry::ObjectEntry;
+pub use object_entry::{ObjectEntry, RenderedObjectEntry};
 
 pub type ObjectMap = OrderMap<String, ObjectEntry>;
+pub type RenderedObjectMap = OrderMap<String, RenderedObjectEntry>;
+
+pub trait Renderable {
+    type Output;
+    fn rendered(self, field_config: &FieldConfig) -> Self::Output;
+}
+
+impl Renderable for ObjectMap {
+    type Output = RenderedObjectMap;
+    fn rendered(self, field_config: &FieldConfig) -> Self::Output {
+        self.into_iter()
+            .map(|(k, o)| (k, o.rendered(field_config)))
+            .collect()
+    }
+}
 
 #[cfg(feature = "typescript")]
 pub mod typedefs {
@@ -31,24 +48,42 @@ pub mod typedefs {
         TypeDef,
     };
 
-    use crate::object::ObjectEntry;
-    pub struct ObjectMapDef;
-    impl TypeDef for ObjectMapDef {
+    use crate::object::RenderedObjectEntry;
+    pub struct RenderedObjectMapDef;
+    impl TypeDef for RenderedObjectMapDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
             r#ref: TypeExpr::Name(TypeName {
                 path: &[],
                 name: Ident("Record"),
                 generic_args: &[
                     TypeExpr::Ref(&String::INFO),
-                    TypeExpr::Ref(&ObjectEntry::INFO),
+                    TypeExpr::Ref(&RenderedObjectEntry::INFO),
                 ],
             }),
         });
     }
 }
 
-#[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
+pub struct RenderedObject {
+    pub filename: String,
+    pub object_name: String,
+    pub order: Option<f64>,
+    pub path: String,
+    pub values: RenderedObjectValues,
+}
+impl Hash for RenderedObject {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.filename.hash(state);
+        self.object_name.hash(state);
+        self.order.map(integer_decode).hash(state);
+        self.path.hash(state);
+        self.values.hash(state);
+    }
+}
+
+#[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq)]
 pub struct Object {
     pub filename: String,
     pub object_name: String,
@@ -63,6 +98,22 @@ impl Hash for Object {
         self.order.map(integer_decode).hash(state);
         self.path.hash(state);
         self.values.hash(state);
+    }
+}
+impl Renderable for Object {
+    type Output = RenderedObject;
+    fn rendered(self, field_config: &FieldConfig) -> Self::Output {
+        Self::Output {
+            filename: self.filename,
+            object_name: self.object_name,
+            order: self.order,
+            path: self.path,
+            values: self
+                .values
+                .into_iter()
+                .map(|(k, v)| (k, v.rendered(field_config)))
+                .collect(),
+        }
     }
 }
 

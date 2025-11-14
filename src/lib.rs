@@ -24,7 +24,7 @@ use events::{
 };
 use events::{AddRootObjectEvent, ArchivalEventResponse};
 pub use fields::FieldConfig;
-pub use fields::FieldValue;
+pub use fields::{FieldValue, RenderedFieldValue};
 use manifest::Manifest;
 use mime_guess::MimeGuess;
 use seahash::SeaHasher;
@@ -65,7 +65,7 @@ pub use object::ObjectMap;
 pub use object_definition::{ObjectDefinition, ObjectDefinitions};
 
 use crate::fields::FieldType;
-use crate::object::ValuePath;
+use crate::object::{RenderedObject, RenderedObjectMap, ValuePath};
 
 pub type ArchivalBuildId = u64;
 
@@ -566,6 +566,28 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     ) -> Result<ObjectMap, Box<dyn Error>> {
         self.fs_mutex
             .with_fs(|fs| self.site.get_objects_sorted(fs, Some(sort)))
+    }
+
+    pub fn get_rendered_objects(&self) -> Result<RenderedObjectMap, Box<dyn Error>> {
+        self.fs_mutex
+            .with_fs(|fs| self.site.get_rendered_objects(fs))
+    }
+
+    pub fn get_rendered_object(
+        &self,
+        name: &str,
+        filename: Option<&str>,
+    ) -> Result<RenderedObject, Box<dyn Error>> {
+        self.fs_mutex
+            .with_fs(|fs| self.site.get_rendered_object(name, filename, fs))
+    }
+
+    pub fn get_rendered_objects_sorted(
+        &self,
+        sort: impl Fn(&Object, &Object) -> Ordering,
+    ) -> Result<RenderedObjectMap, Box<dyn Error>> {
+        self.fs_mutex
+            .with_fs(|fs| self.site.get_rendered_objects_sorted(fs, Some(sort)))
     }
 
     fn edit_field(&self, event: EditFieldEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
@@ -1228,7 +1250,10 @@ mod typescript_definitions {
     use typescript_type_def::{write_definition_file, DefinitionFileOptions};
     use value_path::ValuePath;
 
-    use crate::fields::FieldType;
+    use crate::{
+        fields::FieldType,
+        object::{RenderedObject, RenderedObjectEntry},
+    };
 
     use super::*;
 
@@ -1242,10 +1267,10 @@ mod typescript_definitions {
         type ExportedTypes = (
             ArchivalEvent,
             ObjectDefinition,
-            Object,
             ValuePath,
             FieldType,
-            ObjectEntry,
+            RenderedObject,
+            RenderedObjectEntry,
         );
         write_definition_file::<_, ExportedTypes>(&mut buf, options).unwrap();
     }

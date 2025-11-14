@@ -97,7 +97,7 @@ impl Display for ValuePath {
 
 pub enum FoundValue<'a> {
     Meta(&'a MetaValue),
-    String(&'a String),
+    String(&'a str),
 }
 
 impl Display for FoundValue<'_> {

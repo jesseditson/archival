@@ -1,11 +1,34 @@
-use crate::object::Object;
+use crate::{
+    object::{Object, Renderable, RenderedObject},
+    FieldConfig,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
+pub enum RenderedObjectEntry {
+    List(Vec<RenderedObject>),
+    Object(RenderedObject),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 pub enum ObjectEntry {
     List(Vec<Object>),
     Object(Object),
+}
+
+impl Renderable for ObjectEntry {
+    type Output = RenderedObjectEntry;
+    fn rendered(self, field_config: &FieldConfig) -> Self::Output {
+        match self {
+            Self::List(list) => RenderedObjectEntry::List(
+                list.into_iter()
+                    .map(|li| li.rendered(field_config))
+                    .collect(),
+            ),
+            Self::Object(o) => RenderedObjectEntry::Object(o.rendered(field_config)),
+        }
+    }
 }
 
 impl ObjectEntry {
