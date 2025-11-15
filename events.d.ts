@@ -10,8 +10,9 @@ export type ValuePath = string;
 export type DateTime = {
     "raw": string;
 };
+export type DisplayType = ("Image" | "Video" | "Audio" | "Download");
 export type File = {
-    "display_type": "image"|"audio"|"video"|"upload";
+    "display_type": DisplayType;
     "filename": string;
     "sha": string;
     "mime": string;

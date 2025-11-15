@@ -34,6 +34,15 @@ pub enum FieldValueError {
 pub type ObjectValues = BTreeMap<String, FieldValue>;
 pub type RenderedObjectValues = BTreeMap<String, RenderedFieldValue>;
 
+impl Renderable for ObjectValues {
+    type Output = RenderedObjectValues;
+    fn rendered(self, field_config: &FieldConfig) -> Self::Output {
+        self.into_iter()
+            .map(|(o, v)| (o, v.rendered(field_config)))
+            .collect()
+    }
+}
+
 #[cfg(feature = "typescript")]
 mod typedefs {
     use typescript_type_def::{
