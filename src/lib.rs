@@ -370,7 +370,23 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 })?;
                 Ok(object.to_toml(def)?)
             } else {
-                Err(ArchivalError::new(&format!("filename not found: {}", filename)).into())
+                Err(objects
+                    .as_list()
+                    .map(|list| {
+                        ArchivalError::new(&format!(
+                            "{} {} not found in [{}]",
+                            obj_type,
+                            filename,
+                            list.iter()
+                                .map(|o| o.filename.clone())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ))
+                        .into()
+                    })
+                    .unwrap_or_else(|| {
+                        ArchivalError::new(&format!("object {} not found", filename)).into()
+                    }))
             }
         } else {
             Err(ArchivalError::new(&format!("no objects of type: {}", obj_type)).into())

@@ -22,7 +22,7 @@ use thiserror::Error;
 #[derive(Error, Debug, Clone)]
 pub enum ImportError {
     #[error("file {0} doesn't exist")]
-    FileNotExists(PathBuf),
+    FileNotExists(String),
     #[error("either --format or a file path must be provided")]
     FormatOrFileRequired,
     #[error("no file extension or format provided")]
@@ -173,8 +173,9 @@ impl BinaryCommand for Command {
                     .value_parser(value_parser!(FieldMap)),
             )
             .arg(
-                arg!([file] "The file containing data to import. If not provided, will read from stdout (and --format is required).")
-                    .value_parser(value_parser!(PathBuf)),
+                arg!([file] "The file containing data to import. If not provided, will read from stdin (and --format is required).")
+                    .default_value("-")
+                    .value_parser(value_parser!(String)),
             )
     }
     fn handler(
@@ -184,7 +185,7 @@ impl BinaryCommand for Command {
         _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
         // Fail fast if file doesn't exist
-        let file_path = args.get_one::<PathBuf>("file");
+        let file_path = args.get_one::<String>("file");
         let file_format = if let Some(file_format) = args.get_one::<ImportFormat>("format") {
             file_format.to_owned()
         } else if let Some(file_path) = file_path {
@@ -194,7 +195,7 @@ impl BinaryCommand for Command {
                 return Err(ImportError::FileNotExists(file_path.to_owned()).into());
             }
             ImportFormat::from(
-                file_path
+                PathBuf::from(file_path)
                     .extension()
                     .ok_or(ImportError::NoExtension)?
                     .to_string_lossy()
@@ -202,6 +203,11 @@ impl BinaryCommand for Command {
             )
         } else {
             return Err(ImportError::FormatOrFileRequired.into());
+        };
+        let file_reader = match file_path {
+            Some(path) if path == "-" => None,
+            Some(path) => Some(BufReader::new(File::open(path)?)),
+            None => None,
         };
         let object = args.get_one::<PathBuf>("object").unwrap();
         // TODO: handle root objects?
@@ -284,16 +290,10 @@ impl BinaryCommand for Command {
         } else {
             obj_def
         };
-        let f = if let Some(fp) = file_path {
-            File::open(fp)?
-        } else {
-            todo!("stdin reading not implemented yet")
-        };
         let bar = ProgressBar::new_spinner();
         bar.set_style(ProgressStyle::with_template("{msg} {spinner}").unwrap());
-        let mut reader = BufReader::new(f);
         Command::parse(
-            &mut reader,
+            file_reader,
             &object_type,
             field_map,
             import_name,
@@ -324,7 +324,7 @@ enum ImportName {
 impl Command {
     #[allow(clippy::too_many_arguments)]
     fn parse<R: Read, F: FileSystemAPI + Debug + Clone>(
-        reader: &mut BufReader<R>,
+        reader: Option<BufReader<R>>,
         object: &str,
         field_map: HashMap<String, String>,
         import_name: ImportName,
@@ -338,7 +338,11 @@ impl Command {
         progress("parsing file...", 0, 0);
         let inverted_field_map: HashMap<&String, &String> =
             field_map.iter().map(|(k, v)| (v, k)).collect();
-        let parsed = file_format.parse(reader)?;
+        let parsed = if let Some(mut reader) = reader {
+            file_format.parse(&mut reader)?
+        } else {
+            file_format.parse(&mut BufReader::new(io::stdin().lock()))?
+        };
         if let ImportName::Field(f) = &import_name {
             progress("creating object...", 0, 0);
             archival
@@ -514,14 +518,13 @@ mod csv_tests {
     #[test]
     fn parse_csv_data_to_files() -> Result<(), Box<dyn Error>> {
         let csv_data = "some_number,title,content,date\n1,hello, string,01/21/1987";
-        let mut reader = BufReader::new(csv_data.as_bytes());
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../../../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = crate::Archival::new_with_upload_prefix(fs, "")?;
         let obj_def = archival.site.object_definitions.get("post").unwrap();
         Command::parse(
-            &mut reader,
+            Some(BufReader::new(csv_data.as_bytes())),
             "post",
             HashMap::new(),
             ImportName::Field("title".to_string()),
@@ -562,14 +565,13 @@ mod csv_tests {
     // #[traced_test]
     fn parse_csv_data_to_children() -> Result<(), Box<dyn Error>> {
         let csv_data = "number,name,renamed_date\n128,hello,01/21/1987";
-        let mut reader = BufReader::new(csv_data.as_bytes());
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../../../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = crate::Archival::new_with_upload_prefix(fs, "")?;
         let obj_def = archival.site.object_definitions.get("childlist").unwrap();
         Command::parse(
-            &mut reader,
+            Some(BufReader::new(csv_data.as_bytes())),
             "childlist",
             HashMap::from([("date".to_string(), "renamed_date".to_string())]),
             ImportName::File("has-list".to_string()),
