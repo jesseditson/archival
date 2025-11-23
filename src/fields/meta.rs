@@ -76,6 +76,10 @@ impl Meta {
         self.0.get(key)
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn to_liquid(&self) -> liquid::model::Value {
         let mut m = liquid::Object::new();
         for (k, v) in &self.0 {

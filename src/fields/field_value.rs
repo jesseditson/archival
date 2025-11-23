@@ -279,6 +279,21 @@ impl FieldValue {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        match self {
+            FieldValue::String(s) => s.trim().is_empty(),
+            FieldValue::Enum(_) => false,
+            FieldValue::Markdown(m) => m.trim().is_empty(),
+            FieldValue::Number(_) => false,
+            FieldValue::Date(_) => false,
+            FieldValue::Objects(_) => false,
+            FieldValue::Boolean(_) => false,
+            FieldValue::File(f) => !f.is_valid(),
+            FieldValue::Meta(meta) => meta.is_empty(),
+            FieldValue::Null => true,
+        }
+    }
+
     #[cfg(test)]
     pub fn liquid_date(&self) -> model::DateTime {
         match self {
@@ -375,10 +390,10 @@ impl ValueView for FieldValue {
     /// Query the value's state
     fn query_state(&self, state: model::State) -> bool {
         match state {
-            model::State::Truthy => false,
-            model::State::DefaultValue => false,
-            model::State::Empty => false,
-            model::State::Blank => false,
+            model::State::Truthy => !self.is_empty(),
+            model::State::DefaultValue => self.is_empty(),
+            model::State::Empty => self.is_empty(),
+            model::State::Blank => self.is_empty(),
         }
     }
 
@@ -422,7 +437,9 @@ impl ValueView for FieldValue {
             FieldValue::Date(_) => self.as_scalar().to_value(),
             FieldValue::Boolean(_) => self.as_scalar().to_value(),
             FieldValue::Objects(_) => self.as_array().to_value(),
-            FieldValue::File(_) => panic!("files cannot be rendered via value parsing"),
+            FieldValue::File(_) => {
+                panic!("files cannot be rendered via value parsing. Use file.to_liquid instead.")
+            }
             FieldValue::Meta(_) => self.as_object().to_value(),
             FieldValue::Null => self.as_scalar().to_value(),
         }
@@ -758,5 +775,39 @@ Within it I can add some tags like: <a href=\"https://taskmastersbirthday.com\">
             rendered.contains("<a href=\"https://"),
             "links are rendered properly"
         );
+    }
+}
+#[cfg(test)]
+pub mod file_tests {
+
+    use liquid::model::State;
+
+    use crate::{liquid_parser, MemoryFileSystem};
+
+    use super::*;
+
+    #[test]
+    fn state_is_blank_when_invalid() {
+        let file = File::image();
+        assert!(!file.is_valid());
+        let value = FieldValue::File(file);
+        assert!(value.query_state(State::Blank));
+        assert!(value.query_state(State::Empty));
+        assert!(!value.query_state(State::Truthy));
+    }
+
+    #[test]
+    fn is_not_truthy_if_invalid() {
+        let mut file = File::image();
+        assert!(!file.is_valid());
+        file.filename = "image.png".to_string();
+        file.sha = "fake-sha".to_string();
+        let parser = liquid_parser::get(None, None, &MemoryFileSystem::default()).unwrap();
+        let template = parser
+            .parse("{% if file %}BLANK{% else %}OH NO!!{% endif %}")
+            .unwrap();
+        let field_config = FieldConfig::default();
+        let ctx = liquid::object!({ "file": file.to_liquid(&field_config) });
+        assert_eq!(template.render(&ctx).unwrap(), "BLANK");
     }
 }

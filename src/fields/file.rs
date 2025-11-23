@@ -118,9 +118,7 @@ impl RenderedFile {
     }
 }
 
-#[derive(
-    Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq, PartialOrd, Hash,
-)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, PartialOrd, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct File {
     pub display_type: DisplayType,
@@ -288,6 +286,9 @@ impl File {
             mime: mime.to_string(),
             display_type: DisplayType::Download,
         }
+    }
+    pub fn is_valid(&self) -> bool {
+        self.sha.len() == 64 && self.sha.chars().all(|c| c.is_ascii_hexdigit())
     }
     pub fn url(&self, config: &FieldConfig) -> String {
         if self.sha.is_empty() {
@@ -457,5 +458,15 @@ pub mod tests {
         };
         println!("{}", file.url(&fc));
         assert_eq!(file.url(&fc), "http://foo.com/repo-doid/fake-sha/image.png");
+    }
+    #[test]
+    fn file_validity() {
+        let mut file = File::image();
+        assert!(!file.is_valid());
+        file.filename = "image.png".to_string();
+        file.sha = "fake-sha".to_string();
+        assert!(!file.is_valid());
+        file.sha = "0a20136df0a8221878ed1109dfb0511dbb7ba3d4b87460963a86cb049434d38a".to_string();
+        assert!(file.is_valid());
     }
 }
