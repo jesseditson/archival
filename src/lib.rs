@@ -45,6 +45,8 @@ mod constants;
 mod file_system_stdlib;
 #[cfg(feature = "json-schema")]
 mod json_schema;
+#[cfg(feature = "proto")]
+mod proto;
 #[cfg(feature = "binary")]
 mod server;
 use file_system_mutex::FileSystemMutex;
@@ -63,6 +65,8 @@ pub use file_system_memory::MemoryFileSystem;
 pub use json_schema::{ObjectSchema, ObjectSchemaOptions};
 pub use object::ObjectMap;
 pub use object_definition::{ObjectDefinition, ObjectDefinitions};
+#[cfg(feature = "proto")]
+pub use proto::*;
 
 use crate::fields::FieldType;
 use crate::object::{RenderedObject, RenderedObjectMap, ValuePath};
