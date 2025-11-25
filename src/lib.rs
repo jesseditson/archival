@@ -55,6 +55,8 @@ use semver::{Version, VersionReq};
 pub mod events;
 pub mod fields;
 pub mod object;
+#[cfg(feature = "proto")]
+pub mod proto;
 pub use archival_error::ArchivalError;
 pub use file_system::unpack_zip;
 pub use file_system::FileSystemAPI;
@@ -63,6 +65,8 @@ pub use file_system_memory::MemoryFileSystem;
 pub use json_schema::{ObjectSchema, ObjectSchemaOptions};
 pub use object::ObjectMap;
 pub use object_definition::{ObjectDefinition, ObjectDefinitions};
+#[cfg(feature = "proto")]
+pub use proto::archival_proto;
 
 use crate::fields::FieldType;
 use crate::object::{RenderedObject, RenderedObjectMap, ValuePath};

@@ -1,0 +1,251 @@
+syntax = "proto3";
+
+package archival_proto;
+
+import "google/protobuf/empty.proto";
+
+// Objects
+
+enum DisplayType {
+  IMAGE = 0;
+  VIDEO = 1;
+  AUDIO = 2;
+  DOWNLOAD = 3;
+}
+
+message MetaArray {
+  repeated MetaValue values = 1;
+}
+message MetaValue {
+  oneof value {
+    string string = 1;
+    double number = 2;
+    bool boolean = 3;
+    string date_string = 4;
+    MetaArray array = 5;
+    Meta map = 6;
+  }
+}
+
+message Meta {
+  message Entry {
+    string name = 1;
+    MetaValue value = 2;
+  }
+
+  repeated Entry entries = 1;
+}
+
+message File {
+  DisplayType display_type = 1;
+  string filename = 2;
+  string sha = 3;
+  string mime = 4;
+  string name = 5;
+  string description = 6;
+}
+
+message FieldValue {
+  oneof value {
+    string string = 1;
+    string enum = 2;
+    string markdown = 3;
+    double number = 4;
+    string date_string = 5;
+    ObjectValues objects = 6;
+    bool boolean = 7;
+    File file = 8;
+    Meta meta = 9;
+    google.protobuf.Empty null = 10;
+  }
+}
+
+message ObjectValues {
+  message Field {
+    string name = 1;
+    FieldValue value = 2;
+  }
+
+  repeated Field fields = 1;
+}
+
+message Object {
+  string filename = 1;
+  string object_name = 2;
+  oneof order {
+    google.protobuf.Empty none = 3;
+    double some = 4;
+  }
+  string path = 5;
+  ObjectValues values = 6;
+}
+
+message ObjectList {
+  repeated Object entries = 1;
+}
+
+message ObjectEntry {
+  oneof entry {
+    ObjectList list = 1;
+    Object object = 2;
+  }
+}
+
+message ObjectMap {
+  message Entry {
+    string name = 1;
+    ObjectEntry object = 2;
+  }
+
+  repeated Entry entries = 1;
+}
+
+// Object Definitions
+
+message AliasType {
+  FieldType type = 1;
+  string name = 2;
+}
+
+message EnumFieldType {
+  repeated string values = 1;
+}
+
+message FieldType {
+  oneof type {
+    google.protobuf.Empty string = 1;
+    google.protobuf.Empty number = 2;
+    google.protobuf.Empty date = 3;
+    EnumFieldType enum = 4;
+    google.protobuf.Empty markdown = 5;
+    google.protobuf.Empty boolean = 6;
+    google.protobuf.Empty image = 7;
+    google.protobuf.Empty video = 8;
+    google.protobuf.Empty upload = 9;
+    google.protobuf.Empty audio = 10;
+    google.protobuf.Empty meta = 11;
+    AliasType alias = 12;
+  }
+}
+
+message FieldsMap {
+  message Field {
+    string name = 1;
+    FieldType type = 2;
+  }
+
+  repeated Field fields = 1;
+}
+
+message ChildDefinitions {
+  message Child {
+    string name = 1;
+    ObjectDefinition definition = 2;
+  }
+
+  repeated Child children = 1;
+}
+
+message ObjectDefinition {
+  string name = 1;
+  FieldsMap fields = 2;
+  string template = 3;
+  ChildDefinitions children = 4;
+}
+
+// UI
+
+message ValuePathComponent {
+  oneof component {
+    string key = 1;
+    uint32 index = 2;
+  }
+}
+
+message ValuePath {
+  repeated ValuePathComponent path = 1;
+}
+
+// Events
+
+message AddObjectValue {
+  ValuePath path = 1;
+  FieldValue value = 2;
+}
+
+message RenameObjectEvent {
+  string object = 1;
+  string from = 2;
+  string to = 3;
+}
+
+message AddObjectEvent {
+  string object = 1;
+  string filename = 2;
+  oneof order {
+    google.protobuf.Empty none = 3;
+    double some = 4;
+  }
+  repeated AddObjectValue values = 5;
+}
+
+message AddRootObjectEvent {
+  string object = 1;
+  repeated AddObjectValue values = 2;
+}
+
+message DeleteObjectEvent {
+  string object = 1;
+  string filename = 2;
+  string source = 3;
+}
+
+message EditFieldEvent {
+  string object = 1;
+  string filename = 2;
+  ValuePath path = 3;
+  string field = 4;
+  FieldValue value = 5;
+  string source = 6;
+}
+
+message EditOrderEvent {
+  string object = 1;
+  string filename = 2;
+  oneof order {
+    google.protobuf.Empty none = 3;
+    double some = 4;
+  }
+  string source = 5;
+}
+
+message AddChildEvent {
+  string object = 1;
+  string filename = 2;
+  ValuePath path = 3;
+  repeated AddObjectValue values = 4;
+  oneof index {
+    google.protobuf.Empty none = 5;
+    uint32 some = 6;
+  }
+}
+
+message RemoveChildEvent {
+  string object = 1;
+  string filename = 2;
+  ValuePath path = 3;
+  string source = 4;
+}
+
+message ArchivalEvent {
+  oneof event {
+    RenameObjectEvent rename_object = 1;
+    AddObjectEvent add_object = 2;
+    AddRootObjectEvent add_root_object = 3;
+    DeleteObjectEvent delete_object = 4;
+    EditFieldEvent edit_field = 5;
+    EditOrderEvent edit_order = 6;
+    AddChildEvent add_child = 7;
+    RemoveChildEvent remove_child = 8;
+  }
+}

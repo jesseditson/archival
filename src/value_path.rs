@@ -115,6 +115,27 @@ impl FromIterator<ValuePathComponent> for ValuePath {
     }
 }
 
+pub struct ValuePathIterator {
+    inner: std::vec::IntoIter<ValuePathComponent>,
+}
+
+impl Iterator for ValuePathIterator {
+    type Item = ValuePathComponent;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+impl IntoIterator for ValuePath {
+    type Item = ValuePathComponent;
+    type IntoIter = ValuePathIterator;
+    fn into_iter(self) -> Self::IntoIter {
+        ValuePathIterator {
+            inner: self.0.into_iter(),
+        }
+    }
+}
+
 impl ValuePath {
     pub fn empty() -> Self {
         Self(vec![])

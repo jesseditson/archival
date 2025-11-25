@@ -1,14 +1,15 @@
 use super::BinaryCommand;
 use crate::{
-    binary::ExitStatus, file_system_stdlib, object::ObjectEntry, page::debug_context, site::Site,
+    binary::{command::command_root, ExitStatus},
+    file_system_stdlib,
+    object::ObjectEntry,
+    page::debug_context,
+    site::Site,
 };
 use clap::ArgMatches;
 use liquid_core::Value;
 use ordermap::OrderMap;
-use std::{
-    path::Path,
-    sync::{atomic::AtomicBool, Arc},
-};
+use std::sync::{atomic::AtomicBool, Arc};
 
 pub struct Command {}
 impl BinaryCommand for Command {
@@ -20,11 +21,11 @@ impl BinaryCommand for Command {
     }
     fn handler(
         &self,
-        build_dir: &Path,
-        _args: &ArgMatches,
+        args: &ArgMatches,
         _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
-        let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
+        let root_dir = command_root(args);
+        let fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         let site = Site::load(&fs, Some(""))?;
         let mut objects: OrderMap<String, liquid::model::Value> = OrderMap::new();
         let definitions = &site.object_definitions;

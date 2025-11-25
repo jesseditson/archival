@@ -1,10 +1,11 @@
 use super::BinaryCommand;
-use crate::{binary::ExitStatus, file_system_stdlib, site::Site};
-use clap::ArgMatches;
-use std::{
-    path::Path,
-    sync::{atomic::AtomicBool, Arc},
+use crate::{
+    binary::{command::command_root, ExitStatus},
+    file_system_stdlib,
+    site::Site,
 };
+use clap::ArgMatches;
+use std::sync::{atomic::AtomicBool, Arc};
 
 pub struct Command {}
 impl BinaryCommand for Command {
@@ -16,11 +17,11 @@ impl BinaryCommand for Command {
     }
     fn handler(
         &self,
-        build_dir: &Path,
-        _args: &ArgMatches,
+        args: &ArgMatches,
         _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
-        let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
+        let root_dir = command_root(args);
+        let fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         let site = Site::load(&fs, Some(""))?;
         for s in site.manifest.prebuild {
             let cmd_parts: Vec<&str> = s.split_whitespace().collect();
@@ -28,7 +29,7 @@ impl BinaryCommand for Command {
                 println!("runnning {} {}", cmd_parts[0], cmd_parts[1..].join(" "));
                 let status = std::process::Command::new(cmd_parts[0])
                     .args(&cmd_parts[1..])
-                    .current_dir(build_dir)
+                    .current_dir(&root_dir)
                     .spawn()
                     .unwrap_or_else(|_| panic!("spawn failed: {}", s))
                     .wait();

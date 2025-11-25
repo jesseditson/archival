@@ -1,8 +1,10 @@
-use clap::{ArgMatches, Command};
+use clap::{arg, value_parser, ArgMatches, Command};
 use std::{
+    env,
     error::Error,
-    path::Path,
-    sync::{atomic::AtomicBool, Arc},
+    fs,
+    path::PathBuf,
+    sync::{atomic::AtomicBool, Arc, LazyLock},
 };
 mod build;
 mod compat;
@@ -12,6 +14,8 @@ mod login;
 mod manifest;
 mod objects;
 mod prebuild;
+#[cfg(feature = "proto")]
+mod proto;
 mod run;
 #[cfg(feature = "json-schema")]
 mod schemas;
@@ -30,24 +34,77 @@ impl ExitStatus {
     }
 }
 
+#[derive(Default, Debug)]
+pub struct CommandConfig {
+    upload_prefix: bool,
+    site_path: bool,
+}
+impl CommandConfig {
+    pub fn archival_site() -> Self {
+        CommandConfig {
+            upload_prefix: true,
+            site_path: true,
+        }
+    }
+    pub fn no_build() -> Self {
+        CommandConfig {
+            upload_prefix: false,
+            site_path: true,
+        }
+    }
+    pub fn upload_only() -> Self {
+        CommandConfig {
+            upload_prefix: true,
+            site_path: false,
+        }
+    }
+}
+
+static CWD: LazyLock<PathBuf> = std::sync::LazyLock::new(|| env::current_dir().unwrap());
+
 pub trait BinaryCommand {
     fn name(&self) -> &str;
-    fn no_path(&self) -> bool {
-        false
-    }
-    fn uses_uploads(&self) -> bool {
-        false
-    }
     fn cli(&self, cmd: Command) -> Command;
     fn handler(
         &self,
-        build_dir: &Path,
         args: &ArgMatches,
         quit: Arc<AtomicBool>,
     ) -> Result<ExitStatus, Box<dyn Error>>;
 }
 
-pub const COMMANDS: [&dyn BinaryCommand; 11] = [
+pub fn add_args(mut cmd: Command, config: CommandConfig) -> Command {
+    if config.upload_prefix {
+        cmd = cmd.arg(
+                // NOTE: weird long form quoting due to https://github.com/clap-rs/clap/issues/3586
+                arg!(-u --"upload-prefix" <upload_prefix> "override the upload prefix. If no manifest.toml is present, this is required.")
+                    .value_parser(value_parser!(String)),
+            );
+    }
+    if config.site_path {
+        cmd = cmd.arg(
+                arg!([site_path] "an optional path to the archival site. Otherwise will be auto-detected from cwd.")
+                    .required(false)
+                    .default_value(CWD.to_str())
+                    .value_parser(value_parser!(PathBuf)),
+            );
+    }
+    cmd
+}
+
+pub fn command_root(args: &ArgMatches) -> PathBuf {
+    let path = match args.try_get_one::<PathBuf>("site_path") {
+        Ok(arg) => arg.unwrap(), // defaulted so unwrap is ok
+        Err(_) => &CWD.to_path_buf(),
+    };
+    if *path != *CWD {
+        // If not default, the path is relative
+        fs::canonicalize(CWD.join(path)).unwrap()
+    } else {
+        CWD.to_path_buf()
+    }
+}
+
+pub const COMMANDS: &[&'static dyn BinaryCommand] = &[
     &build::Command {},
     &run::Command {},
     &format::Command {},
@@ -58,5 +115,8 @@ pub const COMMANDS: [&dyn BinaryCommand; 11] = [
     &upload::Command {},
     &import::Command {},
     &objects::Command {},
+    #[cfg(feature = "json-schema")]
     &schemas::Command {},
+    #[cfg(feature = "proto")]
+    &proto::Command {},
 ];
