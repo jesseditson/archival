@@ -110,7 +110,8 @@ name = "archival"
 version = "0.12.7"
 dependencies = [
  "base64",
- "capnp",
+ "capnp 0.23.0",
+ "capnp_conv",
  "clap",
  "comrak",
  "console",
@@ -310,11 +311,42 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "capnp"
+version = "0.20.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "053b81915c2ce1629b8fb964f578b18cb39b23ef9d5b24120d0dfc959569a1d9"
+dependencies = [
+ "embedded-io 0.6.1",
+]
+
+[[package]]
+name = "capnp"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbffb6e69e1ea2cf518ac5037a78a223ecb82b4ac81e7ab33cb5211b43d712ac"
 dependencies = [
- "embedded-io",
+ "embedded-io 0.7.1",
+]
+
+[[package]]
+name = "capnp_conv"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "435f8665cd850a7cab3373a835f3818975f1459a33dcc8cb66c2b4f3b61d728c"
+dependencies = [
+ "capnp 0.20.6",
+ "capnp_conv_macros",
+]
+
+[[package]]
+name = "capnp_conv_macros"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "636ad09697daacca4d04ac1459a99caa0fe47967812d72409c0ebff07356b066"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -682,6 +714,12 @@ checksum = "e079f19b08ca6239f47f8ba8509c11cf3ea30095831f7fed61441475edd8c449"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "embedded-io"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 
 [[package]]
 name = "embedded-io"

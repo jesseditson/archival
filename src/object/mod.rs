@@ -84,6 +84,7 @@ impl Hash for RenderedObject {
 }
 
 #[derive(Debug, ObjectView, ValueView, Deserialize, Serialize, Clone, PartialEq)]
+#[cfg_attr(feature = "proto", capnp_conv::capnp_conv(Object))]
 pub struct Object {
     pub filename: String,
     pub object_name: String,
