@@ -1,30 +1,34 @@
 use super::BinaryCommand;
-use crate::{binary::ExitStatus, check_compatibility};
-use clap::{arg, value_parser, ArgMatches};
-use std::{
-    path::Path,
-    sync::{atomic::AtomicBool, Arc},
+use crate::{
+    binary::{
+        command::{add_args, CommandConfig},
+        ExitStatus,
+    },
+    check_compatibility,
 };
+use clap::{arg, value_parser, ArgMatches};
+use std::sync::{atomic::AtomicBool, Arc};
 
 pub struct Command {}
 impl BinaryCommand for Command {
     fn name(&self) -> &str {
         "compat"
     }
-    fn no_path(&self) -> bool {
-        true
-    }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("checks the compatibility of this version of archival against a version string")
+        add_args(
+            cmd.about(
+                "checks the compatibility of this version of archival against a version string",
+            )
             .arg(
                 arg!([version] "a version string (e.g. 0.4.1-alpha)")
                     .required(true)
                     .value_parser(value_parser!(String)),
-            )
+            ),
+            CommandConfig::default(),
+        )
     }
     fn handler(
         &self,
-        _build_dir: &Path,
         args: &ArgMatches,
         _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {

@@ -1,6 +1,6 @@
 use super::BinaryCommand;
 use crate::{
-    binary::ExitStatus,
+    binary::{command::command_root, ExitStatus},
     events::{AddChildEvent, AddObjectEvent, ArchivalEvent, ArchivalEventResponse, EditFieldEvent},
     file_system_stdlib,
     object::{ObjectEntry, ValuePath},
@@ -14,7 +14,7 @@ use std::{
     fmt::Debug,
     fs::{self, File},
     io::{self, BufReader, Read},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
 };
 use thiserror::Error;
@@ -180,10 +180,10 @@ impl BinaryCommand for Command {
     }
     fn handler(
         &self,
-        build_dir: &Path,
         args: &ArgMatches,
         _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+        let root_dir = command_root(args);
         // Fail fast if file doesn't exist
         let file_path = args.get_one::<String>("file");
         let file_format = if let Some(file_format) = args.get_one::<ImportFormat>("format") {
@@ -228,7 +228,7 @@ impl BinaryCommand for Command {
             (None, object.to_string_lossy().to_string())
         };
         // Set up an archival site to make sure we're able to modify fields
-        let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
+        let fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         let archival = Archival::new(fs)?;
         // Find the specified object definition
         let obj_def = archival

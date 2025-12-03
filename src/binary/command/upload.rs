@@ -1,6 +1,9 @@
 use super::BinaryCommand;
 use crate::{
-    binary::{ArchivalConfig, ExitStatus},
+    binary::{
+        command::{add_args, command_root, CommandConfig},
+        ArchivalConfig, ExitStatus,
+    },
     constants::API_URL,
     events::{ArchivalEvent, EditFieldEvent},
     fields::{FieldType, File},
@@ -18,7 +21,7 @@ use reqwest::{
 use serde_json::json;
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
 };
 use thiserror::Error;
@@ -59,11 +62,8 @@ impl BinaryCommand for Command {
     fn name(&self) -> &str {
         "upload"
     }
-    fn uses_uploads(&self) -> bool {
-        true
-    }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("uploads a local file to archival")
+        add_args(cmd.about("uploads a local file to archival")
             .arg(
                 arg!([object] "The object to upload data for")
                     .required(true)
@@ -82,14 +82,14 @@ impl BinaryCommand for Command {
                 arg!([file] "The file to upload")
                     .required(true)
                     .value_parser(value_parser!(PathBuf)),
-            )
+            ), CommandConfig::archival_site())
     }
     fn handler(
         &self,
-        build_dir: &Path,
         args: &ArgMatches,
         _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+        let root_dir = command_root(args);
         // Fail fast if we aren't logged in
         let config = ArchivalConfig::get();
         let access_token = config.access_token.ok_or(UploadError::NotLoggedIn)?;
@@ -119,7 +119,7 @@ impl BinaryCommand for Command {
         let field = args.get_one::<String>("field").unwrap();
         let field_path = ValuePath::from_string(field);
         // Set up an archival site to make sure we're able to modify fields
-        let fs = file_system_stdlib::NativeFileSystem::new(build_dir);
+        let fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         let archival = if let Some(upload_prefix) =
             args.get_one::<String>("upload-prefix").map(|s| s.as_str())
         {
@@ -151,7 +151,7 @@ impl BinaryCommand for Command {
         } else {
             let github_remote_match = Regex::new(r"github.com.+?\b(.+)\/(.+)\.git").unwrap();
             let git_command = std::process::Command::new("git")
-                .current_dir(build_dir)
+                .current_dir(root_dir)
                 .arg("remote")
                 .arg("-v")
                 .output()

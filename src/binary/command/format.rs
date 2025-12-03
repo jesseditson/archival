@@ -1,12 +1,14 @@
 use super::BinaryCommand;
 use crate::{
-    binary::ExitStatus, file_system_stdlib, Archival, ArchivalError, FileSystemAPI,
-    MANIFEST_FILE_NAME,
+    binary::{
+        command::{add_args, command_root, CommandConfig},
+        ExitStatus,
+    },
+    file_system_stdlib, Archival, ArchivalError, FileSystemAPI, MANIFEST_FILE_NAME,
 };
 use clap::ArgMatches;
 use std::{
     error::Error,
-    path::Path,
     sync::{atomic::AtomicBool, Arc},
 };
 
@@ -40,18 +42,18 @@ impl BinaryCommand for Command {
         "format"
     }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("formats toml files in an archival site")
-    }
-    fn uses_uploads(&self) -> bool {
-        false
+        add_args(
+            cmd.about("formats toml files in an archival site"),
+            CommandConfig::no_build(),
+        )
     }
     fn handler(
         &self,
-        root_dir: &Path,
-        _args: &ArgMatches,
+        args: &ArgMatches,
         _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
-        let fs = file_system_stdlib::NativeFileSystem::new(root_dir);
+        let root_dir = command_root(args);
+        let fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         let archival = Archival::new(fs)?;
         archival.format_objects()?;
         archival.format_manifest()?;

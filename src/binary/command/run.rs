@@ -1,4 +1,5 @@
 use super::BinaryCommand;
+use crate::binary::command::{add_args, command_root, CommandConfig};
 use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, server, site::Site};
 use clap::{arg, value_parser, ArgMatches};
 use console::{style, Term};
@@ -7,7 +8,6 @@ use rsa::pkcs8::der::Writer;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use std::{
-    path::Path,
     process::exit,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -23,26 +23,26 @@ impl BinaryCommand for Command {
         "run"
     }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("auto-rebuild an archival site")
-            .arg(
-                arg!(-p --port <port> "static server port")
-                    .required(false)
-                    .value_parser(value_parser!(u16)),
-            )
-            .arg(arg!(-n --noserve "disables the static server").required(false))
-    }
-    fn uses_uploads(&self) -> bool {
-        true
+        add_args(
+            cmd.about("auto-rebuild an archival site")
+                .arg(
+                    arg!(-p --port <port> "static server port")
+                        .required(false)
+                        .value_parser(value_parser!(u16)),
+                )
+                .arg(arg!(-n --noserve "disables the static server").required(false)),
+            CommandConfig::archival_site(),
+        )
     }
     fn handler(
         &self,
-        build_dir: &Path,
         args: &ArgMatches,
         quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+        let root_dir = command_root(args);
         let mut term = Term::stdout();
         let is_interactive = term.features().is_attended();
-        let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
+        let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         let site = Site::load(
             &fs,
             args.get_one::<String>("upload-prefix").map(|s| s.as_str()),
@@ -64,7 +64,7 @@ impl BinaryCommand for Command {
                 }
             },
         )?;
-        let path = build_dir.join(&site.manifest.build_dir);
+        let path = root_dir.join(&site.manifest.build_dir);
         if !args.get_one::<bool>("noserve").unwrap() {
             let mut sb = server::ServerBuilder::new(&path, Some("404.html"));
             if let Some(port) = args.get_one::<u16>("port") {
@@ -96,7 +96,7 @@ impl BinaryCommand for Command {
         loop {
             match rx.try_recv() {
                 Ok(path) => {
-                    site.invalidate_file(path.strip_prefix(build_dir).unwrap());
+                    site.invalidate_file(path.strip_prefix(&root_dir).unwrap());
                     changed = true;
                 }
                 Err(mpsc::TryRecvError::Empty) => {}
@@ -123,7 +123,7 @@ impl BinaryCommand for Command {
                     println!("Rebuilding...");
                     None
                 };
-                let mut fs = file_system_stdlib::NativeFileSystem::new(build_dir);
+                let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
                 site.sync_static_files(&mut fs).unwrap();
                 let output = if let Err(e) = site.build(&mut fs) {
                     format!("{} {}", style("Build failed:").red(), style(e).red())

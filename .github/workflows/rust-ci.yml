@@ -30,6 +30,10 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v3
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 33.1
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -59,6 +63,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -84,6 +91,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 33.1
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.80.0"
@@ -105,6 +116,10 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v3
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 33.1
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.TRIPLE }}
@@ -119,6 +134,7 @@ jobs:
   #   runs-on: ubuntu-22.04
   #   steps:
   #     - uses: actions/checkout@v3
+  #     - uses: arduino/setup-protoc@v3
   #     - uses: EmbarkStudios/cargo-deny-action@v1
 
   # check-self:
@@ -126,6 +142,7 @@ jobs:
   #   runs-on: ubuntu-22.04
   #   steps:
   #     - uses: actions/checkout@v3
+  #     - uses: arduino/setup-protoc@v3
   #     - uses: dtolnay/rust-toolchain@stable
   #       with:
   #         targets: x86_64-unknown-linux-musl
@@ -149,6 +166,12 @@ jobs:
           - target: aarch64-unknown-linux-musl
     steps:
       - uses: actions/checkout@v3
+      - name: Install unzip in container
+        run: apt-get update && apt-get install -y unzip
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 33.1
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
@@ -195,6 +218,10 @@ jobs:
           sudo apt install -y musl-tools
       - name: Checkout
         uses: actions/checkout@v3
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 33.1
       - name: sccache
         uses: mozilla-actions/sccache-action@v0.0.9
       - name: cargo fetch

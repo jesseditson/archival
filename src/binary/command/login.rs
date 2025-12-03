@@ -1,6 +1,9 @@
 use super::BinaryCommand;
 use crate::{
-    binary::{ArchivalConfig, ExitStatus},
+    binary::{
+        command::{add_args, CommandConfig},
+        ArchivalConfig, ExitStatus,
+    },
     constants::{API_URL, AUTH_URL, CLI_TOKEN_PUBLIC_KEY},
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -11,7 +14,6 @@ use reqwest::StatusCode;
 use rsa::{pkcs8::DecodePublicKey, sha2::Sha256, Oaep, RsaPublicKey};
 use std::{
     fs,
-    path::Path,
     sync::{atomic::AtomicBool, Arc},
     thread,
     time::Duration,
@@ -22,15 +24,14 @@ impl BinaryCommand for Command {
     fn name(&self) -> &str {
         "login"
     }
-    fn no_path(&self) -> bool {
-        true
-    }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("Log in to archival.dev and store credentials locally in ~/.archivalrc")
+        add_args(
+            cmd.about("Log in to archival.dev and store credentials locally in ~/.archivalrc"),
+            CommandConfig::default(),
+        )
     }
     fn handler(
         &self,
-        _build_dir: &Path,
         _args: &ArgMatches,
         _quit: Arc<AtomicBool>,
     ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {

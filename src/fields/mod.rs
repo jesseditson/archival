@@ -7,7 +7,7 @@ pub use date_time::DateTime;
 pub use field_type::{FieldType, InvalidFieldError};
 pub use field_value::{FieldValue, ObjectValues, RenderedFieldValue, RenderedObjectValues};
 pub use file::{DisplayType, File};
-pub use meta::MetaValue;
+pub use meta::{Meta, MetaValue};
 use serde::{Deserialize, Serialize};
 
 use crate::{constants::UPLOADS_URL, manifest::Manifest, ArchivalError};
