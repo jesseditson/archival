@@ -957,6 +957,81 @@ mod lib {
     }
 
     #[test]
+    fn rename_object_with_modifications() -> Result<(), Box<dyn Error>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        let sections_dir = archival.site.manifest.objects_dir.join("section");
+        let sections_before_rename = archival.fs_mutex.with_fs(|fs| {
+            fs.walk_dir(&sections_dir, false)
+                .map(|d| d.collect::<Vec<PathBuf>>())
+        })?;
+        archival.send_event(
+            ArchivalEvent::EditField(EditFieldEvent {
+                object: "section".to_string(),
+                filename: "first".to_string(),
+                path: ValuePath::empty(),
+                field: "name".to_string(),
+                value: Some(FieldValue::String("This is the new name".to_string())),
+                source: None,
+            }),
+            Some(BuildOptions::default()),
+        )?;
+        archival.send_event(
+            ArchivalEvent::RenameObject(RenameObjectEvent {
+                object: "section".to_string(),
+                from: "first".to_string(),
+                to: "renamed".to_string(),
+            }),
+            Some(BuildOptions::default()),
+        )?;
+        // Sending an event should result in an updated fs
+        let sections_dir = archival.site.manifest.objects_dir.join("section");
+        let sections = archival.fs_mutex.with_fs(|fs| {
+            fs.walk_dir(&sections_dir, false)
+                .map(|d| d.collect::<Vec<PathBuf>>())
+        })?;
+        println!("SECTIONS: {:?}", sections);
+        assert_eq!(sections.len(), sections_before_rename.len());
+        assert!(sections.iter().any(|path| path.ends_with("renamed.toml")));
+        let renamed = archival
+            .get_object("section", Some("renamed"))
+            .expect("missing renamed object");
+        let name = ValuePath::from_string("name")
+            .get_in_object(&renamed)
+            .expect("missing name");
+        if let FieldValue::String(name) = name {
+            assert_eq!(name, "This is the new name");
+        } else {
+            panic!("name not string");
+        }
+        archival.send_event(
+            ArchivalEvent::EditField(EditFieldEvent {
+                object: "section".to_string(),
+                filename: "renamed".to_string(),
+                path: ValuePath::empty(),
+                field: "name".to_string(),
+                value: Some(FieldValue::String("This is another name".to_string())),
+                source: None,
+            }),
+            Some(BuildOptions::default()),
+        )?;
+        let renamed = archival
+            .get_object("section", Some("renamed"))
+            .expect("missing renamed object");
+        let name = ValuePath::from_string("name")
+            .get_in_object(&renamed)
+            .expect("missing name");
+        if let FieldValue::String(name) = name {
+            assert_eq!(name, "This is another name");
+        } else {
+            panic!("name not string");
+        }
+        Ok(())
+    }
+
+    #[test]
     #[traced_test]
     fn edit_object_order() -> Result<(), Box<dyn Error>> {
         let mut fs = MemoryFileSystem::default();
