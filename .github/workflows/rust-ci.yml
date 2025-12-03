@@ -31,6 +31,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -61,6 +63,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -87,6 +91,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.80.0"
@@ -109,6 +115,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.TRIPLE }}
@@ -156,6 +164,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
@@ -203,6 +213,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: sccache
         uses: mozilla-actions/sccache-action@v0.0.9
       - name: cargo fetch
