@@ -64,7 +64,7 @@ pub use file_system_memory::MemoryFileSystem;
 #[cfg(feature = "json-schema")]
 pub use json_schema::{ObjectSchema, ObjectSchemaOptions};
 pub use object::ObjectMap;
-pub use object_definition::{ObjectDefinition, ObjectDefinitions};
+pub use object_definition::{FieldsMap, ObjectDefinition, ObjectDefinitions};
 #[cfg(feature = "proto")]
 pub use proto::archival_proto;
 
