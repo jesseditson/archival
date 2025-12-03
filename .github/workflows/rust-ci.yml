@@ -10,14 +10,23 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
+  SCCACHE_LOG: "info"
+  SCCACHE_S3_USE_SSL: true
+
 name: CI
 jobs:
   lint:
     name: Lint
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     runs-on: ubuntu-22.04
+    environment: Build
+    env:
+      SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
+      SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
@@ -37,9 +46,12 @@ jobs:
 
   test:
     name: Tests
+    environment: Build
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
+      SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     strategy:
       matrix:
         os: [macos-latest, windows-2022, ubuntu-22.04]
@@ -62,9 +74,12 @@ jobs:
 
   msrv-check:
     name: Minimum Stable Rust Version Check
+    environment: Build
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
+      SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
@@ -80,10 +95,13 @@ jobs:
   build-aarch64-apple-darwin:
     name: Build aarch64-apple-darwin
     runs-on: macos-latest
+    environment: Build
     env:
       TRIPLE: aarch64-apple-darwin
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
+      SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
@@ -116,9 +134,12 @@ jobs:
 
   publish-check:
     name: Publish Check
+    environment: Build
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
+      SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     runs-on: ubuntu-22.04
     container: ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge
     strategy:
@@ -140,9 +161,12 @@ jobs:
 
   release:
     name: Release
+    environment: Build
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
+      SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     if: startsWith(github.ref, 'refs/tags/')
     strategy:
       matrix:
