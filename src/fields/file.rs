@@ -13,12 +13,13 @@ pub enum FileError {
     MissingField(String),
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, PartialOrd, Hash, Deserialize, Serialize)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum DisplayType {
     Image,
     Video,
     Audio,
+    #[default]
     Download,
 }
 impl DisplayType {
