@@ -32,6 +32,9 @@ impl ArchivalEvent {
             ArchivalEvent::RenameObject(evt) => &evt.object,
         }
     }
+    /// Get the current filename of a given event. Note that for renames, this
+    /// will return the current filename, not the name it was renamed from, as
+    /// this method is usually used to find an (existing) file.
     pub fn filename(&self) -> &str {
         match self {
             ArchivalEvent::AddObject(evt) => &evt.filename,
@@ -41,7 +44,7 @@ impl ArchivalEvent {
             ArchivalEvent::EditOrder(evt) => &evt.filename,
             ArchivalEvent::AddChild(evt) => &evt.filename,
             ArchivalEvent::RemoveChild(evt) => &evt.filename,
-            ArchivalEvent::RenameObject(evt) => &evt.from,
+            ArchivalEvent::RenameObject(evt) => &evt.to,
         }
     }
 }
