@@ -1,6 +1,9 @@
 use super::BinaryCommand;
 use crate::{
-    binary::{command::command_root, ExitStatus},
+    binary::{
+        command::{add_args, command_root, CommandConfig},
+        ExitStatus,
+    },
     file_system_stdlib,
     json_schema::{generate_json_schema, generate_root_json_schema, ObjectSchemaOptions},
     site::Site,
@@ -22,7 +25,7 @@ impl BinaryCommand for Command {
         "schemas"
     }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("dumps schemas").arg(
+        add_args(cmd.about("dumps schemas").arg(
             arg!(-o --object <name> "an object name. If not provided, will dump all objects.")
                 .required(false)
                 .value_parser(value_parser!(String)),
@@ -32,7 +35,7 @@ impl BinaryCommand for Command {
         )
         .arg(
             arg!(-p --pretty "If provided, will prettify json before printing or dumping.").required(false),
-        )
+        ), CommandConfig::no_build())
     }
     fn handler(
         &self,

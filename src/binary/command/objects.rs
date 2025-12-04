@@ -1,6 +1,9 @@
 use super::BinaryCommand;
 use crate::{
-    binary::{command::command_root, ExitStatus},
+    binary::{
+        command::{add_args, command_root, CommandConfig},
+        ExitStatus,
+    },
     file_system_stdlib,
     object::ObjectEntry,
     page::debug_context,
@@ -17,7 +20,10 @@ impl BinaryCommand for Command {
         "objects"
     }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("lists the objects in this site")
+        add_args(
+            cmd.about("lists the objects in this site"),
+            CommandConfig::no_build(),
+        )
     }
     fn handler(
         &self,

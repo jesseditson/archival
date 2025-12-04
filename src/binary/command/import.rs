@@ -1,6 +1,9 @@
 use super::BinaryCommand;
 use crate::{
-    binary::{command::command_root, ExitStatus},
+    binary::{
+        command::{add_args, command_root, CommandConfig},
+        ExitStatus,
+    },
     events::{AddChildEvent, AddObjectEvent, ArchivalEvent, ArchivalEventResponse, EditFieldEvent},
     file_system_stdlib,
     object::{ObjectEntry, ValuePath},
@@ -150,7 +153,7 @@ impl BinaryCommand for Command {
         "import"
     }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("import data into archival site objects")
+        add_args(cmd.about("import data into archival site objects")
             .arg(
                 arg!([object] "The object type if generating objects, or an object file to import to (e.g. post/one.toml) if importing to a child list.")
                     .required(true)
@@ -176,7 +179,7 @@ impl BinaryCommand for Command {
                 arg!([file] "The file containing data to import. If not provided, will read from stdin (and --format is required).")
                     .default_value("-")
                     .value_parser(value_parser!(String)),
-            )
+            ), CommandConfig::no_build())
     }
     fn handler(
         &self,

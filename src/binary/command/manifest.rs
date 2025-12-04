@@ -1,6 +1,9 @@
 use super::BinaryCommand;
 use crate::{
-    binary::{command::command_root, ExitStatus},
+    binary::{
+        command::{add_args, command_root, CommandConfig},
+        ExitStatus,
+    },
     file_system_stdlib,
     manifest::ManifestField,
     site::Site,
@@ -14,10 +17,13 @@ impl BinaryCommand for Command {
         "manifest"
     }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("prints a manifest value").arg(
-            arg!([field] "a field to print")
-                .required(true)
-                .value_parser(value_parser!(ManifestField)),
+        add_args(
+            cmd.about("prints a manifest value").arg(
+                arg!([field] "a field to print")
+                    .required(true)
+                    .value_parser(value_parser!(ManifestField)),
+            ),
+            CommandConfig::no_build(),
         )
     }
     fn handler(

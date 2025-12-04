@@ -1,6 +1,9 @@
 use super::BinaryCommand;
 use crate::{
-    binary::{command::command_root, ExitStatus},
+    binary::{
+        command::{add_args, command_root, CommandConfig},
+        ExitStatus,
+    },
     file_system_stdlib,
     site::Site,
 };
@@ -13,7 +16,10 @@ impl BinaryCommand for Command {
         "prebuild"
     }
     fn cli(&self, cmd: clap::Command) -> clap::Command {
-        cmd.about("runs external build commands, if configured.")
+        add_args(
+            cmd.about("runs external build commands, if configured."),
+            CommandConfig::no_build(),
+        )
     }
     fn handler(
         &self,
