@@ -17,14 +17,11 @@ mod tags;
 mod test_utils;
 mod util;
 mod value_path;
-pub use constants::{MANIFEST_FILE_NAME, MIN_COMPAT_VERSION};
 use events::{
     AddChildEvent, AddObjectEvent, ArchivalEvent, DeleteObjectEvent, EditFieldEvent,
     EditOrderEvent, RemoveChildEvent, RenameObjectEvent,
 };
 use events::{AddRootObjectEvent, ArchivalEventResponse};
-pub use fields::FieldConfig;
-pub use fields::{FieldValue, RenderedFieldValue};
 use manifest::Manifest;
 use mime_guess::MimeGuess;
 use seahash::SeaHasher;
@@ -58,18 +55,19 @@ pub mod object;
 #[cfg(feature = "proto")]
 pub mod proto;
 pub use archival_error::ArchivalError;
-pub use file_system::unpack_zip;
-pub use file_system::FileSystemAPI;
+pub use constants::{MANIFEST_FILE_NAME, MIN_COMPAT_VERSION};
+pub use fields::{
+    file::RenderedFile, FieldConfig, FieldType, FieldValue, RenderedFieldValue,
+    RenderedObjectValues,
+};
+pub use file_system::{unpack_zip, FileSystemAPI};
 pub use file_system_memory::MemoryFileSystem;
 #[cfg(feature = "json-schema")]
 pub use json_schema::{ObjectSchema, ObjectSchemaOptions};
-pub use object::ObjectMap;
+pub use object::{ObjectMap, RenderedObject, RenderedObjectMap, ValuePath};
 pub use object_definition::{FieldsMap, ObjectDefinition, ObjectDefinitions};
 #[cfg(feature = "proto")]
 pub use proto::archival_proto;
-
-use crate::fields::FieldType;
-use crate::object::{RenderedObject, RenderedObjectMap, ValuePath};
 
 pub type ArchivalBuildId = u64;
 

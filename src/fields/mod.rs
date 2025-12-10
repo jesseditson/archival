@@ -1,7 +1,7 @@
 mod date_time;
 pub(crate) mod field_type;
 pub(crate) mod field_value;
-mod file;
+pub(crate) mod file;
 pub(crate) mod meta;
 pub use date_time::DateTime;
 pub use field_type::{FieldType, InvalidFieldError};
