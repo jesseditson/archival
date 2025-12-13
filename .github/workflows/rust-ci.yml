@@ -191,7 +191,8 @@ jobs:
       SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
       AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    if: startsWith(github.ref, 'refs/tags/')
+    if: ${{ startsWith(github.ref, 'refs/tags/') && needs.publish-check.result == 'success' }}
+    needs: publish-check
     strategy:
       matrix:
         include:
@@ -202,9 +203,9 @@ jobs:
             container: ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge
           - os: windows-2022
             target: x86_64-pc-windows-msvc
-          - os: macOS-latest
+          - os: macos-latest
             target: x86_64-apple-darwin
-          - os: macOS-latest
+          - os: macos-latest
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
@@ -212,12 +213,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
-      - name: Install musl tools
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: |
-          sudo apt install -y musl-tools
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt install -y musl-tools
+      - name: Install unzip tools
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          apt-get update
+          apt-get install -y unzip
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
