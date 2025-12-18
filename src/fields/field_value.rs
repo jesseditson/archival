@@ -19,15 +19,8 @@ use std::{
     error::Error,
     fmt::{self, Debug},
 };
-use thiserror::Error;
 use toml::Value;
 use tracing::instrument;
-
-#[derive(Debug, Error)]
-pub enum FieldValueError {
-    #[error("Invalid value for {0}: {1}")]
-    InvalidValue(String, String),
-}
 
 // These are BTrees rather than OrderMaps because we only serialize them when we
 // have access to the definition, which has the field order.
@@ -131,13 +124,14 @@ pub enum FieldValue {
         )]
         Vec<ObjectValues>,
     ),
+    Oneof(
+        #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::OneofTypeDef"))]
+        (String, Box<FieldValue>),
+    ),
     Boolean(bool),
     File(File),
     Meta(Meta),
     Null,
-}
-fn err(f_type: &FieldType, value: String) -> FieldValueError {
-    FieldValueError::InvalidValue(f_type.to_string(), value.to_owned())
 }
 
 impl Hash for FieldValue {
@@ -210,73 +204,6 @@ impl FieldValue {
             Self::Boolean,
             Self::File
         )
-    }
-    pub fn val_with_type(f_type: &FieldType, value: String) -> Result<Self, Box<dyn Error>> {
-        let t_val = toml::Value::try_from(&value)?;
-        Ok(match f_type {
-            FieldType::Boolean => Self::Boolean(t_val.as_bool().ok_or_else(|| err(f_type, value))?),
-            FieldType::Markdown => Self::Markdown(
-                t_val
-                    .as_str()
-                    .ok_or_else(|| err(f_type, value))?
-                    .to_string(),
-            ),
-            FieldType::Number => Self::Number(
-                t_val.as_float().unwrap_or(
-                    t_val
-                        .as_integer()
-                        .ok_or_else(|| err(f_type, value))
-                        .map(|v| v as f64)?,
-                ),
-            ),
-            FieldType::String => Self::String(
-                t_val
-                    .as_str()
-                    .ok_or_else(|| err(f_type, value))?
-                    .to_string(),
-            ),
-            FieldType::Enum(_) => Self::Enum(
-                t_val
-                    .as_str()
-                    .ok_or_else(|| err(f_type, value))?
-                    .to_string(),
-            ),
-            FieldType::Oneof(types) => {
-                let info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
-                let selected_type = info
-                    .get("type")
-                    .and_then(|v| FieldType::oneof_type(v.as_str()))
-                    .unwrap_or_else(|| err(f_type, value));
-                let value = info
-                    .get("value")
-                    .and_then(|value| Self::from_toml(&value, &field_type, value))
-                    .unwrap_or_else(|| err(f_type, value));
-            }
-            FieldType::Date => Self::Date(DateTime::from_toml(
-                t_val.as_datetime().ok_or_else(|| err(f_type, value))?,
-            )?),
-            FieldType::Image => {
-                let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
-                Self::File(File::image().fill_from_toml_map(f_info).unwrap())
-            }
-            FieldType::Video => {
-                let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
-                Self::File(File::video().fill_from_toml_map(f_info).unwrap())
-            }
-            FieldType::Audio => {
-                let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
-                Self::File(File::audio().fill_from_toml_map(f_info).unwrap())
-            }
-            FieldType::Upload => {
-                let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
-                Self::File(File::download().fill_from_toml_map(f_info).unwrap())
-            }
-            FieldType::Meta => {
-                let f_info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
-                Self::Meta(Meta::from(f_info))
-            }
-            FieldType::Alias(a) => Self::val_with_type(&a.0, value)?,
-        })
     }
 
     pub fn typed_objects(
