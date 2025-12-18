@@ -112,7 +112,7 @@ impl ObjectDefinition {
                         .map(|info| {
                             let name = info.get("name")?.as_str()?;
                             let type_name = info.get("type")?.as_str()?;
-                            let def_type = FieldType::oneof_type(type_name)?;
+                            let def_type = FieldType::from_str(type_name, editor_types).ok()?;
                             Some((name, def_type))
                         })
                         .collect::<Option<Vec<_>>>()

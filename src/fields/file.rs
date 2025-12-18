@@ -230,13 +230,6 @@ impl File {
         }
         Ok(())
     }
-    pub fn to_liquid(&self, field_config: &FieldConfig) -> liquid::model::Value {
-        let mut m = liquid::model::Object::new();
-        for (k, v) in self.clone().into_map(Some(field_config)) {
-            m.insert(k.into(), liquid::model::Value::scalar(v));
-        }
-        liquid_core::Value::Object(m)
-    }
     pub fn to_toml(&self) -> toml::map::Map<std::string::String, toml::Value> {
         let mut m = toml::map::Map::new();
         for (k, v) in self.clone().into_map(None) {

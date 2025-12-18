@@ -1,4 +1,7 @@
-use crate::{fields::ObjectValues, FieldConfig, FieldValue, ObjectDefinition};
+use crate::{
+    fields::{File, ObjectValues},
+    FieldConfig, FieldValue, ObjectDefinition,
+};
 use liquid::model::{KString, ObjectIndex};
 use liquid_core::{Value, ValueView};
 
@@ -15,10 +18,7 @@ pub fn object_to_liquid(
                 KString::from_ref(k.as_index()),
                 object_values
                     .get(k)
-                    .map(|v| match v {
-                        FieldValue::File(file) => file.to_liquid(field_config),
-                        _ => v.to_value(),
-                    })
+                    .map(|v| v.to_liquid(field_config))
                     .unwrap_or_else(|| Value::Nil),
             )
         })
@@ -49,4 +49,28 @@ pub fn object_to_liquid(
     values.append(&mut meta_values);
     values.append(&mut child_values);
     values.into_iter().collect()
+}
+
+impl FieldValue {
+    pub fn to_liquid(&self, field_config: &FieldConfig) -> liquid::model::Value {
+        match self {
+            FieldValue::File(file) => file.to_liquid(field_config),
+            FieldValue::Oneof((t, v)) => liquid::object!({
+                "type": t,
+                "value": v.to_liquid(field_config)
+            })
+            .into(),
+            _ => self.to_value(),
+        }
+    }
+}
+
+impl File {
+    pub fn to_liquid(&self, field_config: &FieldConfig) -> liquid::model::Value {
+        let mut m = liquid::model::Object::new();
+        for (k, v) in self.clone().into_map(Some(field_config)) {
+            m.insert(k.into(), liquid::model::Value::scalar(v));
+        }
+        liquid_core::Value::Object(m)
+    }
 }

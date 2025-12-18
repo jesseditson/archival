@@ -396,7 +396,9 @@ impl ValueView for FieldValue {
             FieldValue::File(_) => {
                 panic!("files cannot be rendered via value parsing. Use file.to_liquid instead.")
             }
-            FieldValue::Oneof((_, v)) => v.to_value(),
+            FieldValue::Oneof(_) => {
+                panic!("oneof cannot be rendered via value parsing. Use oneof.to_liquid instead.")
+            }
             FieldValue::Meta(_) => self.as_object().to_value(),
             FieldValue::Null => self.as_scalar().to_value(),
         }
@@ -553,7 +555,13 @@ impl FieldValue {
                     .as_table()
                     .and_then(|info| {
                         let type_name = info.get("type")?.as_str()?;
-                        let selected_type = FieldType::oneof_type(type_name)?;
+                        let selected_type = valid_types.iter().find_map(|opt| {
+                            if opt.name == type_name {
+                                Some(opt.r#type.clone())
+                            } else {
+                                None
+                            }
+                        })?;
                         Some((type_name, selected_type, info.get("value")?))
                     })
                     .ok_or_else(|| InvalidFieldError::TypeMismatch {

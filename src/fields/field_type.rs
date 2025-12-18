@@ -133,20 +133,6 @@ impl FieldType {
             Self::Alias(a) => a.0.as_str(),
         }
     }
-    pub fn oneof_type(type_name: &str) -> Option<FieldType> {
-        match type_name {
-            "string" => Some(FieldType::String),
-            "number" => Some(FieldType::Number),
-            "date" => Some(FieldType::Date),
-            "markdown" => Some(FieldType::Markdown),
-            "boolean" => Some(FieldType::Boolean),
-            "image" => Some(FieldType::Image),
-            "video" => Some(FieldType::Video),
-            "audio" => Some(FieldType::Audio),
-            "upload" => Some(FieldType::Upload),
-            _ => None,
-        }
-    }
     pub fn from_str(
         string: &str,
         editor_types: &EditorTypes,
