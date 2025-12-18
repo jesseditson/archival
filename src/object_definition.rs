@@ -124,7 +124,6 @@ impl ObjectDefinition {
                                 r#type: def_type,
                             })
                             .collect();
-                        println!("OPTIONS {} {:?}", key, options);
                         obj_def
                             .fields
                             .insert(key.clone(), FieldType::Oneof(options));
