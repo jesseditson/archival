@@ -14,12 +14,22 @@ pub enum InvalidFieldError {
     UnrecognizedType(String),
     #[error("invalid enum {0} - only string enums supported.")]
     InvalidEnum(String),
+    #[error("invalid oneof {0:?} - parse failed")]
+    InvalidOneof(String),
     #[error("invalid date {0}")]
     InvalidDate(String),
     #[error(
         "type mismatch for field {field:?} - expected type {field_type:?}, got value {value:?}"
     )]
     TypeMismatch {
+        field: String,
+        field_type: String,
+        value: String,
+    },
+    #[error(
+        "oneof mismatch for field {field:?} - expected type {value:?} to be in {field_type:?}"
+    )]
+    OneofMismatch {
         field: String,
         field_type: String,
         value: String,
@@ -62,8 +72,22 @@ mod typedefs {
             r#ref: TypeExpr::ident(Ident("[FieldType, string]")),
         });
     }
+    pub struct FieldTypeDef;
+    impl TypeDef for FieldTypeDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            r#ref: TypeExpr::ident(Ident("FieldType")),
+        });
+    }
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
+pub struct OneofOption {
+    pub name: String,
+    // Avoid cycle by just inlining the def
+    #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::FieldTypeDef"))]
+    pub r#type: FieldType,
+}
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldType {
@@ -78,6 +102,7 @@ pub enum FieldType {
     Upload,
     Audio,
     Meta,
+    Oneof(Vec<OneofOption>),
     Alias(
         #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::AliasTypeDef"))]
         Box<(FieldType, String)>,
@@ -98,7 +123,28 @@ impl FieldType {
             Self::Audio => "audio".into(),
             Self::Upload => "upload".into(),
             Self::Meta => "meta".into(),
+            Self::Oneof(v) => v
+                .iter()
+                .map(|f| format!("{}:{}", f.name, f.r#type.as_str()))
+                .collect::<Vec<_>>()
+                .join("|")
+                .to_string()
+                .into(),
             Self::Alias(a) => a.0.as_str(),
+        }
+    }
+    pub fn oneof_type(type_name: &str) -> Option<FieldType> {
+        match type_name {
+            "string" => Some(FieldType::String),
+            "number" => Some(FieldType::Number),
+            "date" => Some(FieldType::Date),
+            "markdown" => Some(FieldType::Markdown),
+            "boolean" => Some(FieldType::Boolean),
+            "image" => Some(FieldType::Image),
+            "video" => Some(FieldType::Video),
+            "audio" => Some(FieldType::Audio),
+            "upload" => Some(FieldType::Upload),
+            _ => None,
         }
     }
     pub fn from_str(
@@ -117,6 +163,7 @@ impl FieldType {
             "audio" => Ok(FieldType::Audio),
             "upload" => Ok(FieldType::Upload),
             "meta" => Ok(FieldType::Meta),
+            // Note that oneofs are only supported via direct instantiation
             t => {
                 if let Some(et) = editor_types.get(t) {
                     Ok(FieldType::Alias(Box::new((
@@ -188,6 +235,26 @@ impl FieldType {
                     schema.insert("description".into(), description.into());
                     schema.insert("type".into(), "string".into());
                     schema.insert("enum".into(), json!(valid_values));
+                    schema
+                } else if let Self::Oneof(field_types) = self {
+                    let mut schema = serde_json::Map::new();
+                    schema.insert("description".into(), description.into());
+                    schema.insert(
+                        "oneOf".into(),
+                        field_types
+                            .iter()
+                            .map(|t| {
+                                let mut schema = serde_json::Map::new();
+                                schema.insert("type".into(), "object".into());
+                                schema.insert("additionalProperties".into(), false.into());
+                                schema.insert("properties".into(), serde_json::json!({
+                                    "type": t.name,
+                                    "value": t.r#type.to_json_schema_property(&format!("{} - {}", description, t.name), options)
+                                }));
+                                schema.insert("required".into(), serde_json::json!(["type", "value"]));
+                            })
+                            .collect(),
+                    );
                     schema
                 } else {
                     let mut schema = serde_json::Map::new();

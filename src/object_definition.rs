@@ -1,7 +1,7 @@
 #[cfg(feature = "json-schema")]
 use crate::object::ValuePath;
 use crate::{
-    fields::{field_type::InvalidFieldError, FieldType, ObjectValues},
+    fields::{field_type::InvalidFieldError, FieldType, ObjectValues, OneofOption},
     manifest::EditorTypes,
     reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
     FieldValue,
@@ -101,17 +101,52 @@ impl ObjectDefinition {
                     ObjectDefinition::new(key, child_table, editor_types)?,
                 );
             } else if let Some(value) = m_value.as_array() {
-                let string_vals = value
+                if let Some(tables) = value
                     .iter()
-                    .map(|v| {
-                        v.as_str()
-                            .map(|s| s.to_string())
-                            .ok_or_else(|| InvalidFieldError::InvalidEnum(format!("{value:?}")))
-                    })
-                    .collect::<Result<Vec<String>, InvalidFieldError>>()?;
-                obj_def
-                    .fields
-                    .insert(key.clone(), FieldType::Enum(string_vals));
+                    .map(|v| v.as_table())
+                    .collect::<Option<Vec<_>>>()
+                {
+                    // this is an array of tables, try to parse as oneof
+                    if let Some(options) = tables
+                        .iter()
+                        .map(|info| {
+                            let name = info.get("name")?.as_str()?;
+                            let type_name = info.get("type")?.as_str()?;
+                            let def_type = FieldType::oneof_type(type_name)?;
+                            Some((name, def_type))
+                        })
+                        .collect::<Option<Vec<_>>>()
+                    {
+                        let options = options
+                            .into_iter()
+                            .map(|(name, def_type)| OneofOption {
+                                name: name.to_string(),
+                                r#type: def_type,
+                            })
+                            .collect();
+                        println!("OPTIONS {} {:?}", key, options);
+                        obj_def
+                            .fields
+                            .insert(key.clone(), FieldType::Oneof(options));
+                    } else {
+                        return Err(Box::new(InvalidFieldError::InvalidOneof(format!(
+                            "{tables:?}"
+                        ))));
+                    }
+                } else {
+                    // not objects, try to parse as enum
+                    let string_vals = value
+                        .iter()
+                        .map(|v| {
+                            v.as_str()
+                                .map(|s| s.to_string())
+                                .ok_or_else(|| InvalidFieldError::InvalidEnum(format!("{value:?}")))
+                        })
+                        .collect::<Result<Vec<String>, InvalidFieldError>>()?;
+                    obj_def
+                        .fields
+                        .insert(key.clone(), FieldType::Enum(string_vals));
+                }
             } else if let Some(value) = m_value.as_str() {
                 if key == reserved_fields::TEMPLATE {
                     obj_def.template = Some(value.to_string());
@@ -218,29 +253,37 @@ pub mod tests {
     use super::*;
 
     pub fn artist_and_example_definition_str() -> &'static str {
-        "[artists]
-        name = \"string\"
-        meta = \"meta\"
-        genre = [\"emo\", \"metal\"]
-        template = \"artist\"
+        r#"
+        [artists]
+        name = "string"
+        meta = "meta"
+        genre = ["emo", "metal"]
+        template = "artist"
+        [[artists.media]]
+        name = "video"
+        type = "video"
+        [[artists.media]]
+        name = "photo"
+        type = "image"
         [artists.tour_dates]
-        date = \"date\"
-        ticket_link = \"string\"
+        date = "date"
+        ticket_link = "string"
         [artists.videos]
-        video = \"video\"
+        video = "video"
         [artists.numbers]
-        number = \"number\"
+        number = "number"
         
         [example]
-        content = \"markdown\"
+        content = "markdown"
         [example.links]
-        url = \"string\""
+        url = "string"
+        "#
     }
 
     #[test]
-    fn parsing() -> Result<(), Box<dyn Error>> {
-        let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
+    fn parsing() {
+        let table: Table = toml::from_str(artist_and_example_definition_str()).unwrap();
+        let defs = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
 
         println!("{:?}", defs);
 
@@ -249,10 +292,20 @@ pub mod tests {
         assert!(defs.contains_key("example"));
         let artist = defs.get("artists").unwrap();
         let fields = artist.fields.keys();
-        assert_eq!(fields.len(), 3);
+        assert_eq!(fields.len(), 4);
         assert_eq!(fields[0], "name".to_string());
         assert_eq!(fields[1], "meta".to_string());
         assert_eq!(fields[2], "genre".to_string());
+        assert_eq!(fields[3], "media".to_string());
+        let oneof_field = artist.fields.get("media").unwrap();
+        assert!(matches!(oneof_field, FieldType::Oneof(_)));
+        if let FieldType::Oneof(field) = oneof_field {
+            assert_eq!(field.len(), 2);
+            assert_eq!(field[0].name, "video");
+            assert_eq!(field[1].name, "photo");
+            assert!(matches!(field[0].r#type, FieldType::Video));
+            assert!(matches!(field[1].r#type, FieldType::Image));
+        }
         let children = artist.children.keys();
         assert_eq!(children.len(), 3);
         assert_eq!(children[0], "tour_dates".to_string());
@@ -297,7 +350,5 @@ pub mod tests {
         let links = example.children.get("links").unwrap();
         assert!(links.fields.contains_key("url"));
         assert_eq!(links.fields.get("url").unwrap(), &FieldType::String);
-
-        Ok(())
     }
 }

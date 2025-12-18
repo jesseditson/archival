@@ -344,6 +344,9 @@ mod tests {
     fn artist_object_str() -> &'static str {
         "name = \"Tormenta Rey\"
         order = 1
+        [media]
+        type = \"video\"
+        value = {sha = \"fake-sha\", name = \"Video Name\", filename = \"video.mp4\", mime = \"video/mpeg4\"}
       
       [[tour_dates]]
       date = \"12/22/2022\"
@@ -357,27 +360,30 @@ mod tests {
     }
 
     #[test]
-    fn object_parsing() -> Result<(), Box<dyn Error>> {
+    fn object_parsing() {
         let defs = ObjectDefinition::from_table(
-            &toml::from_str(artist_and_example_definition_str())?,
+            &toml::from_str(artist_and_example_definition_str()).unwrap(),
             &OrderMap::new(),
-        )?;
-        let table: Table = toml::from_str(artist_object_str())?;
+        )
+        .unwrap();
+        let table: Table = toml::from_str(artist_object_str()).unwrap();
         let obj = Object::from_table(
             defs.get("artists").unwrap(),
             Path::new("tormenta-rey"),
             &table,
             &OrderMap::new(),
             false,
-        )?;
+        )
+        .unwrap();
         assert_eq!(obj.order, Some(1.));
         assert_eq!(obj.object_name, "artists");
         assert_eq!(obj.filename, "tormenta-rey");
-        assert_eq!(obj.values.len(), 4);
+        assert_eq!(obj.values.len(), 5);
         assert!(obj.values.contains_key("name"));
         assert!(obj.values.contains_key("tour_dates"));
         assert!(obj.values.contains_key("numbers"));
         assert!(obj.values.contains_key("videos"));
+        assert!(obj.values.contains_key("media"));
         assert_eq!(
             obj.values.get("name"),
             Some(&FieldValue::String("Tormenta Rey".to_string()))
@@ -408,6 +414,14 @@ mod tests {
             assert!(num.contains_key("number"));
             assert_eq!(num.get("number").unwrap(), &FieldValue::Number(2.57));
         }
+        let media = obj.values.get("media").unwrap();
+        assert!(matches!(media, FieldValue::Oneof(_)));
+        if let FieldValue::Objects(numbers) = numbers {
+            assert_eq!(numbers.len(), 1);
+            let num = numbers.first().unwrap();
+            assert!(num.contains_key("number"));
+            assert_eq!(num.get("number").unwrap(), &FieldValue::Number(2.57));
+        }
         let videos = obj.values.get("videos").unwrap();
         assert!(matches!(videos, FieldValue::Objects { .. }));
         if let FieldValue::Objects(videos) = videos {
@@ -432,7 +446,5 @@ mod tests {
                 );
             }
         }
-
-        Ok(())
     }
 }

@@ -63,6 +63,13 @@ mod typedefs {
             r#ref: TypeExpr::ident(Ident("Record<string, FieldValue>[]")),
         });
     }
+    pub struct OneofTypeDef;
+    impl TypeDef for OneofTypeDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
+            r#ref: TypeExpr::ident(Ident("[string, FieldValue]")),
+        });
+    }
 }
 
 macro_rules! compare_values {
@@ -161,6 +168,7 @@ impl Renderable for FieldValue {
                     })
                     .collect(),
             ),
+            FieldValue::Oneof((_, v)) => v.rendered(field_config),
             FieldValue::Boolean(b) => RenderedFieldValue::Boolean(b),
             FieldValue::File(file) => RenderedFieldValue::File(file.rendered(field_config)),
             FieldValue::Meta(m) => RenderedFieldValue::Meta(m),
@@ -233,6 +241,17 @@ impl FieldValue {
                     .ok_or_else(|| err(f_type, value))?
                     .to_string(),
             ),
+            FieldType::Oneof(types) => {
+                let info = t_val.as_table().ok_or_else(|| err(f_type, value))?;
+                let selected_type = info
+                    .get("type")
+                    .and_then(|v| FieldType::oneof_type(v.as_str()))
+                    .unwrap_or_else(|| err(f_type, value));
+                let value = info
+                    .get("value")
+                    .and_then(|value| Self::from_toml(&value, &field_type, value))
+                    .unwrap_or_else(|| err(f_type, value));
+            }
             FieldType::Date => Self::Date(DateTime::from_toml(
                 t_val.as_datetime().ok_or_else(|| err(f_type, value))?,
             )?),
@@ -287,6 +306,7 @@ impl FieldValue {
             FieldValue::Number(_) => false,
             FieldValue::Date(_) => false,
             FieldValue::Objects(_) => false,
+            FieldValue::Oneof(_) => false,
             FieldValue::Boolean(_) => false,
             FieldValue::File(f) => !f.is_valid(),
             FieldValue::Meta(meta) => meta.is_empty(),
@@ -347,6 +367,13 @@ impl From<&FieldValue> for Option<toml::Value> {
                     })
                     .collect(),
             )),
+            FieldValue::Oneof((t, v)) => {
+                let mut table = toml::map::Map::new();
+                table.insert("name".to_string(), toml::Value::String(t.to_string()));
+                let value = Option::<toml::Value>::from(v.as_ref());
+                table.insert("value".to_string(), value.unwrap());
+                Some(toml::Value::Table(table))
+            }
             FieldValue::File(f) => Some(toml::Value::Table(f.to_toml())),
             FieldValue::Meta(m) => Some(toml::Value::Table(m.to_toml())),
             FieldValue::Null => None,
@@ -380,6 +407,7 @@ impl ValueView for FieldValue {
             FieldValue::Boolean(_) => "boolean",
             FieldValue::File(_) => "file",
             FieldValue::Meta(_) => "meta",
+            FieldValue::Oneof(_) => "oneof",
             FieldValue::Null => "null",
         }
     }
@@ -410,6 +438,7 @@ impl ValueView for FieldValue {
             ))),
             FieldValue::Boolean(b) => Some(model::ScalarCow::new(*b)),
             FieldValue::Objects(_) => None,
+            FieldValue::Oneof((_, v)) => v.as_scalar(),
             FieldValue::File(_f) => None,
             FieldValue::Meta(_m) => None,
             FieldValue::Null => None,
@@ -440,6 +469,7 @@ impl ValueView for FieldValue {
             FieldValue::File(_) => {
                 panic!("files cannot be rendered via value parsing. Use file.to_liquid instead.")
             }
+            FieldValue::Oneof((_, v)) => v.to_value(),
             FieldValue::Meta(_) => self.as_object().to_value(),
             FieldValue::Null => self.as_scalar().to_value(),
         }
@@ -591,6 +621,38 @@ impl FieldValue {
                 date_str = DateTime::parse_date_string(date_str)?;
                 Ok(FieldValue::Date(DateTime::from(&date_str)?))
             }
+            FieldType::Oneof(valid_types) => {
+                let (type_name, selected_type, value) = value
+                    .as_table()
+                    .and_then(|info| {
+                        let type_name = info.get("type")?.as_str()?;
+                        let selected_type = FieldType::oneof_type(type_name)?;
+                        Some((type_name, selected_type, info.get("value")?))
+                    })
+                    .ok_or_else(|| InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value: value.to_string(),
+                    })?;
+                if !valid_types.iter().any(|t| t.r#type == selected_type) {
+                    Err(InvalidFieldError::OneofMismatch {
+                        field: key.to_owned(),
+                        field_type: selected_type.to_string(),
+                        value: value.to_string(),
+                    })?
+                } else {
+                    Ok(FieldValue::Oneof((
+                        type_name.to_string(),
+                        Box::new(Self::from_toml(key, &selected_type, value).map_err(|_| {
+                            InvalidFieldError::TypeMismatch {
+                                field: format!("{}:{}", key, type_name),
+                                field_type: selected_type.to_string(),
+                                value: value.to_string(),
+                            }
+                        })?),
+                    )))
+                }
+            }
             FieldType::Audio => Ok(FieldValue::File(
                 File::audio().fill_from_toml_map(value.as_table().ok_or_else(|| {
                     InvalidFieldError::TypeMismatch {
@@ -653,6 +715,7 @@ impl FieldValue {
                     .map(|c| f.clone().into_map(Some(c)))
                     .expect("cannot render files without a config")
             ),
+            FieldValue::Oneof((name, val)) => format!("{name}:{}", val.as_string(config)),
             FieldValue::Meta(m) => format!("{:?}", serde_json::Value::from(m)),
             FieldValue::Null => "null".to_string(),
         }

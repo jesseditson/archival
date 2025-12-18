@@ -3,6 +3,7 @@ pub mod archival_proto {
 }
 
 use crate::events::ArchivalEvent;
+use crate::fields::field_type::OneofOption;
 use crate::fields::meta::Meta;
 use crate::fields::{DateTime, DisplayType, FieldType, FieldValue, File, MetaValue};
 use crate::object::{Object, ObjectEntry, ObjectMap};
@@ -163,6 +164,12 @@ impl From<archival_proto::FieldValue> for FieldValue {
                 // FieldValue::Objects expects Vec<ObjectValues>
                 FieldValue::Objects(vec![fields])
             }
+            Some(archival_proto::field_value::Value::Oneof(val)) => FieldValue::Oneof((
+                val.name,
+                Box::new(FieldValue::from(
+                    *val.value.expect("invalid oneof missing value"),
+                )),
+            )),
             Some(archival_proto::field_value::Value::Boolean(b)) => FieldValue::Boolean(b),
             Some(archival_proto::field_value::Value::File(f)) => FieldValue::File(f.into()),
             Some(archival_proto::field_value::Value::Meta(m)) => FieldValue::Meta(m.into()),
@@ -193,6 +200,12 @@ impl From<FieldValue> for archival_proto::FieldValue {
                     }
                 }
                 archival_proto::field_value::Value::Objects(archival_proto::ObjectValues { fields })
+            }
+            FieldValue::Oneof((name, val)) => {
+                archival_proto::field_value::Value::Oneof(Box::new(archival_proto::OneofValue {
+                    name,
+                    value: Some(Box::new(archival_proto::FieldValue::from(*val))),
+                }))
             }
             FieldValue::Boolean(b) => archival_proto::field_value::Value::Boolean(b),
             FieldValue::File(file) => archival_proto::field_value::Value::File(file.into()),
@@ -403,6 +416,15 @@ impl From<archival_proto::FieldType> for FieldType {
             Some(archival_proto::field_type::Type::Enum(values)) => FieldType::Enum(values.values),
             Some(archival_proto::field_type::Type::Markdown(())) => FieldType::Markdown,
             Some(archival_proto::field_type::Type::Boolean(())) => FieldType::Boolean,
+            Some(archival_proto::field_type::Type::Oneof(opts)) => FieldType::Oneof(
+                opts.options
+                    .into_iter()
+                    .map(|option| OneofOption {
+                        name: option.name,
+                        r#type: option.r#type.expect("missing type on oneof option").into(),
+                    })
+                    .collect(),
+            ),
             Some(archival_proto::field_type::Type::Image(())) => FieldType::Image,
             Some(archival_proto::field_type::Type::Video(())) => FieldType::Video,
             Some(archival_proto::field_type::Type::Upload(())) => FieldType::Upload,
@@ -459,6 +481,15 @@ impl From<FieldType> for archival_proto::FieldType {
             FieldType::Enum(vals) => Type::Enum(archival_proto::EnumFieldType { values: vals }),
             FieldType::Markdown => Type::Markdown(()),
             FieldType::Boolean => Type::Boolean(()),
+            FieldType::Oneof(opts) => Type::Oneof(archival_proto::OneofFieldType {
+                options: opts
+                    .into_iter()
+                    .map(|option| archival_proto::OneofFieldTypeOption {
+                        name: option.name,
+                        r#type: Some(option.r#type.into()),
+                    })
+                    .collect(),
+            }),
             FieldType::Image => Type::Image(()),
             FieldType::Video => Type::Video(()),
             FieldType::Upload => Type::Upload(()),
@@ -962,6 +993,16 @@ mod proto_tests {
         fields::FieldType::Number;
         fields::FieldType::Enum(vec!["sjdklasd".to_string(), "blue".to_string()]);
         fields::FieldType::Alias(Box::new((fields::FieldType::Number, "numeric".to_string())));
+        fields::FieldType::Oneof(vec![
+            fields::OneofOption {
+                name: "test".to_string(),
+                r#type: fields::FieldType::Number,
+            },
+            fields::OneofOption {
+                name: "test2".to_string(),
+                r#type: fields::FieldType::String,
+            }
+        ]);
     });
     proto_test!(archival_proto::ObjectDefinition => ObjectDefinition, object_definition_test {
         ObjectDefinition {

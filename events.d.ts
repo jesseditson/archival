@@ -46,6 +46,8 @@ export type FieldValue = ({
 } | {
     "Objects": Record<string, FieldValue>[];
 } | {
+    "Oneof": [string, FieldValue];
+} | {
     "Boolean": boolean;
 } | {
     "File": File;
