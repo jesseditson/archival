@@ -1,6 +1,5 @@
 {
   "$id": "jesseditson/archival/v0.10.4/objects.schema.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "id": "object_def",
   "patternProperties": {

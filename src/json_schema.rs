@@ -62,10 +62,6 @@ pub fn generate_root_json_schema(
     options: ObjectSchemaOptions,
 ) -> ObjectSchema {
     let mut schema = serde_json::Map::new();
-    schema.insert(
-        "$schema".into(),
-        "https://json-schema.org/draft/2020-12/schema".into(),
-    );
     schema.insert("$id".into(), id.into());
     if let Some(title) = title {
         schema.insert("title".into(), title.into());
@@ -134,10 +130,6 @@ pub fn generate_json_schema(
     options: crate::json_schema::ObjectSchemaOptions,
 ) -> ObjectSchema {
     let mut schema = serde_json::Map::new();
-    schema.insert(
-        "$schema".into(),
-        "https://json-schema.org/draft/2020-12/schema".into(),
-    );
     schema.insert("$id".into(), id.into());
     // schema.insert("title".into(), name.into());
     // schema.insert("description".into(), description.into());

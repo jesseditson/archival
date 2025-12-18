@@ -1,6 +1,5 @@
 {
   "$id": "jesseditson/archival/v0.10.4/manifest.schema.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "type": "object",
   "properties": {
