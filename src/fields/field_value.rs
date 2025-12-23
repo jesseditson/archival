@@ -313,7 +313,7 @@ impl From<&FieldValue> for Option<toml::Value> {
             )),
             FieldValue::Oneof((t, v)) => {
                 let mut table = toml::map::Map::new();
-                table.insert("name".to_string(), toml::Value::String(t.to_string()));
+                table.insert("type".to_string(), toml::Value::String(t.to_string()));
                 let value = Option::<toml::Value>::from(v.as_ref());
                 table.insert("value".to_string(), value.unwrap());
                 Some(toml::Value::Table(table))

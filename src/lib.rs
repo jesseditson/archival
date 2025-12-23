@@ -796,17 +796,19 @@ mod lib {
         let post_obj = objects.get("post").unwrap();
         assert!(matches!(post_obj, ObjectEntry::List(_)));
         let fp = post_obj.into_iter().next().unwrap();
-        let m = ValuePath::from_string("media.0.image")
-            .get_in_object(fp)
-            .unwrap();
-        assert!(matches!(m, FieldValue::File(_)));
+        let m = ValuePath::from_string("media").get_in_object(fp).unwrap();
+        assert!(matches!(m, FieldValue::Oneof(..)));
         let fc = &archival.site.field_config;
-        if let FieldValue::File(img) = m {
-            assert_eq!(img.filename, "test.jpg");
-            assert_eq!(img.mime, "image/jpg");
-            assert_eq!(img.name, Some("Test".to_string()));
-            assert_eq!(img.sha, "test-sha");
-            assert_eq!(img.url(fc), "test://uploads-url/test-sha/test.jpg");
+        if let FieldValue::Oneof((t, val)) = m {
+            assert_eq!(t, "image");
+            assert!(matches!(**val, FieldValue::File(_)));
+            if let FieldValue::File(img) = val.as_ref() {
+                assert_eq!(img.filename, "test.jpg");
+                assert_eq!(img.mime, "image/jpg");
+                assert_eq!(img.name, Some("Test".to_string()));
+                assert_eq!(img.sha, "test-sha");
+                assert_eq!(img.url(fc), "test://uploads-url/test-sha/test.jpg");
+            }
         }
         archival.build(BuildOptions::default())?;
         let dist_files = archival
@@ -1136,7 +1138,7 @@ mod lib {
                 }
             }
         }
-        assert!(found);
+        assert!(found, "a-post not found in posts: {:?}", posts);
         // Sending an event should result in an updated fs
         let post_html = archival
             .fs_mutex
