@@ -46,6 +46,11 @@ impl From<&str> for ValuePathComponent {
         ValuePath::key(value)
     }
 }
+impl From<&String> for ValuePathComponent {
+    fn from(value: &String) -> Self {
+        ValuePath::key(value)
+    }
+}
 impl From<usize> for ValuePathComponent {
     fn from(value: usize) -> Self {
         ValuePathComponent::Index(value)
