@@ -226,7 +226,11 @@ impl FieldType {
                     let mut schema = serde_json::Map::new();
                     schema.insert("description".into(), description.into());
                     schema.insert(
-                        "oneOf".into(),
+                        if options.anyof_for_unions {
+                            "anyOf"
+                        } else {
+                            "oneOf"
+                        }.into(),
                         field_types
                             .iter()
                             .map(|t| {

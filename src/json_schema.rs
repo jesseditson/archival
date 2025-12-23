@@ -14,6 +14,8 @@ pub struct ObjectSchemaOptions {
     // If a "date" format isn't supported, this option allows setting them to a
     // static value.
     pub set_dates_to: Option<Date>,
+    // Some generators don't support oneOf but do support anyOf
+    pub anyof_for_unions: bool,
     pub name: Option<String>,
     pub property_overrides: HashMap<FieldType, serde_json::Map<String, serde_json::Value>>,
     pub omit_paths: Option<Vec<ValuePath>>,
@@ -33,6 +35,10 @@ impl ObjectSchemaOptions {
     }
     pub fn without_file_types(mut self) -> Self {
         self.omit_file_types = true;
+        self
+    }
+    pub fn with_anyof_for_unions(mut self) -> Self {
+        self.anyof_for_unions = true;
         self
     }
     pub fn with_all_fields_required(mut self) -> Self {
