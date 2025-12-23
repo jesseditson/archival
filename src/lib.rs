@@ -636,7 +636,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         self.write_object(&event.object, &event.filename, |existing| {
             event
                 .path
-                .append((&event.field).into())
+                .append((&(*event.field)).into())
                 .set_in_object(existing, event.value)?;
             Ok(existing)
         })?;

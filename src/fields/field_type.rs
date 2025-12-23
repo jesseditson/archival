@@ -234,7 +234,10 @@ impl FieldType {
                                 schema.insert("type".into(), "object".into());
                                 schema.insert("additionalProperties".into(), false.into());
                                 schema.insert("properties".into(), serde_json::json!({
-                                    "type": t.name,
+                                    "type": {
+                                        "type": "string",
+                                        "const": t.name
+                                    },
                                     "value": t.r#type.to_json_schema_property(&format!("{} - {}", description, t.name), options)
                                 }));
                                 schema.insert("required".into(), serde_json::json!(["type", "value"]));

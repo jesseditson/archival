@@ -2,7 +2,8 @@ use crate::fields::file::RenderedFile;
 use crate::object::to_liquid::object_to_liquid;
 use crate::object::Renderable;
 use crate::util::integer_decode;
-use crate::{FieldConfig, ObjectDefinition};
+use crate::value_path::ValuePathError;
+use crate::{FieldConfig, ObjectDefinition, ValuePath};
 
 use super::file::File;
 use super::meta::Meta;
@@ -20,7 +21,7 @@ use std::{
     fmt::{self, Debug},
 };
 use toml::Value;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 // These are BTrees rather than OrderMaps because we only serialize them when we
 // have access to the definition, which has the field order.
@@ -54,6 +55,13 @@ mod typedefs {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
             // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
             r#ref: TypeExpr::ident(Ident("Record<string, FieldValue>[]")),
+        });
+    }
+    pub struct RenderedOneofTypeDef;
+    impl TypeDef for RenderedOneofTypeDef {
+        const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
+            // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
+            r#ref: TypeExpr::ident(Ident("[string, RenderedFieldValue]")),
         });
     }
     pub struct OneofTypeDef;
@@ -94,6 +102,13 @@ pub enum RenderedFieldValue {
             type_def(type_of = "typedefs::RenderedObjectValuesTypeDef")
         )]
         Vec<RenderedObjectValues>,
+    ),
+    Oneof(
+        #[cfg_attr(
+            feature = "typescript",
+            type_def(type_of = "typedefs::RenderedOneofTypeDef")
+        )]
+        (String, Box<RenderedFieldValue>),
     ),
     Boolean(bool),
     File(RenderedFile),
@@ -162,7 +177,9 @@ impl Renderable for FieldValue {
                     })
                     .collect(),
             ),
-            FieldValue::Oneof((_, v)) => v.rendered(field_config),
+            FieldValue::Oneof((t, v)) => {
+                RenderedFieldValue::Oneof((t, Box::new(v.rendered(field_config))))
+            }
             FieldValue::Boolean(b) => RenderedFieldValue::Boolean(b),
             FieldValue::File(file) => RenderedFieldValue::File(file.rendered(field_config)),
             FieldValue::Meta(m) => RenderedFieldValue::Meta(m),
@@ -467,6 +484,111 @@ impl FieldValue {
         }
     }
 
+    fn field_from_json(
+        value: &serde_json::Value,
+        field_type: &FieldType,
+        parent_path: &ValuePath,
+        object_definition: &ObjectDefinition,
+    ) -> Result<Option<Self>, Box<dyn Error>> {
+        match value {
+            serde_json::Value::String(s) => Ok(Some(FieldValue::String(s.to_string()))),
+            serde_json::Value::Bool(b) => Ok(Some(FieldValue::Boolean(*b))),
+            serde_json::Value::Number(n) => Ok(Some(FieldValue::Number(n.as_f64().unwrap()))),
+            serde_json::Value::Null => Ok(Some(FieldValue::String("".into()))),
+            serde_json::Value::Object(o) => match field_type {
+                FieldType::Oneof(options) => {
+                    if let (Some(serde_json::Value::String(typ)), Some(val)) =
+                        (o.get("type"), o.get("value"))
+                    {
+                        let found_type = options
+                            .iter()
+                            .find_map(|opt| {
+                                if opt.name == *typ {
+                                    Some(opt.r#type.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .ok_or_else(|| {
+                                InvalidFieldError::InvalidOneof(format!(
+                                    "faied finding type {}",
+                                    typ
+                                ))
+                            })?;
+                        Ok(FieldValue::field_from_json(
+                            val,
+                            &found_type,
+                            &parent_path.clone(),
+                            object_definition,
+                        )?
+                        .map(|value| FieldValue::Oneof((typ.to_string(), Box::new(value)))))
+                    } else {
+                        Err(InvalidFieldError::InvalidOneof(format!(
+                            "expected value at {parent_path}, found: {:?}",
+                            o
+                        ))
+                        .into())
+                    }
+                }
+                FieldType::Video | FieldType::Audio | FieldType::Upload | FieldType::Image => {
+                    Ok(Some(
+                        File::download()
+                            .fill_from_json_map(o)
+                            .map(FieldValue::File)?,
+                    ))
+                }
+                FieldType::Meta => Ok(Some(FieldValue::Meta(Meta::from(o)))),
+                _ => Err(InvalidFieldError::UnrecognizedType(field_type.to_string()).into()),
+            },
+            serde_json::Value::Array(v) => Ok(Some(FieldValue::Objects(
+                v.iter()
+                    .enumerate()
+                    .map(|(index, val)| {
+                        let mut map = BTreeMap::new();
+                        if let Some(obj) = val.as_object() {
+                            for (k, v) in obj.iter() {
+                                if let Some(value) = FieldValue::from_json(
+                                    v,
+                                    &parent_path.clone(),
+                                    object_definition,
+                                )? {
+                                    map.insert(k.to_string(), value);
+                                } else {
+                                    warn!(
+                                        "{} {} had invalid key {}, skipping.",
+                                        parent_path, index, k
+                                    );
+                                }
+                            }
+                        } else {
+                            panic!("Invalid value {} for child", val);
+                        }
+                        Ok::<_, Box<dyn Error>>(map)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))),
+        }
+    }
+
+    #[instrument(skip(value))]
+    pub fn from_json(
+        value: &serde_json::Value,
+        field_path: &ValuePath,
+        object_definition: &ObjectDefinition,
+    ) -> Result<Option<Self>, Box<dyn Error>> {
+        match field_path.get_field_definition(object_definition) {
+            Ok(field_type) => {
+                Self::field_from_json(value, field_type, field_path, object_definition)
+            }
+            Err(e) => {
+                if matches!(e, ValuePathError::NotFound(..)) {
+                    Ok(None)
+                } else {
+                    Err(e.into())
+                }
+            }
+        }
+    }
     #[instrument(skip(value))]
     pub fn from_toml(
         key: &String,
@@ -657,42 +779,6 @@ impl FieldValue {
     }
 }
 
-impl From<&serde_json::Value> for FieldValue {
-    fn from(value: &serde_json::Value) -> Self {
-        match value {
-            serde_json::Value::String(s) => FieldValue::String(s.to_string()),
-            serde_json::Value::Bool(b) => FieldValue::Boolean(*b),
-            serde_json::Value::Number(n) => FieldValue::Number(n.as_f64().unwrap()),
-            serde_json::Value::Null => FieldValue::String("".into()),
-            serde_json::Value::Object(o) => {
-                // fill_from_json_map fails when a file field is missing, so we
-                // may incorrectly map to meta if the source data is not
-                // structured correctly, which will likely cause a serialization
-                // error downstream.
-                match File::download().fill_from_json_map(o) {
-                    Ok(file) => FieldValue::File(file),
-                    Err(_) => FieldValue::Meta(Meta::from(o)),
-                }
-            }
-            serde_json::Value::Array(v) => FieldValue::Objects(
-                v.iter()
-                    .map(|val| {
-                        let mut map = BTreeMap::new();
-                        if let Some(obj) = val.as_object() {
-                            for (k, v) in obj.iter() {
-                                map.insert(k.to_string(), FieldValue::from(v));
-                            }
-                        } else {
-                            panic!("Invalid value {} for child", val);
-                        }
-                        map
-                    })
-                    .collect(),
-            ),
-        }
-    }
-}
-
 #[cfg(test)]
 pub mod enum_tests {
 
@@ -807,5 +893,244 @@ pub mod file_tests {
         let field_config = FieldConfig::default();
         let ctx = liquid::object!({ "file": file.to_liquid(&field_config) });
         assert_eq!(template.render(&ctx).unwrap(), "BLANK");
+    }
+}
+#[cfg(test)]
+pub mod json_parsing_tests {
+    use std::collections::HashMap;
+
+    use ordermap::OrderMap;
+    use serde_json::{json, Map, Value};
+    use toml::Table;
+    use tracing_test::traced_test;
+
+    use crate::{fields::File, FieldValue, ObjectDefinition, ValuePath};
+
+    pub fn object_definition_toml() -> &'static str {
+        r#"
+        [site]
+        name = "string"
+        description = "string"
+
+        [post]
+        title = "string"
+        content = "markdown"
+        excerpt = "string"
+        date = "date"
+        tags = "string"
+        template = "post"
+        [[post.media]]
+        name = "image"
+        type = "image"
+        [[post.media]]
+        name = "video"
+        type = "video"
+        [[post.media]]
+        name = "audio"
+        type = "audio"
+        [[post.media]]
+        name = "link"
+        type = "string"
+        "#
+    }
+
+    #[traced_test]
+    #[test]
+    fn parsing_basics() {
+        let table: Table = toml::from_str(object_definition_toml()).unwrap();
+        let object_definitions = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
+        let mut example = serde_json::json!({
+          "post": [
+            {
+              "__filename": "welcome-post",
+              "content": "Welcome to my personal blog! Here you'll find updates about my life, thoughts, and interests. Stay tuned for more posts.",
+              "date": "2025-12-19 00:00:00",
+              "excerpt": "Welcome to my blog! This is the first post.",
+              "media": {
+                "type": "image",
+                "value": {
+                  "description": "A welcoming image for my blog",
+                  "display_type": "image",
+                  "filename": "welcome-image.png",
+                  "mime": "image/png",
+                  "name": "Welcome Image",
+                  "sha": "abc123def4567890abc123def4567890abc123def4567890abc123def4567890"
+                }
+              },
+              "order": 1,
+              "tags": "personal,blog,welcome",
+              "title": "Hello World!"
+            },
+            {
+              "__filename": "second-post",
+              "content": "Today I want to share some thoughts on the importance of hobbies and taking time for oneself.",
+              "date": "2025-12-19 00:00:00",
+              "excerpt": "Reflecting on hobbies and self-care.",
+              "media": {
+                "type": "video",
+                "value": {
+                  "description": "A short video about my hobbies",
+                  "display_type": "video",
+                  "filename": "hobbies-video.mp4",
+                  "mime": "video/mp4",
+                  "name": "Hobbies Video",
+                  "sha": "def456abc1237890def456abc1237890def456abc1237890def456abc1237890"
+                }
+              },
+              "order": 2,
+              "tags": "personal,blog,hobbies",
+              "title": "My Hobbies"
+            },
+            {
+              "__filename": "third-post",
+              "content": "Sharing a recent picture from my trip to the mountains. Nature is truly breathtaking.",
+              "date": "2025-12-19 00:00:00",
+              "excerpt": "A beautiful mountain landscape.",
+              "media": {
+                "type": "image",
+                "value": {
+                  "description": "Scenic mountain view from my trip",
+                  "display_type": "image",
+                  "filename": "mountain-trip.jpg",
+                  "mime": "image/jpeg",
+                  "name": "Mountain Trip",
+                  "sha": "789abc012def3456789abc012def3456789abc012def3456789abc012def345"
+                }
+              },
+              "order": 3,
+              "tags": "personal,blog,travel,photography",
+              "title": "Mountain Adventure"
+            },
+            {
+              "__filename": "fourth-post",
+              "content": "Considering my favorite books and why they matter to me. Here are some recommendations.",
+              "date": "2025-12-19 00:00:00",
+              "excerpt": "My favorite books and why I love them.",
+              "media": { "type": "link", "value": "https://mybookrecommendations.com" },
+              "order": 4,
+              "tags": "personal,blog,books,recommendations",
+              "title": "My Favorite Books"
+            },
+            {
+              "__filename": "fifth-post",
+              "content": "Here's a quick update on my recent projects and future plans. Exciting stuff ahead!",
+              "date": "2025-12-19 00:00:00",
+              "excerpt": "Upcoming projects and goals.",
+              "media": {
+                "type": "audio",
+                "value": {
+                  "description": "Audio update about my projects",
+                  "display_type": "audio",
+                  "filename": "project-update.mp3",
+                  "mime": "audio/mpeg",
+                  "name": "Project Update",
+                  "sha": "012def3456789abc012def3456789abc012def3456789abc012def3456789abc"
+                }
+              },
+              "order": 5,
+              "tags": "personal,blog,updates,projects",
+              "title": "Project and Future Plans"
+            }
+          ],
+          "site": {
+            "description": "I would like to make a blog",
+            "name": "My Personal Blog",
+            "order": 1
+          }
+        });
+        fn get_fields(
+            object: &Map<String, Value>,
+            object_def: &ObjectDefinition,
+        ) -> HashMap<String, FieldValue> {
+            let mut fields = HashMap::new();
+            for (key, value) in object.into_iter() {
+                if key == "order" {
+                    continue;
+                };
+                if let Some(value) =
+                    FieldValue::from_json(value, &ValuePath::from_string(key), object_def).unwrap()
+                {
+                    fields.insert(key.to_string(), value);
+                } else {
+                    println!(
+                        "skipping key {key} in {} (valid values: [{}])",
+                        object_def.name,
+                        object_def
+                            .fields
+                            .iter()
+                            .map(|f| f.0.as_str())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                }
+            }
+            fields
+        }
+        let mut output = HashMap::new();
+        for (obj_name, obj_val) in example.as_object_mut().unwrap() {
+            if let serde_json::Value::Array(objects) = obj_val {
+                let mut parsed_objs = HashMap::new();
+                for obj_val in objects {
+                    let object = obj_val.as_object_mut().unwrap();
+                    let filename = object
+                        .remove("__filename")
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .to_string();
+                    let object_def = object_definitions.get(obj_name).unwrap();
+                    let fields = get_fields(object, object_def);
+                    parsed_objs.insert(filename, fields);
+                }
+                output.insert(obj_name.to_string(), parsed_objs);
+            } else {
+                let object = obj_val.as_object().unwrap();
+                let object_def = object_definitions.get(obj_name).unwrap();
+                let fields = get_fields(object, object_def);
+                output.insert(
+                    obj_name.to_string(),
+                    HashMap::from([("root".to_string(), fields)]),
+                );
+            }
+        }
+        println!("PARSED: {:#?}", output);
+        let posts = output.get("post").expect("missing posts");
+        assert_eq!(posts.len(), 5);
+        let site = output
+            .get("site")
+            .expect("missing site")
+            .get("root")
+            .expect("site was not a root object");
+        assert_eq!(
+            *site.get("description").unwrap(),
+            FieldValue::String("I would like to make a blog".to_string())
+        );
+        assert_eq!(
+            *site.get("name").unwrap(),
+            FieldValue::String("My Personal Blog".to_string())
+        );
+        let fifth_post = posts.get("fifth-post").expect("missing fifth-post");
+        assert_eq!(
+            *fifth_post.get("tags").unwrap(),
+            FieldValue::String("personal,blog,updates,projects".to_string())
+        );
+        assert_eq!(
+            *fifth_post.get("media").unwrap(),
+            FieldValue::Oneof((
+                "audio".to_string(),
+                Box::new(FieldValue::File(
+                    File::audio()
+                        .fill_from_json_map(json!({
+                          "description": "Audio update about my projects",
+                          "display_type": "audio",
+                          "filename": "project-update.mp3",
+                          "mime": "audio/mpeg",
+                          "name": "Project Update",
+                          "sha": "012def3456789abc012def3456789abc012def3456789abc012def3456789abc"
+                        }).as_object().unwrap())
+                        .unwrap()
+                ))
+            ))
+        );
     }
 }
