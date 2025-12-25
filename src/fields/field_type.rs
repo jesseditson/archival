@@ -162,13 +162,6 @@ impl FieldType {
             }
         }
     }
-
-    pub fn is_file_type(&self) -> bool {
-        matches!(
-            self,
-            FieldType::Image | FieldType::Audio | FieldType::Video | FieldType::Upload
-        )
-    }
 }
 
 impl Display for FieldType {
@@ -192,13 +185,22 @@ impl FieldType {
     pub fn to_json_schema_property(
         &self,
         description: &str,
-        options: &crate::json_schema::ObjectSchemaOptions,
+        field_path: &crate::ValuePath,
+        options: &mut crate::json_schema::ObjectSchemaOptions,
     ) -> crate::json_schema::ObjectSchema {
         match self {
-            Self::Alias(a) => a.0.to_json_schema_property(description, options),
-            _ => {
+            Self::Alias(a) => {
+                a.0.to_json_schema_property(description, field_path, options)
+            }
+            field_type => {
                 if let Some(display_type) = self.maybe_file_type() {
-                    File::to_json_schema_property(description, display_type, options)
+                    File::to_json_schema_property(
+                        description,
+                        field_path,
+                        field_type,
+                        display_type,
+                        options,
+                    )
                 } else if matches!(self, Self::Date) {
                     let mut schema = serde_json::Map::new();
                     schema.insert("description".into(), description.into());
@@ -213,6 +215,7 @@ impl FieldType {
                     } else {
                         schema.insert("format".into(), "date".into());
                     }
+                    options.decorate(field_path, field_type, &mut schema);
                     schema
                 } else if let Self::Enum(valid_values) = self {
                     use serde_json::json;
@@ -221,6 +224,7 @@ impl FieldType {
                     schema.insert("description".into(), description.into());
                     schema.insert("type".into(), "string".into());
                     schema.insert("enum".into(), json!(valid_values));
+                    options.decorate(field_path, field_type, &mut schema);
                     schema
                 } else if let Self::Oneof(field_types) = self {
                     let mut schema = serde_json::Map::new();
@@ -242,13 +246,14 @@ impl FieldType {
                                         "type": "string",
                                         "const": t.name
                                     },
-                                    "value": t.r#type.to_json_schema_property(&format!("{} - {}", description, t.name), options)
+                                    "value": t.r#type.to_json_schema_property(&format!("{} - {}", description, t.name), &field_path.clone().append("value".into()), options)
                                 }));
                                 schema.insert("required".into(), serde_json::json!(["type", "value"]));
                                 schema
                             })
                             .collect(),
                     );
+                    options.decorate(field_path, field_type, &mut schema);
                     schema
                 } else {
                     let mut schema = serde_json::Map::new();
@@ -279,6 +284,7 @@ impl FieldType {
                         schema.insert("properties".into(), serde_json::json!({}));
                         schema.insert("required".into(), serde_json::json!([]));
                     }
+                    options.decorate(field_path, field_type, &mut schema);
                     schema
                 }
             }

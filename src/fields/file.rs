@@ -338,8 +338,10 @@ impl Renderable for File {
 impl File {
     pub fn to_json_schema_property(
         description: &str,
+        field_path: &crate::ValuePath,
+        field_type: &crate::FieldType,
         display_type: DisplayType,
-        options: &crate::json_schema::ObjectSchemaOptions,
+        options: &mut crate::json_schema::ObjectSchemaOptions,
     ) -> crate::json_schema::ObjectSchema {
         use serde_json::json;
         let mut property = serde_json::Map::new();
@@ -374,7 +376,7 @@ impl File {
             "filename".into(),
             json!({
                 "type": "string",
-                "description": "the filename that this upload was generated from",
+                "description": "the filename of this file",
             }),
         );
         properties.insert(
@@ -400,6 +402,7 @@ impl File {
         }
         property.insert("required".into(), required_fields.into());
         property.insert("additionalProperties".into(), false.into());
+        options.decorate(field_path, field_type, &mut property);
         property
     }
 }

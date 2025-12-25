@@ -1,15 +1,15 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use serde_json::json;
 use time::Date;
 
-use crate::{fields::FieldType, object::ValuePath, ObjectDefinition, ObjectDefinitions};
+use crate::{object::ValuePath, FieldType, ObjectDefinition, ObjectDefinitions};
 
 pub type ObjectSchema = serde_json::Map<String, serde_json::Value>;
 
-#[derive(Debug, Default)]
+type DecoratorFn = dyn FnMut(&ValuePath, &FieldType, &mut ObjectSchema);
+#[derive(Default)]
 pub struct ObjectSchemaOptions {
-    pub omit_file_types: bool,
     pub all_fields_required: bool,
     // If a "date" format isn't supported, this option allows setting them to a
     // static value.
@@ -17,24 +17,18 @@ pub struct ObjectSchemaOptions {
     // Some generators don't support oneOf but do support anyOf
     pub anyof_for_unions: bool,
     pub name: Option<String>,
-    pub property_overrides: HashMap<FieldType, serde_json::Map<String, serde_json::Value>>,
+    // Decorator will be called for every leaf type, including oneof branches.
+    // It is used to override the default output when needed.
+    pub decorator_fn: Option<Box<DecoratorFn>>,
     pub omit_paths: Option<Vec<ValuePath>>,
 }
 
 impl ObjectSchemaOptions {
-    pub fn with_overrides(
+    pub fn with_decorator(
         mut self,
-        field_type: FieldType,
-        props: serde_json::Map<String, serde_json::Value>,
+        decorator: impl FnMut(&ValuePath, &FieldType, &mut ObjectSchema) + 'static,
     ) -> Self {
-        let existing = self.property_overrides.entry(field_type).or_default();
-        for (k, v) in props {
-            existing.insert(k, v);
-        }
-        self
-    }
-    pub fn without_file_types(mut self) -> Self {
-        self.omit_file_types = true;
+        self.decorator_fn = Some(Box::new(decorator));
         self
     }
     pub fn with_anyof_for_unions(mut self) -> Self {
@@ -57,6 +51,30 @@ impl ObjectSchemaOptions {
         self.omit_paths = paths;
         self
     }
+
+    pub(crate) fn decorate(
+        &mut self,
+        field_path: &ValuePath,
+        field_type: &FieldType,
+        schema: &mut ObjectSchema,
+    ) {
+        if let Some(decorator) = &mut self.decorator_fn {
+            decorator(field_path, field_type, schema);
+        }
+    }
+}
+
+impl std::fmt::Debug for ObjectSchemaOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ObjectSchemaOptions")
+            .field("all_fields_required", &self.all_fields_required)
+            .field("set_dates_to", &self.set_dates_to)
+            .field("anyof_for_unions", &self.anyof_for_unions)
+            .field("name", &self.name)
+            .field("decorator_fn", &self.decorator_fn.is_some())
+            .field("omit_paths", &self.omit_paths)
+            .finish()
+    }
 }
 
 pub fn generate_root_json_schema(
@@ -65,7 +83,7 @@ pub fn generate_root_json_schema(
     description: &str,
     objects: &ObjectDefinitions,
     root_objects: &HashSet<String>,
-    options: ObjectSchemaOptions,
+    mut options: ObjectSchemaOptions,
 ) -> ObjectSchema {
     let mut schema = serde_json::Map::new();
     schema.insert("$id".into(), id.into());
@@ -86,7 +104,7 @@ pub fn generate_root_json_schema(
         {
             continue;
         }
-        let obj_properties = def.to_json_schema_properties(false, &options, object_path);
+        let obj_properties = def.to_json_schema_properties(false, &mut options, object_path);
         let required: Vec<String> = if options.all_fields_required {
             obj_properties.keys().map(|k| k.to_string()).collect()
         } else {
@@ -133,7 +151,7 @@ pub fn generate_json_schema(
     // name: &str,
     // description: &str,
     definition: &ObjectDefinition,
-    options: crate::json_schema::ObjectSchemaOptions,
+    mut options: ObjectSchemaOptions,
 ) -> ObjectSchema {
     let mut schema = serde_json::Map::new();
     schema.insert("$id".into(), id.into());
@@ -141,7 +159,7 @@ pub fn generate_json_schema(
     // schema.insert("description".into(), description.into());
     schema.insert("type".into(), "object".into());
     let object_path = ValuePath::empty();
-    let properties = definition.to_json_schema_properties(false, &options, object_path);
+    let properties = definition.to_json_schema_properties(false, &mut options, object_path);
     if options.all_fields_required {
         let keys: Vec<String> = properties.keys().map(|k| k.to_string()).collect();
         schema.insert("required".into(), keys.into());

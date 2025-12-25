@@ -189,7 +189,7 @@ impl ObjectDefinition {
     pub fn to_json_schema_properties(
         &self,
         is_child: bool,
-        options: &crate::json_schema::ObjectSchemaOptions,
+        options: &mut crate::json_schema::ObjectSchemaOptions,
         current_path: ValuePath,
     ) -> crate::json_schema::ObjectSchema {
         let mut properties = serde_json::Map::new();
@@ -203,15 +203,7 @@ impl ObjectDefinition {
             {
                 continue;
             }
-            if options.omit_file_types && field_type.is_file_type() {
-                continue;
-            }
-            let mut field_props = field_type.to_json_schema_property(field, options);
-            if let Some(overrides) = options.property_overrides.get(field_type) {
-                for (k, v) in overrides {
-                    field_props.insert(k.to_string(), v.clone());
-                }
-            }
+            let field_props = field_type.to_json_schema_property(field, &field_path, options);
             properties.insert(field.into(), field_props.into());
         }
         if !is_child {
