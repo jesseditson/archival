@@ -262,6 +262,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             pages_dir,
             layout_dir,
             objects_dir,
+            static_dir,
             ..
         } = &self.site.manifest;
         let root_files = [
@@ -270,6 +271,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         ];
         Ok(root_files
             .into_iter()
+            .chain(fs.walk_dir(static_dir, false)?.map(|p| static_dir.join(p)))
             .chain(fs.walk_dir(pages_dir, false)?.map(|p| pages_dir.join(p)))
             .chain(fs.walk_dir(layout_dir, false)?.map(|p| layout_dir.join(p)))
             .chain(
