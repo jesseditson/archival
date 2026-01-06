@@ -1,10 +1,8 @@
 pub use crate::value_path::{ValuePath, ValuePathComponent};
 use crate::{
     events::AddObjectValue,
-    fields::{
-        field_value::RenderedObjectValues, FieldType, FieldValue, InvalidFieldError, ObjectValues,
-    },
-    manifest::{EditorTypes, ManifestEditorTypeValidator},
+    fields::{field_value::RenderedObjectValues, FieldValue, InvalidFieldError, ObjectValues},
+    manifest::EditorTypes,
     object_definition::ObjectDefinition,
     reserved_fields::{self, is_reserved_field},
     util::integer_decode,
@@ -118,53 +116,6 @@ impl Renderable for Object {
 }
 
 impl Object {
-    #[instrument]
-    pub fn validate(
-        field_type: &FieldType,
-        field_value: &FieldValue,
-        custom_types: &EditorTypes,
-    ) -> Result<(), InvalidFieldError> {
-        // You can only define a validator via editor_types, which will always
-        // create an alias type
-        if let FieldType::Alias(a) = field_type {
-            if let Some(custom_type) = custom_types.get(&a.1) {
-                for validator in &custom_type.validate {
-                    match validator {
-                        ManifestEditorTypeValidator::Path(p) => {
-                            if let Ok(validated_value) = p.path.get_value(field_value) {
-                                if !p.validate.validate(&validated_value.to_string()) {
-                                    return Err(InvalidFieldError::FailedValidation(
-                                        validated_value.to_string(),
-                                        p.validate.to_string(),
-                                    ));
-                                }
-                            } else {
-                                // Value not found - if our validator passes
-                                // with an empty string, this is ok. Otherwise
-                                // this is an error.
-                                if !p.validate.validate("") {
-                                    return Err(InvalidFieldError::FailedValidation(
-                                        "(not found)".to_string(),
-                                        p.validate.to_string(),
-                                    ));
-                                }
-                            }
-                        }
-                        ManifestEditorTypeValidator::Value(v) => {
-                            if !v.validate(&field_value.to_string()) {
-                                return Err(InvalidFieldError::FailedValidation(
-                                    field_value.to_string(),
-                                    v.to_string(),
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
     #[instrument(skip(definition, table))]
     pub fn values_from_table(
         file: &Path,
@@ -186,7 +137,11 @@ impl Object {
                 // Values
                 let field_value = FieldValue::from_toml(def_key, field_type, value)?;
                 if !skip_validation {
-                    Object::validate(field_type, &field_value, custom_types)?;
+                    field_value.validate(
+                        &ValuePath::from_string(def_key),
+                        definition,
+                        custom_types,
+                    )?;
                 }
                 values.insert(def_key.to_string(), field_value);
             } else if let Some(child_def) = definition.children.get(&def_key.to_string()) {

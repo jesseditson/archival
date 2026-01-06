@@ -611,29 +611,22 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     }
 
     fn edit_field(&self, event: EditFieldEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
-        // TODO: we should probably validate all fields this way
-        if let Some(FieldValue::Enum(enum_val)) = &event.value {
-            let def = self
-                .site
-                .object_definitions
-                .get(&event.object)
-                .ok_or_else(|| {
-                    ArchivalError::new(&format!("object type not found: {}", event.object))
-                })?;
-            let field = event
-                .path
-                .clone()
-                .concat(ValuePath::from_string(&event.field))
-                .get_field_definition(def)?;
-            if let FieldType::Enum(valid_values) = field {
-                if !valid_values.contains(enum_val) {
-                    return Err(ArchivalError::new(&format!(
-                        "Invalid value {enum_val} for enum [{}]",
-                        valid_values.join(",")
-                    ))
-                    .into());
-                }
-            }
+        let def = self
+            .site
+            .object_definitions
+            .get(&event.object)
+            .ok_or_else(|| {
+                ArchivalError::new(&format!("object type not found: {}", event.object))
+            })?;
+        if let Some(value) = &event.value {
+            value.validate(
+                &event
+                    .path
+                    .clone()
+                    .concat(ValuePath::from_string(&event.field)),
+                def,
+                &self.site.manifest.editor_types,
+            )?;
         }
         self.write_object(&event.object, &event.filename, |existing| {
             event
@@ -665,6 +658,21 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
 
     fn add_child(&self, event: AddChildEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
         let mut added_idx = usize::MAX;
+        let def = self
+            .site
+            .object_definitions
+            .get(&event.object)
+            .ok_or_else(|| {
+                ArchivalError::new(&format!("object type not found: {}", event.object))
+            })?;
+        // Validate any initial values
+        for value in &event.values {
+            value.value.validate(
+                &event.path.clone().concat(value.path.clone()),
+                def,
+                &self.site.manifest.editor_types,
+            )?;
+        }
         self.write_object(&event.object, &event.filename, |existing| {
             added_idx = event.path.add_child(existing, event.index, |child| {
                 for value in event.values {

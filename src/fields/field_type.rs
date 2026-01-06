@@ -56,8 +56,6 @@ pub enum InvalidFieldError {
     UnsupportedStringValue(String),
     #[error("type {0} was not provided a value and has no default")]
     NoDefaultForType(String),
-    #[error("field '{0}' failed validator '{1}'")]
-    FailedValidation(String, String),
 }
 
 #[cfg(feature = "typescript")]

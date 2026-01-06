@@ -510,21 +510,22 @@ impl Command {
 #[cfg(feature = "import-csv")]
 mod csv_tests {
 
+    use tracing_test::traced_test;
+
     use super::{Command, ImportFormat, ImportName};
     use crate::fields::DateTime;
     use crate::object::ValuePath;
     use crate::{unpack_zip, FieldValue, MemoryFileSystem};
     use std::collections::HashMap;
-    use std::error::Error;
     use std::io::BufReader;
 
     #[test]
-    fn parse_csv_data_to_files() -> Result<(), Box<dyn Error>> {
+    fn parse_csv_data_to_files() {
         let csv_data = "some_number,title,content,date\n1,hello, string,01/21/1987";
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../../../tests/fixtures/archival-website.zip");
-        unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = crate::Archival::new_with_upload_prefix(fs, "")?;
+        unpack_zip(zip.to_vec(), &mut fs).unwrap();
+        let archival = crate::Archival::new_with_upload_prefix(fs, "").unwrap();
         let obj_def = archival.site.object_definitions.get("post").unwrap();
         Command::parse(
             Some(BufReader::new(csv_data.as_bytes())),
@@ -536,8 +537,9 @@ mod csv_tests {
             &ImportFormat::Csv,
             &archival,
             |m, p, t| println!("{} ({}/{})", m, p, t),
-        )?;
-        let objects = archival.get_objects()?;
+        )
+        .unwrap();
+        let objects = archival.get_objects().unwrap();
         let posts = objects.get("post").unwrap();
         let mut found = false;
         for post in posts {
@@ -561,17 +563,16 @@ mod csv_tests {
             }
         }
         assert!(found);
-        Ok(())
     }
 
     #[test]
-    // #[traced_test]
-    fn parse_csv_data_to_children() -> Result<(), Box<dyn Error>> {
+    #[traced_test]
+    fn parse_csv_data_to_children() {
         let csv_data = "number,name,renamed_date\n128,hello,01/21/1987";
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../../../tests/fixtures/archival-website.zip");
-        unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = crate::Archival::new_with_upload_prefix(fs, "")?;
+        unpack_zip(zip.to_vec(), &mut fs).unwrap();
+        let archival = crate::Archival::new_with_upload_prefix(fs, "").unwrap();
         let obj_def = archival.site.object_definitions.get("childlist").unwrap();
         Command::parse(
             Some(BufReader::new(csv_data.as_bytes())),
@@ -583,8 +584,9 @@ mod csv_tests {
             &ImportFormat::Csv,
             &archival,
             |m, p, t| println!("{} ({}/{})", m, p, t),
-        )?;
-        let objects = archival.get_objects()?;
+        )
+        .unwrap();
+        let objects = archival.get_objects().unwrap();
         let children = objects.get("childlist").unwrap();
         let mut found = false;
         for children in children {
@@ -625,6 +627,5 @@ mod csv_tests {
             }
         }
         assert!(found);
-        Ok(())
     }
 }

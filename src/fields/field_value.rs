@@ -1,4 +1,6 @@
 use crate::fields::file::RenderedFile;
+use crate::fields::DisplayType;
+use crate::manifest::{EditorTypes, ManifestEditorTypeValidator};
 use crate::object::to_liquid::object_to_liquid;
 use crate::object::Renderable;
 use crate::util::integer_decode;
@@ -22,6 +24,28 @@ use std::{
 };
 use toml::Value;
 use tracing::{instrument, warn};
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum FieldValueValidationError {
+    #[error("Type mismatch: {0} provided for path {1} which is of type {2}")]
+    TypeMismatch(FieldValue, ValuePath, FieldType),
+    #[error("Invalid enum value {0} provided for path {1} (valid values {2})")]
+    InvalidEnumValue(String, ValuePath, String),
+    #[error("Invalid file type {0} provided for path {1} which is of type {2}")]
+    InvalidFileType(DisplayType, ValuePath, FieldType),
+    #[error("Field definition not found for {0} in {1:?} ({2})")]
+    FieldDefinitionNotFound(ValuePath, ObjectDefinition, ValuePathError),
+    #[error("Invalid oneof name {0} for path {1} (options {2})")]
+    InvalidOneofName(String, ValuePath, String),
+    #[error("Invalid oneof type {0} for path {1}: expected {2}")]
+    InvalidOneofType(FieldType, ValuePath, FieldType),
+    #[error("Cannot Validate type {0} at path {1}")]
+    CannotValidateType(FieldValue, ValuePath),
+    #[error("field '{0}' at {1} failed validator '{2}'")]
+    FailedValidation(String, ValuePath, String),
+}
 
 // These are BTrees rather than OrderMaps because we only serialize them when we
 // have access to the definition, which has the field order.
@@ -258,6 +282,250 @@ impl FieldValue {
         }
     }
 
+    #[allow(clippy::result_large_err)]
+    fn run_custom_validation(
+        &self,
+        path: &ValuePath,
+        field_type: &FieldType,
+        custom_types: &EditorTypes,
+    ) -> Result<(), FieldValueValidationError> {
+        // You can only define a validator via editor_types, which will always
+        // create an alias type
+        if let FieldType::Alias(a) = field_type {
+            if let Some(custom_type) = custom_types.get(&a.1) {
+                for validator in &custom_type.validate {
+                    match validator {
+                        ManifestEditorTypeValidator::Path(p) => {
+                            if let Ok(validated_value) = p.path.get_value(self) {
+                                if !p.validate.validate(&validated_value.to_string()) {
+                                    return Err(FieldValueValidationError::FailedValidation(
+                                        validated_value.to_string(),
+                                        path.clone(),
+                                        p.validate.to_string(),
+                                    ));
+                                }
+                            } else {
+                                // Value not found - if our validator passes
+                                // with an empty string, this is ok. Otherwise
+                                // this is an error.
+                                if !p.validate.validate("") {
+                                    return Err(FieldValueValidationError::FailedValidation(
+                                        "(not found)".to_string(),
+                                        path.clone(),
+                                        p.validate.to_string(),
+                                    ));
+                                }
+                            }
+                        }
+                        ManifestEditorTypeValidator::Value(v) => {
+                            if !v.validate(&self.to_string()) {
+                                return Err(FieldValueValidationError::FailedValidation(
+                                    self.to_string(),
+                                    path.clone(),
+                                    v.to_string(),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn validate_type(
+        &self,
+        path: &ValuePath,
+        field_type: &FieldType,
+    ) -> Result<(), FieldValueValidationError> {
+        let field_mismatch = || {
+            Err(FieldValueValidationError::TypeMismatch(
+                self.clone(),
+                path.clone(),
+                field_type.clone(),
+            ))
+        };
+        match self {
+            Self::Enum(enum_val) => {
+                if let FieldType::Enum(valid_values) = field_type {
+                    if !valid_values.contains(enum_val) {
+                        return Err(FieldValueValidationError::InvalidEnumValue(
+                            enum_val.clone(),
+                            path.clone(),
+                            valid_values.join(","),
+                        ));
+                    }
+                    Ok(())
+                } else {
+                    field_mismatch()
+                }
+            }
+            Self::String(_) => {
+                if !matches!(field_type, FieldType::String) {
+                    field_mismatch()
+                } else {
+                    Ok(())
+                }
+            }
+            Self::Markdown(_) => {
+                if !matches!(field_type, FieldType::Markdown) {
+                    field_mismatch()
+                } else {
+                    Ok(())
+                }
+            }
+            Self::Number(_) => {
+                if !matches!(field_type, FieldType::Number) {
+                    field_mismatch()
+                } else {
+                    Ok(())
+                }
+            }
+            Self::Date(_) => {
+                if !matches!(field_type, FieldType::Date) {
+                    field_mismatch()
+                } else {
+                    Ok(())
+                }
+            }
+            Self::Boolean(_) => {
+                if !matches!(field_type, FieldType::Boolean) {
+                    field_mismatch()
+                } else {
+                    Ok(())
+                }
+            }
+            Self::File(f) => {
+                if !matches!(
+                    field_type,
+                    FieldType::Audio | FieldType::Image | FieldType::Video | FieldType::Upload
+                ) {
+                    field_mismatch()
+                } else {
+                    let assert_file_match = |match_ok: bool, required_type: FieldType| {
+                        if !match_ok {
+                            Err(FieldValueValidationError::InvalidFileType(
+                                f.display_type.clone(),
+                                path.clone(),
+                                required_type,
+                            ))
+                        } else {
+                            Ok(())
+                        }
+                    };
+                    match &f.display_type {
+                        DisplayType::Image => assert_file_match(
+                            matches!(field_type, FieldType::Image),
+                            FieldType::Image,
+                        ),
+                        DisplayType::Video => assert_file_match(
+                            matches!(field_type, FieldType::Video),
+                            FieldType::Video,
+                        ),
+                        DisplayType::Audio => assert_file_match(
+                            matches!(field_type, FieldType::Audio),
+                            FieldType::Audio,
+                        ),
+                        DisplayType::Download => assert_file_match(
+                            matches!(field_type, FieldType::Upload),
+                            FieldType::Upload,
+                        ),
+                    }
+                }
+            }
+            Self::Meta(_meta) => {
+                if !matches!(field_type, FieldType::Meta) {
+                    field_mismatch()
+                } else {
+                    // TODO: we could/should do some more sophisticated meta
+                    // validation here
+                    Ok(())
+                }
+            }
+            // All fields can be set to null
+            Self::Null => Ok(()),
+            // Fallthrough for types that require upstream/complex validation
+            t => Err(FieldValueValidationError::CannotValidateType(
+                t.clone(),
+                path.clone(),
+            )),
+        }
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn validate(
+        &self,
+        path: &ValuePath,
+        definition: &ObjectDefinition,
+        custom_types: &EditorTypes,
+    ) -> Result<(), FieldValueValidationError> {
+        let field_type = path.get_field_definition(definition).map_err(|e| {
+            FieldValueValidationError::FieldDefinitionNotFound(path.clone(), definition.clone(), e)
+        })?;
+        let field_mismatch = || {
+            Err(FieldValueValidationError::TypeMismatch(
+                self.clone(),
+                path.clone(),
+                field_type.clone(),
+            ))
+        };
+        self.run_custom_validation(path, field_type, custom_types)?;
+        // After we've run custom validation, aliases should just be dereferenced.
+        let field_type = match field_type {
+            FieldType::Alias(val) => &val.0,
+            _ => field_type,
+        };
+        match self {
+            // Oneof needs special checking since we need to validate the inner
+            // type and the type name against the valid options
+            Self::Oneof((name, value)) => {
+                if let FieldType::Oneof(valid_values) = field_type {
+                    let found_type = valid_values
+                        .iter()
+                        .find(|val| val.name == *name)
+                        .ok_or_else(|| {
+                            FieldValueValidationError::InvalidOneofName(
+                                name.clone(),
+                                path.clone(),
+                                valid_values
+                                    .iter()
+                                    .map(|v| v.name.to_string())
+                                    .collect::<Vec<String>>()
+                                    .join(","),
+                            )
+                        })?;
+                    if let Some(v) = value.as_ref() {
+                        v.validate_type(path, &found_type.r#type)
+                    } else {
+                        // Empty is ok for all values
+                        Ok(())
+                    }
+                } else {
+                    field_mismatch()
+                }
+            }
+            // Objects should be recursively validated
+            Self::Objects(children) => {
+                for (idx, child) in children.iter().enumerate() {
+                    for (name, field) in child {
+                        field.validate(
+                            &path.clone().concat(
+                                ValuePath::empty()
+                                    .append(ValuePath::index(idx))
+                                    .append(ValuePath::key(name)),
+                            ),
+                            definition,
+                            custom_types,
+                        )?;
+                    }
+                }
+                Ok(())
+            }
+            t => t.validate_type(path, field_type),
+        }
+    }
+
     #[cfg(test)]
     pub fn liquid_date(&self) -> model::DateTime {
         match self {
@@ -272,6 +540,8 @@ impl fmt::Display for FieldValue {
         write!(f, "{}", self.as_string(Some(&FieldConfig::default())))
     }
 }
+
+// Conversions
 
 impl From<&FieldValue> for Option<toml::Value> {
     fn from(value: &FieldValue) -> Self {
@@ -1352,5 +1622,70 @@ pub mod json_parsing_tests {
             *sixth_post.get("media").unwrap(),
             FieldValue::Oneof(("audio".to_string(), Box::new(None)))
         );
+    }
+}
+
+#[cfg(test)]
+mod validate_tests {
+    use super::*;
+    use ordermap::OrderMap;
+    use toml::Table;
+
+    #[test]
+    fn type_mismatch_returns_type_mismatch() {
+        let table: Table = toml::from_str(json_parsing_tests::object_definition_toml()).unwrap();
+        let object_definitions = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
+        let post_def = object_definitions.get("post").unwrap();
+        let path = ValuePath::from_string("date");
+        let v = FieldValue::String("not a date".to_string());
+        let err = v
+            .validate(&path, post_def, &EditorTypes::new())
+            .unwrap_err();
+        assert!(matches!(err, FieldValueValidationError::TypeMismatch(_, p, _) if p == path));
+    }
+
+    #[test]
+    fn field_definition_not_found_returns_error() {
+        let table: Table = toml::from_str(json_parsing_tests::object_definition_toml()).unwrap();
+        let object_definitions = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
+        let post_def = object_definitions.get("post").unwrap();
+        let path = ValuePath::from_string("does_not_exist");
+        let v = FieldValue::String("x".to_string());
+        let err = v
+            .validate(&path, post_def, &EditorTypes::new())
+            .unwrap_err();
+        assert!(
+            matches!(err, FieldValueValidationError::FieldDefinitionNotFound(pth, _, _) if pth == path)
+        );
+    }
+
+    #[test]
+    fn invalid_oneof_name_returns_error() {
+        let table: Table = toml::from_str(json_parsing_tests::object_definition_toml()).unwrap();
+        let object_definitions = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
+        let post_def = object_definitions.get("post").unwrap();
+        let path = ValuePath::from_string("media");
+        let v = FieldValue::Oneof(("notatype".to_string(), Box::new(None)));
+        let err = v
+            .validate(&path, post_def, &EditorTypes::new())
+            .unwrap_err();
+        assert!(matches!(err, FieldValueValidationError::InvalidOneofName(_, p, _) if p == path));
+    }
+
+    #[test]
+    fn invalid_oneof_type_returns_error() {
+        let table: Table = toml::from_str(json_parsing_tests::object_definition_toml()).unwrap();
+        let object_definitions = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
+        let post_def = object_definitions.get("post").unwrap();
+        let path = ValuePath::from_string("media");
+        // Provide an invalid inner value so validation fails (None values validate)
+        let v = FieldValue::Oneof((
+            "audio".to_string(),
+            Box::new(Some(FieldValue::String("not-an-audio".to_string()))),
+        ));
+        let err = v
+            .validate(&path, post_def, &EditorTypes::new())
+            .unwrap_err();
+        assert!(matches!(err, FieldValueValidationError::TypeMismatch(_, p, _) if p == path));
     }
 }
