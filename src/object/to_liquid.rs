@@ -55,11 +55,14 @@ impl FieldValue {
     pub fn to_liquid(&self, field_config: &FieldConfig) -> liquid::model::Value {
         match self {
             FieldValue::File(file) => file.to_liquid(field_config),
-            FieldValue::Oneof((t, v)) => liquid::object!({
-                "type": t,
-                "value": v.to_liquid(field_config)
-            })
-            .into(),
+            FieldValue::Oneof((t, v)) => match v.as_ref() {
+                Some(v) => liquid::object!({
+                    "type": t,
+                    "value": v.to_liquid(field_config)
+                })
+                .into(),
+                None => liquid::model::Value::Nil,
+            },
             _ => self.to_value(),
         }
     }

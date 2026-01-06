@@ -61,14 +61,14 @@ mod typedefs {
     impl TypeDef for RenderedOneofTypeDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
             // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
-            r#ref: TypeExpr::ident(Ident("[string, RenderedFieldValue]")),
+            r#ref: TypeExpr::ident(Ident("[string, RenderedFieldValue | null]")),
         });
     }
     pub struct OneofTypeDef;
     impl TypeDef for OneofTypeDef {
         const INFO: TypeInfo = TypeInfo::Native(NativeTypeInfo {
             // Workaround for circular type: https://github.com/dbeckwith/rust-typescript-type-def/issues/18#issuecomment-2078469020
-            r#ref: TypeExpr::ident(Ident("[string, FieldValue]")),
+            r#ref: TypeExpr::ident(Ident("[string, FieldValue | null]")),
         });
     }
 }
@@ -108,7 +108,7 @@ pub enum RenderedFieldValue {
             feature = "typescript",
             type_def(type_of = "typedefs::RenderedOneofTypeDef")
         )]
-        (String, Box<RenderedFieldValue>),
+        (String, Box<Option<RenderedFieldValue>>),
     ),
     Boolean(bool),
     File(RenderedFile),
@@ -141,7 +141,7 @@ pub enum FieldValue {
     ),
     Oneof(
         #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::OneofTypeDef"))]
-        (String, Box<FieldValue>),
+        (String, Box<Option<FieldValue>>),
     ),
     Boolean(bool),
     File(File),
@@ -178,7 +178,7 @@ impl Renderable for FieldValue {
                     .collect(),
             ),
             FieldValue::Oneof((t, v)) => {
-                RenderedFieldValue::Oneof((t, Box::new(v.rendered(field_config))))
+                RenderedFieldValue::Oneof((t, Box::new(v.map(|fv| fv.rendered(field_config)))))
             }
             FieldValue::Boolean(b) => RenderedFieldValue::Boolean(b),
             FieldValue::File(file) => RenderedFieldValue::File(file.rendered(field_config)),
@@ -314,8 +314,9 @@ impl From<&FieldValue> for Option<toml::Value> {
             FieldValue::Oneof((t, v)) => {
                 let mut table = toml::map::Map::new();
                 table.insert("type".to_string(), toml::Value::String(t.to_string()));
-                let value = Option::<toml::Value>::from(v.as_ref());
-                table.insert("value".to_string(), value.unwrap());
+                if let Some(value) = v.as_ref().as_ref().and_then(Option::<toml::Value>::from) {
+                    table.insert("value".to_string(), value);
+                }
                 Some(toml::Value::Table(table))
             }
             FieldValue::File(f) => Some(toml::Value::Table(f.to_toml())),
@@ -497,7 +498,7 @@ impl FieldValue {
             serde_json::Value::Null => Ok(Some(FieldValue::String("".into()))),
             serde_json::Value::Object(o) => match field_type {
                 FieldType::Oneof(options) => {
-                    if let (Some(serde_json::Value::String(typ)), Some(val)) =
+                    if let (Some(serde_json::Value::String(typ)), val) =
                         (o.get("type"), o.get("value"))
                     {
                         let found_type = options
@@ -515,13 +516,19 @@ impl FieldValue {
                                     typ
                                 ))
                             })?;
-                        Ok(FieldValue::field_from_json(
-                            val,
-                            &found_type,
-                            &parent_path.clone(),
-                            object_definition,
-                        )?
-                        .map(|value| FieldValue::Oneof((typ.to_string(), Box::new(value)))))
+                        println!("FOUND TYPE: {:?} ({:?})", found_type, val);
+                        match val {
+                            Some(val) => Ok(FieldValue::field_from_json(
+                                val,
+                                &found_type,
+                                &parent_path.clone(),
+                                object_definition,
+                            )?
+                            .map(|value| {
+                                FieldValue::Oneof((typ.to_string(), Box::new(Some(value))))
+                            })),
+                            None => Ok(Some(FieldValue::Oneof((typ.to_string(), Box::new(None))))),
+                        }
                     } else {
                         Err(InvalidFieldError::InvalidOneof(format!(
                             "expected value at {parent_path}, found: {:?}",
@@ -684,7 +691,7 @@ impl FieldValue {
                                 None
                             }
                         })?;
-                        Some((type_name, selected_type, info.get("value")?))
+                        Some((type_name, selected_type, info.get("value")))
                     })
                     .ok_or_else(|| InvalidFieldError::TypeMismatch {
                         field: key.to_owned(),
@@ -695,18 +702,26 @@ impl FieldValue {
                     Err(InvalidFieldError::OneofMismatch {
                         field: key.to_owned(),
                         field_type: selected_type.to_string(),
-                        value: value.to_string(),
+                        value: match value {
+                            Some(value) => value.to_string(),
+                            None => "null".to_string(),
+                        },
                     })?
                 } else {
                     Ok(FieldValue::Oneof((
                         type_name.to_string(),
-                        Box::new(Self::from_toml(key, &selected_type, value).map_err(|_| {
-                            InvalidFieldError::TypeMismatch {
-                                field: format!("{}:{}", key, type_name),
-                                field_type: selected_type.to_string(),
-                                value: value.to_string(),
+                        Box::new(match value {
+                            Some(value) => {
+                                Some(Self::from_toml(key, &selected_type, value).map_err(|_| {
+                                    InvalidFieldError::TypeMismatch {
+                                        field: format!("{}:{}", key, type_name),
+                                        field_type: selected_type.to_string(),
+                                        value: value.to_string(),
+                                    }
+                                })?)
                             }
-                        })?),
+                            None => None,
+                        }),
                     )))
                 }
             }
@@ -772,7 +787,13 @@ impl FieldValue {
                     .map(|c| f.clone().into_map(Some(c)))
                     .expect("cannot render files without a config")
             ),
-            FieldValue::Oneof((name, val)) => format!("{name}:{}", val.as_string(config)),
+            FieldValue::Oneof((name, val)) => format!(
+                "{name}:{}",
+                match val.as_ref() {
+                    Some(v) => v.as_string(config),
+                    None => "null".to_string(),
+                }
+            ),
             FieldValue::Meta(m) => format!("{:?}", serde_json::Value::from(m)),
             FieldValue::Null => "null".to_string(),
         }
@@ -1030,6 +1051,18 @@ pub mod json_parsing_tests {
               "order": 5,
               "tags": "personal,blog,updates,projects",
               "title": "Project and Future Plans"
+            },
+            {
+              "__filename": "sixth-post",
+              "content": "This one is a work in progress and has no value yet",
+              "date": "2025-12-19 00:00:00",
+              "excerpt": "Upcoming projects and goals.",
+              "media": {
+                "type": "audio",
+              },
+              "order": 5,
+              "tags": "personal,blog,updates,projects",
+              "title": "Project and Future Plans"
             }
           ],
           "site": {
@@ -1095,7 +1128,7 @@ pub mod json_parsing_tests {
         }
         println!("PARSED: {:#?}", output);
         let posts = output.get("post").expect("missing posts");
-        assert_eq!(posts.len(), 5);
+        assert_eq!(posts.len(), 6);
         let site = output
             .get("site")
             .expect("missing site")
@@ -1118,7 +1151,7 @@ pub mod json_parsing_tests {
             *fifth_post.get("media").unwrap(),
             FieldValue::Oneof((
                 "audio".to_string(),
-                Box::new(FieldValue::File(
+                Box::new(Some(FieldValue::File(
                     File::audio()
                         .fill_from_json_map(json!({
                           "description": "Audio update about my projects",
@@ -1129,8 +1162,195 @@ pub mod json_parsing_tests {
                           "sha": "012def3456789abc012def3456789abc012def3456789abc012def3456789abc"
                         }).as_object().unwrap())
                         .unwrap()
-                ))
+                )))
             ))
+        );
+        let sixth_post = posts.get("sixth-post").expect("missing sixth-post");
+        assert_eq!(
+            *sixth_post.get("media").unwrap(),
+            FieldValue::Oneof(("audio".to_string(), Box::new(None)))
+        );
+    }
+
+    #[traced_test]
+    #[test]
+    fn parsing_basics_from_toml() {
+        let def_table: Table = toml::from_str(object_definition_toml()).unwrap();
+        let object_definitions =
+            ObjectDefinition::from_table(&def_table, &OrderMap::new()).unwrap();
+
+        let example_toml = r#"
+        [[post]]
+        __filename = "welcome-post"
+        content = "Welcome to my personal blog! Here you'll find updates about my life, thoughts, and interests. Stay tuned for more posts."
+        date = 2025-12-19T00:00:00
+        excerpt = "Welcome to my blog! This is the first post."
+        media = { type = "image", value = { description = "A welcoming image for my blog", display_type = "image", filename = "welcome-image.png", mime = "image/png", name = "Welcome Image", sha = "abc123def4567890abc123def4567890abc123def4567890abc123def4567890" } }
+        order = 1
+        tags = "personal,blog,welcome"
+        title = "Hello World!"
+
+        [[post]]
+        __filename = "second-post"
+        content = "Today I want to share some thoughts on the importance of hobbies and taking time for oneself."
+        date = 2025-12-19T00:00:00
+        excerpt = "Reflecting on hobbies and self-care."
+        media = { type = "video", value = { description = "A short video about my hobbies", display_type = "video", filename = "hobbies-video.mp4", mime = "video/mp4", name = "Hobbies Video", sha = "def456abc1237890def456abc1237890def456abc1237890def456abc1237890" } }
+        order = 2
+        tags = "personal,blog,hobbies"
+        title = "My Hobbies"
+
+        [[post]]
+        __filename = "third-post"
+        content = "Sharing a recent picture from my trip to the mountains. Nature is truly breathtaking."
+        date = 2025-12-19T00:00:00
+        excerpt = "A beautiful mountain landscape."
+        media = { type = "image", value = { description = "Scenic mountain view from my trip", display_type = "image", filename = "mountain-trip.jpg", mime = "image/jpeg", name = "Mountain Trip", sha = "789abc012def3456789abc012def3456789abc012def3456789abc012def345" } }
+        order = 3
+        tags = "personal,blog,travel,photography"
+        title = "Mountain Adventure"
+
+        [[post]]
+        __filename = "fourth-post"
+        content = "Considering my favorite books and why they matter to me. Here are some recommendations."
+        date = 2025-12-19T00:00:00
+        excerpt = "My favorite books and why I love them."
+        media = { type = "link", value = "https://mybookrecommendations.com" }
+        order = 4
+        tags = "personal,blog,books,recommendations"
+        title = "My Favorite Books"
+
+        [[post]]
+        __filename = "fifth-post"
+        content = "Here's a quick update on my recent projects and future plans. Exciting stuff ahead!"
+        date = 2025-12-19T00:00:00
+        excerpt = "Upcoming projects and goals."
+        media = { type = "audio", value = { description = "Audio update about my projects", display_type = "audio", filename = "project-update.mp3", mime = "audio/mpeg", name = "Project Update", sha = "012def3456789abc012def3456789abc012def3456789abc012def3456789abc" } }
+        order = 5
+        tags = "personal,blog,updates,projects"
+        title = "Project and Future Plans"
+
+        [[post]]
+        __filename = "sixth-post"
+        content = "This one is a work in progress and has no value yet"
+        date = 2025-12-19T00:00:00
+        excerpt = "Upcoming projects and goals."
+        media = { type = "audio" }
+        order = 5
+        tags = "personal,blog,updates,projects"
+        title = "Project and Future Plans"
+
+        [site]
+        description = "I would like to make a blog"
+        name = "My Personal Blog"
+        order = 1
+        "#;
+
+        let table: Table = toml::from_str(example_toml).unwrap();
+        let parsed_table = table.clone();
+
+        fn get_fields(
+            object: &toml::value::Table,
+            object_def: &ObjectDefinition,
+        ) -> HashMap<String, FieldValue> {
+            let mut fields = HashMap::new();
+            for (key, value) in object.iter() {
+                if key == "order" || key == "__filename" {
+                    continue;
+                };
+                if let Some(field_type) = object_def.fields.get(key) {
+                    let fv = FieldValue::from_toml(&key.to_string(), field_type, value).unwrap();
+                    fields.insert(key.to_string(), fv);
+                } else {
+                    println!(
+                        "skipping key {} in {} (valid values: [{}])",
+                        key,
+                        object_def.name,
+                        object_def
+                            .fields
+                            .iter()
+                            .map(|f| f.0.as_str())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                }
+            }
+            fields
+        }
+
+        let mut output = HashMap::new();
+        for (obj_name, obj_val) in table.into_iter() {
+            if let toml::Value::Array(objects) = obj_val {
+                let mut parsed_objs = HashMap::new();
+                for obj_val in objects {
+                    let object = obj_val.as_table().unwrap();
+                    let filename = object
+                        .get("__filename")
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .to_string();
+                    let object_def = object_definitions.get(obj_name.as_str()).unwrap();
+                    let fields = get_fields(object, object_def);
+                    parsed_objs.insert(filename, fields);
+                }
+                output.insert(obj_name.to_string(), parsed_objs);
+            } else {
+                let object = obj_val.as_table().unwrap();
+                let object_def = object_definitions.get(obj_name.as_str()).unwrap();
+                let fields = get_fields(object, object_def);
+                output.insert(
+                    obj_name.to_string(),
+                    HashMap::from([("root".to_string(), fields)]),
+                );
+            }
+        }
+
+        let posts = output.get("post").expect("missing posts");
+        assert_eq!(posts.len(), 6);
+        let site = output
+            .get("site")
+            .expect("missing site")
+            .get("root")
+            .expect("site was not a root object");
+        assert_eq!(
+            *site.get("description").unwrap(),
+            FieldValue::String("I would like to make a blog".to_string())
+        );
+        assert_eq!(
+            *site.get("name").unwrap(),
+            FieldValue::String("My Personal Blog".to_string())
+        );
+        let fifth_post = posts.get("fifth-post").expect("missing fifth-post");
+        assert_eq!(
+            *fifth_post.get("tags").unwrap(),
+            FieldValue::String("personal,blog,updates,projects".to_string())
+        );
+
+        // construct expected file from parsed toml
+        let posts_array = parsed_table.get("post").unwrap().as_array().unwrap();
+        let fifth_media_value = posts_array[4]
+            .as_table()
+            .unwrap()
+            .get("media")
+            .unwrap()
+            .as_table()
+            .unwrap();
+        let fifth_media_inner_value = fifth_media_value.get("value").unwrap().as_table().unwrap();
+        let expected_file = File::audio()
+            .fill_from_toml_map(fifth_media_inner_value)
+            .unwrap();
+        assert_eq!(
+            *fifth_post.get("media").unwrap(),
+            FieldValue::Oneof((
+                "audio".to_string(),
+                Box::new(Some(FieldValue::File(expected_file)))
+            ))
+        );
+        let sixth_post = posts.get("sixth-post").expect("missing sixth-post");
+        assert_eq!(
+            *sixth_post.get("media").unwrap(),
+            FieldValue::Oneof(("audio".to_string(), Box::new(None)))
         );
     }
 }

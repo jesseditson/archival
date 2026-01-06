@@ -803,8 +803,8 @@ mod lib {
         let fc = &archival.site.field_config;
         if let FieldValue::Oneof((t, val)) = m {
             assert_eq!(t, "image");
-            assert!(matches!(**val, FieldValue::File(_)));
-            if let FieldValue::File(img) = val.as_ref() {
+            assert!(matches!(**val, Some(FieldValue::File(_))));
+            if let Some(FieldValue::File(img)) = val.as_ref() {
                 assert_eq!(img.filename, "test.jpg");
                 assert_eq!(img.mime, "image/jpg");
                 assert_eq!(img.name, Some("Test".to_string()));

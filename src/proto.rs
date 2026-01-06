@@ -164,12 +164,9 @@ impl From<archival_proto::FieldValue> for FieldValue {
                 // FieldValue::Objects expects Vec<ObjectValues>
                 FieldValue::Objects(vec![fields])
             }
-            Some(archival_proto::field_value::Value::Oneof(val)) => FieldValue::Oneof((
-                val.name,
-                Box::new(FieldValue::from(
-                    *val.value.expect("invalid oneof missing value"),
-                )),
-            )),
+            Some(archival_proto::field_value::Value::Oneof(val)) => {
+                FieldValue::Oneof((val.name, Box::new(val.value.map(|f| FieldValue::from(*f)))))
+            }
             Some(archival_proto::field_value::Value::Boolean(b)) => FieldValue::Boolean(b),
             Some(archival_proto::field_value::Value::File(f)) => FieldValue::File(f.into()),
             Some(archival_proto::field_value::Value::Meta(m)) => FieldValue::Meta(m.into()),
@@ -204,7 +201,7 @@ impl From<FieldValue> for archival_proto::FieldValue {
             FieldValue::Oneof((name, val)) => {
                 archival_proto::field_value::Value::Oneof(Box::new(archival_proto::OneofValue {
                     name,
-                    value: Some(Box::new(archival_proto::FieldValue::from(*val))),
+                    value: val.map(|f| Box::new(archival_proto::FieldValue::from(f))),
                 }))
             }
             FieldValue::Boolean(b) => archival_proto::field_value::Value::Boolean(b),
