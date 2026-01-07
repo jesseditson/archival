@@ -241,7 +241,6 @@ impl From<archival_proto::Object> for Object {
             filename: proto.filename,
             object_name: proto.object_name,
             order,
-            path: proto.path,
             values: proto.values.map(|v| v.into()).unwrap_or_default(),
         }
     }
@@ -258,7 +257,6 @@ impl From<Object> for archival_proto::Object {
             filename: obj.filename,
             object_name: obj.object_name,
             order,
-            path: obj.path,
             values: Some(obj.values.into()),
         }
     }
@@ -278,7 +276,6 @@ impl From<archival_proto::ObjectEntry> for ObjectEntry {
                 filename: String::new(),
                 object_name: String::new(),
                 order: None,
-                path: String::new(),
                 values: BTreeMap::new(),
             }),
         }
@@ -317,7 +314,6 @@ impl From<archival_proto::ObjectMap> for ObjectMap {
                             filename: String::new(),
                             object_name: String::new(),
                             order: None,
-                            path: String::new(),
                             values: BTreeMap::new(),
                         })
                     }),
@@ -957,7 +953,6 @@ mod proto_tests {
             filename: "testing".to_string(),
             object_name: "foo".to_string(),
             order: Some(23.90),
-            path: "fosdjs/sdjskd".to_string(),
             values: fields::ObjectValues::from([("test".to_string(), FieldValue::String("Test".to_string()))])
         };
     });
@@ -966,7 +961,6 @@ mod proto_tests {
             filename: "testing".to_string(),
             object_name: "foo".to_string(),
             order: Some(23.90),
-            path: "fosdjs/sdjskd".to_string(),
             values: fields::ObjectValues::from([("test".to_string(), FieldValue::String("Test".to_string()))])
         }]);
     });
@@ -975,7 +969,6 @@ mod proto_tests {
             filename: "testing".to_string(),
             object_name: "foo".to_string(),
             order: Some(23.90),
-            path: "fosdjs/sdjskd".to_string(),
             values: fields::ObjectValues::from([("test".to_string(), FieldValue::String("Test".to_string()))])
         }]))]);
     });

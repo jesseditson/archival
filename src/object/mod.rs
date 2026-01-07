@@ -14,7 +14,12 @@ use liquid::{
 };
 use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
-use std::{error::Error, fmt::Debug, hash::Hash, path::Path};
+use std::{
+    error::Error,
+    fmt::Debug,
+    hash::Hash,
+    path::{Path, PathBuf},
+};
 use to_liquid::object_to_liquid;
 use toml::Table;
 use tracing::{instrument, warn};
@@ -68,7 +73,7 @@ pub struct RenderedObject {
     pub filename: String,
     pub object_name: String,
     pub order: Option<f64>,
-    pub path: String,
+    pub path: PathBuf,
     pub values: RenderedObjectValues,
 }
 impl Hash for RenderedObject {
@@ -86,26 +91,31 @@ pub struct Object {
     pub filename: String,
     pub object_name: String,
     pub order: Option<f64>,
-    pub path: String,
     pub values: ObjectValues,
 }
+impl Object {
+    pub fn path(&self) -> PathBuf {
+        Path::new(&self.object_name).join(self.filename.clone())
+    }
+}
+
 impl Hash for Object {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.filename.hash(state);
         self.object_name.hash(state);
         self.order.map(integer_decode).hash(state);
-        self.path.hash(state);
         self.values.hash(state);
     }
 }
 impl Renderable for Object {
     type Output = RenderedObject;
     fn rendered(self, field_config: &FieldConfig) -> Self::Output {
+        let path = self.path();
         Self::Output {
             filename: self.filename,
             object_name: self.object_name,
             order: self.order,
-            path: self.path,
+            path,
             values: self
                 .values
                 .into_iter()
@@ -203,10 +213,6 @@ impl Object {
         }
         let filename = file.file_name().unwrap().to_string_lossy().to_string();
         let object = Object {
-            path: Path::new(&definition.name)
-                .join(&filename)
-                .to_string_lossy()
-                .to_string(),
             filename,
             object_name: definition.name.clone(),
             order,
@@ -227,7 +233,6 @@ impl Object {
         let mut object = Self {
             filename: filename.to_owned(),
             object_name: definition.name.clone(),
-            path: path.to_string_lossy().to_string(),
             order,
             values,
         };
@@ -281,7 +286,10 @@ impl Object {
         if values.contains_key("order") {
             panic!("Objects may not define order key.");
         }
-        values.insert(KString::from_ref("path"), self.path.to_value());
+        values.insert(
+            KString::from_ref("path"),
+            self.path().as_os_str().display().to_string().to_value(),
+        );
         values.insert(KString::from_ref("order"), self.order.to_value());
         Value::Object(values)
     }

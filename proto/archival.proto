@@ -83,7 +83,6 @@ message Object {
     google.protobuf.Empty none = 3;
     double                some = 4;
   }
-  string       path   = 5;
   ObjectValues values = 6;
 }
 

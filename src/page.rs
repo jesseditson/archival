@@ -241,7 +241,7 @@ impl<'a> Page<'a> {
             object_vals.extend(liquid::object!({
                 "object_name": template_info.object.object_name,
                 "order": template_info.object.order,
-                "path": template_info.object.path,
+                "path": template_info.object.path(),
             }));
             let mut context = globals.clone();
             context.extend(liquid::object!({
@@ -355,7 +355,6 @@ here is a liquid variable: {{site_url}}
         let artist = Object {
             filename: "tormenta-rey".to_string(),
             object_name: "artist".to_string(),
-            path: "artist/tormenta-rey".to_string(),
             order: None,
             values: artist_values,
         };
@@ -375,7 +374,6 @@ here is a liquid variable: {{site_url}}
         let c = Object {
             filename: "home".to_string(),
             object_name: "c".to_string(),
-            path: "home".to_string(),
             order: None,
             values: c_values,
         };
@@ -509,7 +507,7 @@ here is a liquid variable: {{site_url}}
             rendered.contains("artist: Tormenta Rey"),
             "item from objects"
         );
-        assert!(rendered.contains("page_path: home"), "path is defined");
+        assert!(rendered.contains("page_path: c/home"), "path is defined");
         assert!(
             rendered.contains("path: artist/tormenta-rey"),
             "items define paths"
