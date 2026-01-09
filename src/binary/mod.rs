@@ -1,5 +1,6 @@
 pub mod command;
 pub mod config;
+pub mod dev_server;
 
 use self::command::{ExitStatus, COMMANDS};
 use clap::{command, Command};
