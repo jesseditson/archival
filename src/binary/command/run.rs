@@ -1,6 +1,6 @@
 use super::BinaryCommand;
 use crate::binary::command::{add_args, command_root, CommandConfig};
-use crate::binary::dev_server::{self, DevServerMode};
+use crate::binary::dev_server::{self, DevServerMode, UploadsConfig};
 use clap::{arg, value_parser, ArgMatches};
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -33,6 +33,13 @@ impl BinaryCommand for Command {
         } else {
             DevServerMode::NoServe
         };
-        dev_server::watch(root_dir, upload_prefix, options, None, None, quit)
+        dev_server::watch(
+            root_dir,
+            upload_prefix.map(UploadsConfig::prefix).unwrap_or_default(),
+            options,
+            None,
+            None,
+            quit,
+        )
     }
 }

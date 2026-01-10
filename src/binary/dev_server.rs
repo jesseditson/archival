@@ -9,14 +9,31 @@ use std::time::{Duration, Instant};
 use std::{process::exit, sync::atomic::Ordering, thread};
 use tracing::warn;
 
+#[derive(Debug, Default)]
 pub enum DevServerMode {
+    #[default]
     NoServe,
     Serve(Option<u16>),
 }
 
+#[derive(Debug, Default)]
+pub struct UploadsConfig<'a> {
+    pub url: Option<&'a str>,
+    pub prefix: Option<&'a str>,
+}
+
+impl<'a> UploadsConfig<'a> {
+    pub fn prefix(prefix: &'a str) -> Self {
+        UploadsConfig {
+            url: None,
+            prefix: Some(prefix),
+        }
+    }
+}
+
 pub fn watch(
     root_dir: PathBuf,
-    upload_prefix: Option<&str>,
+    uploads_config: UploadsConfig,
     mode: DevServerMode,
     change_sender: Option<mpsc::Sender<Vec<PathBuf>>>,
     watch_paths: Option<Vec<String>>,
@@ -25,7 +42,12 @@ pub fn watch(
     let mut term = Term::stdout();
     let is_interactive = term.features().is_attended();
     let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
-    let site = Site::load(&fs, upload_prefix)?;
+    let mut site = Site::load(&fs, uploads_config.prefix)?;
+    if let Some(uploads_url) = uploads_config.url {
+        site.modify_manifest(&mut fs, |manifest| {
+            manifest.uploads_url = Some(uploads_url.to_string());
+        })?;
+    }
     site.sync_static_files(&mut fs)?;
     let (tx, rx) = mpsc::channel();
     let initial_build = site.build(&mut fs);
