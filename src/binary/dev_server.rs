@@ -29,6 +29,12 @@ impl<'a> UploadsConfig<'a> {
             prefix: Some(prefix),
         }
     }
+    pub fn new(url: &'a str, prefix: &'a str) -> Self {
+        UploadsConfig {
+            url: Some(url),
+            prefix: Some(prefix),
+        }
+    }
 }
 
 pub fn watch(
