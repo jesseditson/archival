@@ -652,7 +652,14 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         child_path: &ValuePath,
     ) -> Result<usize, Box<dyn Error>> {
         let mut object = self.get_object(obj_type.as_ref(), Some(filename.as_ref()))?;
-        let index = child_path.modify_children(&mut object, |children| children.len() - 1)?;
+        let index = child_path.modify_children(&mut object, |children| {
+            let len = children.len();
+            if len == 0 {
+                0
+            } else {
+                len - 1
+            }
+        })?;
         Ok(index)
     }
 
