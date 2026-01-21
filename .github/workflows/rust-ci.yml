@@ -22,7 +22,6 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-22.04
-    environment: Build
     env:
       SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
       SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
@@ -51,7 +50,6 @@ jobs:
 
   test:
     name: Tests
-    environment: Build
     env:
       SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
       SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
@@ -82,7 +80,6 @@ jobs:
 
   msrv-check:
     name: Minimum Stable Rust Version Check
-    environment: Build
     env:
       SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
       SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
@@ -107,7 +104,6 @@ jobs:
   build-aarch64-apple-darwin:
     name: Build aarch64-apple-darwin
     runs-on: macos-latest
-    environment: Build
     env:
       TRIPLE: aarch64-apple-darwin
       SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
@@ -152,7 +148,6 @@ jobs:
 
   publish-check:
     name: Publish Check
-    environment: Build
     env:
       SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
       SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
@@ -185,7 +180,6 @@ jobs:
 
   release:
     name: Release
-    environment: Build
     env:
       SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
       SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
