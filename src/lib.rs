@@ -336,14 +336,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         contents: String,
     ) -> Result<(), Box<dyn Error>> {
         // Validate toml
-        let obj_def = self
-            .site
-            .object_definitions
-            .get(obj_type)
-            .ok_or(ArchivalError::new(&format!(
-                "object not found: {}",
-                obj_type
-            )))?;
+        let obj_def = self.get_object_definition(obj_type)?;
         let table: toml::Table = toml::from_str(&contents)?;
         // Note that this also fails when custom validation fails.
         let _ = Object::from_table(
@@ -423,14 +416,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         &self,
         event: AddRootObjectEvent,
     ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
-        let obj_def = self
-            .site
-            .object_definitions
-            .get(&event.object)
-            .ok_or(ArchivalError::new(&format!(
-                "object not found: {}",
-                event.object
-            )))?;
+        let obj_def = self.get_object_definition(&event.object)?;
         self.fs_mutex.with_fs(|fs| {
             let dir_path = self
                 .site
@@ -465,14 +451,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     }
 
     fn add_object(&self, event: AddObjectEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
-        let obj_def = self
-            .site
-            .object_definitions
-            .get(&event.object)
-            .ok_or(ArchivalError::new(&format!(
-                "object not found: {}",
-                event.object
-            )))?;
+        let obj_def = self.get_object_definition(&event.object)?;
         self.fs_mutex.with_fs(|fs| {
             let obj_dir = self
                 .site
@@ -515,14 +494,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         &self,
         event: RenameObjectEvent,
     ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
-        let obj_def = self
-            .site
-            .object_definitions
-            .get(&event.object)
-            .ok_or(ArchivalError::new(&format!(
-                "object not found: {}",
-                event.object
-            )))?;
+        let obj_def = self.get_object_definition(&event.object)?;
         self.fs_mutex.with_fs(|fs| {
             let root_objects = self.site.root_objects(fs);
             if root_objects.contains(&event.from) {
@@ -550,14 +522,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         &self,
         event: DeleteObjectEvent,
     ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
-        let obj_def = self
-            .site
-            .object_definitions
-            .get(&event.object)
-            .ok_or(ArchivalError::new(&format!(
-                "object not found: {}",
-                event.object
-            )))?;
+        let obj_def = self.get_object_definition(&event.object)?;
         self.fs_mutex.with_fs(|fs| {
             let path = self.object_path_impl(&obj_def.name, &event.filename, fs)?;
             fs.delete(&path)?;
@@ -569,6 +534,13 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
 
     pub fn manifest_content(&self) -> Result<String, Box<dyn Error>> {
         self.fs_mutex.with_fs(|fs| self.site.manifest_content(fs))
+    }
+
+    pub fn get_object_definition(&self, name: &str) -> Result<&ObjectDefinition, ArchivalError> {
+        self.site
+            .object_definitions
+            .get(name)
+            .ok_or(ArchivalError::new(&format!("object not found: {}", name)))
     }
 
     pub fn get_objects(&self) -> Result<ObjectMap, Box<dyn Error>> {

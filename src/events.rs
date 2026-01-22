@@ -1,10 +1,17 @@
 use indefinite::indefinite;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, hash::Hash};
+use std::{
+    error::Error,
+    fmt::{Debug, Display},
+    hash::Hash,
+};
 #[cfg(feature = "typescript")]
 use typescript_type_def::TypeDef;
 
-use crate::{util::integer_decode, value_path::ValuePath, FieldValue};
+use crate::{
+    object::Object, util::integer_decode, value_path::ValuePath, Archival, FieldValue,
+    FileSystemAPI,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[cfg_attr(feature = "typescript", derive(TypeDef))]
@@ -45,6 +52,27 @@ impl ArchivalEvent {
             ArchivalEvent::AddChild(evt) => &evt.filename,
             ArchivalEvent::RemoveChild(evt) => &evt.filename,
             ArchivalEvent::RenameObject(evt) => &evt.to,
+        }
+    }
+}
+
+impl ArchivalEvent {
+    pub fn content<F>(&self, archival: &Archival<F>) -> Result<String, Box<dyn Error>>
+    where
+        F: FileSystemAPI + Clone + Debug,
+    {
+        match self {
+            ArchivalEvent::DeleteObject(_) => {
+                archival.object_file(self.object_name(), self.filename())
+            }
+            ArchivalEvent::RenameObject(evt) => archival.object_file(&evt.object, &evt.from),
+            ArchivalEvent::AddObject(evt) => {
+                let obj_def = archival.get_object_definition(&evt.object)?;
+                let object =
+                    Object::from_def(obj_def, &evt.filename, evt.order, evt.values.clone())?;
+                Ok(object.to_toml(obj_def)?)
+            }
+            evt => archival.object_file(evt.object_name(), evt.filename()),
         }
     }
 }
