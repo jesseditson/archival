@@ -172,9 +172,10 @@ pub fn generate_json_schema(
 #[cfg(test)]
 pub mod tests {
 
+    use anyhow::Result;
     use ordermap::OrderMap;
     use serde_json::json;
-    use std::{collections::HashSet, error::Error};
+    use std::collections::HashSet;
     use toml::Table;
 
     use crate::{
@@ -213,7 +214,7 @@ pub mod tests {
     }
 
     #[test]
-    fn json_schema_generation() -> Result<(), Box<dyn Error>> {
+    fn json_schema_generation() -> Result<()> {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
         let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
 
@@ -247,7 +248,7 @@ pub mod tests {
     }
 
     #[test]
-    fn omitted_fields() -> Result<(), Box<dyn Error>> {
+    fn omitted_fields() -> Result<()> {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
         let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
 
@@ -284,7 +285,7 @@ pub mod tests {
     }
 
     #[test]
-    fn root_omitted_fields() -> Result<(), Box<dyn Error>> {
+    fn root_omitted_fields() -> Result<()> {
         let table: Table = toml::from_str(artist_and_example_definition_str())?;
         let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
 

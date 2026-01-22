@@ -3,18 +3,18 @@ pub mod config;
 pub mod dev_server;
 
 use self::command::{ExitStatus, COMMANDS};
+use anyhow::Result;
 use clap::{command, Command};
 pub use config::ArchivalConfig;
 use std::{
     env,
-    error::Error,
     sync::{atomic::AtomicBool, Arc},
 };
 
 pub fn binary(
     args: impl Iterator<Item = String>,
     quit: Option<Arc<AtomicBool>>,
-) -> Result<ExitStatus, Box<dyn Error>> {
+) -> Result<ExitStatus> {
     let mut cmd: Command = command!().arg_required_else_help(true);
     for command in COMMANDS {
         cmd = cmd.subcommand(command.cli(Command::new(command.name())));

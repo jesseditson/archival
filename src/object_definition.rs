@@ -6,11 +6,12 @@ use crate::{
     reserved_fields::{self, is_reserved_field, reserved_field_from_str, ReservedFieldError},
     FieldValue,
 };
+use anyhow::Result;
 use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "json-schema")]
 use serde_json::json;
-use std::{error::Error, fmt::Debug};
+use std::fmt::Debug;
 use toml::Table;
 use tracing::instrument;
 
@@ -77,7 +78,7 @@ impl ObjectDefinition {
         name: &str,
         definition: &Table,
         editor_types: &EditorTypes,
-    ) -> Result<ObjectDefinition, Box<dyn Error>> {
+    ) -> Result<ObjectDefinition> {
         if is_reserved_field(name) {
             return Err(InvalidFieldError::ReservedObjectNameError(name.to_string()).into());
         }
@@ -91,9 +92,10 @@ impl ObjectDefinition {
             if is_reserved_field(key)
                 && !(m_value.as_str().is_some() && key == reserved_fields::TEMPLATE)
             {
-                return Err(Box::new(ReservedFieldError {
+                return Err(ReservedFieldError {
                     field: reserved_field_from_str(key),
-                }));
+                }
+                .into());
             }
             if let Some(child_table) = m_value.as_table() {
                 obj_def.children.insert(
@@ -128,9 +130,7 @@ impl ObjectDefinition {
                             .fields
                             .insert(key.clone(), FieldType::Oneof(options));
                     } else {
-                        return Err(Box::new(InvalidFieldError::InvalidOneof(format!(
-                            "{tables:?}"
-                        ))));
+                        return Err(InvalidFieldError::InvalidOneof(format!("{tables:?}")).into());
                     }
                 } else {
                     // not objects, try to parse as enum
@@ -158,10 +158,7 @@ impl ObjectDefinition {
         }
         Ok(obj_def)
     }
-    pub fn from_table(
-        table: &Table,
-        editor_types: &EditorTypes,
-    ) -> Result<ObjectDefinitions, Box<dyn Error>> {
+    pub fn from_table(table: &Table, editor_types: &EditorTypes) -> Result<ObjectDefinitions> {
         let mut objects = ObjectDefinitions::new();
         for (name, m_def) in table.into_iter() {
             if let Some(def) = m_def.as_table() {

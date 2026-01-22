@@ -1,4 +1,5 @@
-use std::{error::Error, ops::DerefMut, sync::Mutex};
+use anyhow::Result;
+use std::{ops::DerefMut, sync::Mutex};
 
 use crate::FileSystemAPI;
 
@@ -20,10 +21,7 @@ where
     pub fn init(fs: F) -> Self {
         Self(Mutex::new(fs))
     }
-    pub fn with_fs<R>(
-        &self,
-        f: impl FnOnce(&mut F) -> Result<R, Box<dyn Error>>,
-    ) -> Result<R, Box<dyn Error>> {
+    pub fn with_fs<R>(&self, f: impl FnOnce(&mut F) -> Result<R>) -> Result<R> {
         if let Ok(mut fs) = self.0.try_lock() {
             let r = f(fs.deref_mut())?;
             Ok(r)

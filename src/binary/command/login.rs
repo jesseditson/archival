@@ -6,6 +6,7 @@ use crate::{
     },
     constants::{API_URL, AUTH_URL, CLI_TOKEN_PUBLIC_KEY},
 };
+use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::ArgMatches;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -34,7 +35,7 @@ impl BinaryCommand for Command {
         &self,
         _args: &ArgMatches,
         _quit: Arc<AtomicBool>,
-    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+    ) -> Result<crate::binary::ExitStatus> {
         let config_file_path = ArchivalConfig::location();
         let secret_client_id = nanoid!(21);
         let public_key = RsaPublicKey::from_public_key_pem(CLI_TOKEN_PUBLIC_KEY).unwrap();

@@ -6,14 +6,12 @@ use crate::{
     },
     file_system_stdlib, Archival, ArchivalError, FileSystemAPI, MANIFEST_FILE_NAME,
 };
+use anyhow::Result;
 use clap::ArgMatches;
-use std::{
-    error::Error,
-    sync::{atomic::AtomicBool, Arc},
-};
+use std::sync::{atomic::AtomicBool, Arc};
 
 impl Archival<file_system_stdlib::NativeFileSystem> {
-    fn format_objects(&self) -> Result<(), Box<dyn Error>> {
+    fn format_objects(&self) -> Result<()> {
         self.fs_mutex.with_fs(|fs| {
             let all_objects = self.site.get_objects(fs)?;
             let definitions = &self.site.object_definitions;
@@ -30,7 +28,7 @@ impl Archival<file_system_stdlib::NativeFileSystem> {
             Ok(())
         })
     }
-    fn format_manifest(&self) -> Result<(), Box<dyn Error>> {
+    fn format_manifest(&self) -> Result<()> {
         self.fs_mutex
             .with_fs(|fs| fs.write_str(MANIFEST_FILE_NAME, self.site.manifest.to_toml()?))
     }
@@ -51,7 +49,7 @@ impl BinaryCommand for Command {
         &self,
         args: &ArgMatches,
         _quit: Arc<AtomicBool>,
-    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+    ) -> Result<crate::binary::ExitStatus> {
         let root_dir = command_root(args);
         let fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         let archival = Archival::new(fs)?;

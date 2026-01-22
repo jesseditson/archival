@@ -1,6 +1,7 @@
 use super::BinaryCommand;
 use crate::binary::command::{add_args, command_root, CommandConfig};
 use crate::binary::dev_server::{self, DevServerMode, UploadsConfig};
+use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches};
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -25,7 +26,7 @@ impl BinaryCommand for Command {
         &self,
         args: &ArgMatches,
         quit: Arc<AtomicBool>,
-    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+    ) -> Result<crate::binary::ExitStatus> {
         let root_dir = command_root(args);
         let upload_prefix = args.get_one::<String>("upload-prefix").map(|s| s.as_str());
         let options = if !args.get_one::<bool>("noserve").unwrap() {

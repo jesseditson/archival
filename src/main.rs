@@ -19,14 +19,14 @@ fn main() {
 
 #[cfg(feature = "binary")]
 mod binary {
+    use anyhow::Result;
     use archival::binary::{self, command::ExitStatus};
-    use std::error::Error;
     use tracing::{span, Level};
     #[cfg(feature = "gen-traces")]
     use tracing_chrome::ChromeLayerBuilder;
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-    pub fn main() -> Result<ExitStatus, Box<dyn Error>> {
+    pub fn main() -> Result<ExitStatus> {
         let ts = tracing_subscriber::registry()
             .with(fmt::layer())
             .with(EnvFilter::from_default_env());

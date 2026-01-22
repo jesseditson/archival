@@ -1,7 +1,7 @@
+use anyhow::Result;
 use indefinite::indefinite;
 use serde::{Deserialize, Serialize};
 use std::{
-    error::Error,
     fmt::{Debug, Display},
     hash::Hash,
 };
@@ -57,7 +57,7 @@ impl ArchivalEvent {
 }
 
 impl ArchivalEvent {
-    pub fn content<F>(&self, archival: &Archival<F>) -> Result<String, Box<dyn Error>>
+    pub fn content<F>(&self, archival: &Archival<F>) -> Result<String>
     where
         F: FileSystemAPI + Clone + Debug,
     {

@@ -1,8 +1,7 @@
+use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches, Command};
 use std::{
-    env,
-    error::Error,
-    fs,
+    env, fs,
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc, LazyLock},
 };
@@ -65,11 +64,7 @@ static CWD: LazyLock<PathBuf> = std::sync::LazyLock::new(|| env::current_dir().u
 pub trait BinaryCommand {
     fn name(&self) -> &str;
     fn cli(&self, cmd: Command) -> Command;
-    fn handler(
-        &self,
-        args: &ArgMatches,
-        quit: Arc<AtomicBool>,
-    ) -> Result<ExitStatus, Box<dyn Error>>;
+    fn handler(&self, args: &ArgMatches, quit: Arc<AtomicBool>) -> Result<ExitStatus>;
 }
 
 pub fn add_args(mut cmd: Command, config: CommandConfig) -> Command {

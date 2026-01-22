@@ -7,6 +7,7 @@ use crate::{
     file_system_stdlib,
     site::Site,
 };
+use anyhow::Result;
 use clap::ArgMatches;
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -25,7 +26,7 @@ impl BinaryCommand for Command {
         &self,
         args: &ArgMatches,
         _quit: Arc<AtomicBool>,
-    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+    ) -> Result<crate::binary::ExitStatus> {
         let root_dir = command_root(args);
         let fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         let site = Site::load(&fs, Some(""))?;

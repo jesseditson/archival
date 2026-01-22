@@ -1,8 +1,8 @@
+use anyhow::Result;
 use ordermap::OrderMap;
 use regex::Regex;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::{
-    error::Error,
     fmt::{self, Display},
     hash::Hash,
     ops::Deref,
@@ -421,7 +421,7 @@ impl Manifest {
         root: &Path,
         string: String,
         upload_prefix: Option<&str>,
-    ) -> Result<Manifest, Box<dyn Error>> {
+    ) -> Result<Manifest> {
         let mut manifest = Manifest::default(root, "" /* set below */);
         let values: Table = toml::from_str(&string)?;
         let path_or_err = |value: Value, field: &str| -> Result<PathBuf, InvalidManifestError> {
@@ -484,7 +484,7 @@ impl Manifest {
         manifest_path: &Path,
         fs: &impl FileSystemAPI,
         upload_prefix: Option<&str>,
-    ) -> Result<Manifest, Box<dyn Error>> {
+    ) -> Result<Manifest> {
         let root = manifest_path
             .parent()
             .ok_or(InvalidManifestError::InvalidSitePath)?;
@@ -788,7 +788,7 @@ baz = "hello!"
     }
 
     #[test]
-    fn manifest_parsing() -> Result<(), Box<dyn Error>> {
+    fn manifest_parsing() -> Result<()> {
         let m = Manifest::from_string(Path::new(""), full_manifest_content().to_string(), None)?;
         println!("M: {:?}", m);
         assert_eq!(m.archival_version, Some("0.8.0".to_string()));

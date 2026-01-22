@@ -1,3 +1,7 @@
+use super::file::File;
+use super::meta::Meta;
+use super::DateTime;
+use super::{FieldType, InvalidFieldError};
 use crate::fields::file::RenderedFile;
 use crate::fields::DisplayType;
 use crate::manifest::{EditorTypes, ManifestEditorTypeValidator};
@@ -6,22 +10,15 @@ use crate::object::Renderable;
 use crate::util::integer_decode;
 use crate::value_path::ValuePathError;
 use crate::{FieldConfig, ObjectDefinition, ValuePath};
-
-use super::file::File;
-use super::meta::Meta;
-use super::DateTime;
-use super::{FieldType, InvalidFieldError};
+use anyhow::Result;
 use comrak::{markdown_to_html, ComrakOptions};
 use liquid::{model, ValueView};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::fmt::{self, Debug};
 use std::hash::Hash;
-use std::{
-    error::Error,
-    fmt::{self, Debug},
-};
 use toml::Value;
 use tracing::{instrument, warn};
 
@@ -760,7 +757,7 @@ impl FieldValue {
         field_type: &FieldType,
         parent_path: &ValuePath,
         object_definition: &ObjectDefinition,
-    ) -> Result<Option<Self>, Box<dyn Error>> {
+    ) -> Result<Option<Self>> {
         match value {
             serde_json::Value::String(s) => Ok(Some(FieldValue::String(s.to_string()))),
             serde_json::Value::Bool(b) => Ok(Some(FieldValue::Boolean(*b))),
@@ -840,7 +837,7 @@ impl FieldValue {
                         } else {
                             panic!("Invalid value {} for child", val);
                         }
-                        Ok::<_, Box<dyn Error>>(map)
+                        Ok::<_, anyhow::Error>(map)
                     })
                     .collect::<Result<Vec<_>, _>>()?,
             ))),
@@ -852,7 +849,7 @@ impl FieldValue {
         value: &serde_json::Value,
         field_path: &ValuePath,
         object_definition: &ObjectDefinition,
-    ) -> Result<Option<Self>, Box<dyn Error>> {
+    ) -> Result<Option<Self>> {
         match field_path.get_field_definition(object_definition) {
             Ok(field_type) => {
                 Self::field_from_json(value, field_type, field_path, object_definition)
@@ -867,11 +864,7 @@ impl FieldValue {
         }
     }
     #[instrument(skip(value))]
-    pub fn from_toml(
-        key: &String,
-        field_type: &FieldType,
-        value: &Value,
-    ) -> Result<FieldValue, Box<dyn Error>> {
+    pub fn from_toml(key: &String, field_type: &FieldType, value: &Value) -> Result<FieldValue> {
         match field_type {
             FieldType::String => Ok(FieldValue::String(
                 value
@@ -1076,7 +1069,7 @@ pub mod enum_tests {
     use super::*;
 
     #[test]
-    fn enum_value_validation_from_toml() -> Result<(), Box<dyn Error>> {
+    fn enum_value_validation_from_toml() -> Result<()> {
         let enum_field_type = FieldType::Enum(vec!["emo".to_string(), "metal".to_string()]);
         assert!(FieldValue::from_toml(
             &"some_key".to_string(),
@@ -1084,21 +1077,24 @@ pub mod enum_tests {
             &Value::String("butt rock".to_string())
         )
         .is_err_and(|e| {
-            let inner = e.downcast::<InvalidFieldError>().unwrap();
-            matches!(
-                *inner,
-                InvalidFieldError::EnumMismatch {
-                    field: _,
-                    field_type: _,
-                    value: _,
-                }
-            )
+            e.downcast_ref::<InvalidFieldError>()
+                .map(|inner| {
+                    matches!(
+                        inner,
+                        InvalidFieldError::EnumMismatch {
+                            field: _,
+                            field_type: _,
+                            value: _,
+                        }
+                    )
+                })
+                .unwrap_or(false)
         }));
 
         Ok(())
     }
     #[test]
-    fn enum_value_validation_from_string() -> Result<(), Box<dyn Error>> {
+    fn enum_value_validation_from_string() -> Result<()> {
         let enum_field_type = FieldType::Enum(vec!["emo".to_string(), "metal".to_string()]);
         assert!(FieldValue::from_string(
             &"some_key".to_string(),

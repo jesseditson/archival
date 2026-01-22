@@ -9,6 +9,7 @@ use crate::{
     object::{ObjectEntry, ValuePath},
     Archival, FieldValue, FileSystemAPI, ObjectDefinition,
 };
+use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches};
 use indicatif::{ProgressBar, ProgressStyle};
 use liquid::model::ArrayView;
@@ -185,7 +186,7 @@ impl BinaryCommand for Command {
         &self,
         args: &ArgMatches,
         _quit: Arc<AtomicBool>,
-    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+    ) -> Result<crate::binary::ExitStatus> {
         let root_dir = command_root(args);
         // Fail fast if file doesn't exist
         let file_path = args.get_one::<String>("file");

@@ -2,10 +2,10 @@ use crate::{
     file_system::{FileSystemAPI, WatchableFileSystemAPI},
     ArchivalError,
 };
+use anyhow::Result;
 use notify::{RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::{
-    error::Error,
     fs,
     path::{Path, PathBuf},
 };
@@ -33,45 +33,41 @@ impl FileSystemAPI for NativeFileSystem {
     fn root_dir(&self) -> &Path {
         &self.root
     }
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>> {
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool> {
         Ok(fs::metadata(self.get_path(path)).is_ok())
     }
-    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>> {
+    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool> {
         Ok(self.get_path(path).is_dir())
     }
-    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<()> {
         Ok(fs::remove_dir_all(self.get_path(path))?)
     }
-    fn create_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+    fn create_dir_all(&mut self, path: impl AsRef<Path>) -> Result<()> {
         Ok(fs::create_dir_all(self.get_path(path))?)
     }
-    fn read(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>> {
         Ok(Some(fs::read(self.get_path(path))?))
     }
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>, Box<dyn Error>> {
+    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>> {
         Ok(Some(fs::read_to_string(self.get_path(path))?))
     }
-    fn delete(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+    fn delete(&mut self, path: impl AsRef<Path>) -> Result<()> {
         if self.is_dir(&path)? {
             return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
         }
         Ok(fs::remove_file(self.get_path(path))?)
     }
-    fn write_str(
-        &mut self,
-        path: impl AsRef<Path>,
-        contents: String,
-    ) -> Result<(), Box<dyn Error>> {
+    fn write_str(&mut self, path: impl AsRef<Path>, contents: String) -> Result<()> {
         Ok(fs::write(self.get_path(path), contents)?)
     }
-    fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
+    fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<()> {
         Ok(fs::write(self.get_path(path), contents)?)
     }
     fn walk_dir(
         &self,
         path: impl AsRef<Path>,
         include_dirs: bool,
-    ) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
+    ) -> Result<Box<dyn Iterator<Item = PathBuf>>> {
         let root = self.get_path(path);
         let iterator = WalkDir::new(&root)
             .follow_links(true)
@@ -101,7 +97,7 @@ impl WatchableFileSystemAPI for NativeFileSystem {
         root: PathBuf,
         watch_paths: Vec<String>,
         changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
-    ) -> Result<Box<dyn FnOnce()>, Box<dyn Error>> {
+    ) -> Result<Box<dyn FnOnce()>> {
         let root = fs::canonicalize(self.get_path(&root)).unwrap();
         let watch_path = root.to_owned();
         changed(vec![watch_path.to_path_buf()]);

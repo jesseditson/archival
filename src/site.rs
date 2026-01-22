@@ -12,12 +12,12 @@ use crate::{
     tags::layout,
     ArchivalError, FieldConfig, FileSystemAPI, ObjectMap,
 };
+use anyhow::Result;
 use seahash::SeaHasher;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
-    error::Error,
     hash::Hasher,
     path::{Path, PathBuf},
     sync::RwLock,
@@ -92,10 +92,7 @@ fn get_order(obj: &Object) -> String {
 
 impl Site {
     #[instrument(skip(fs))]
-    pub fn load(
-        fs: &impl FileSystemAPI,
-        upload_prefix: Option<&str>,
-    ) -> Result<Site, Box<dyn Error>> {
+    pub fn load(fs: &impl FileSystemAPI, upload_prefix: Option<&str>) -> Result<Site> {
         // Load our manifest (should it exist)
         let manifest_path = Path::new(MANIFEST_FILE_NAME);
         let manifest = if fs.exists(manifest_path)? {
@@ -185,7 +182,7 @@ impl Site {
     }
 
     #[cfg(feature = "json-schema")]
-    pub fn dump_schemas(&self, fs: &mut impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
+    pub fn dump_schemas(&self, fs: &mut impl FileSystemAPI) -> Result<()> {
         use crate::ObjectSchemaOptions;
 
         debug!(
@@ -210,11 +207,7 @@ impl Site {
         Ok(())
     }
     #[cfg(feature = "json-schema")]
-    pub fn dump_schema(
-        &self,
-        object: &String,
-        fs: &mut impl FileSystemAPI,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn dump_schema(&self, object: &String, fs: &mut impl FileSystemAPI) -> Result<()> {
         use crate::ObjectSchemaOptions;
 
         debug!("dumping schema for {}", object);
@@ -237,17 +230,14 @@ impl Site {
     }
 
     #[instrument(skip(fs))]
-    pub fn get_objects<T: FileSystemAPI>(&self, fs: &T) -> Result<ObjectMap, Box<dyn Error>> {
+    pub fn get_objects<T: FileSystemAPI>(&self, fs: &T) -> Result<ObjectMap> {
         self.get_objects_sorted(
             fs,
             Some(|a: &_, b: &_| get_order(a).partial_cmp(&get_order(b)).unwrap()),
         )
     }
     #[instrument(skip(fs))]
-    pub fn get_rendered_objects<T: FileSystemAPI>(
-        &self,
-        fs: &T,
-    ) -> Result<RenderedObjectMap, Box<dyn Error>> {
+    pub fn get_rendered_objects<T: FileSystemAPI>(&self, fs: &T) -> Result<RenderedObjectMap> {
         let objects = self.get_objects(fs)?;
         Ok(objects.rendered(&self.field_config))
     }
@@ -258,7 +248,7 @@ impl Site {
         object_name: &str,
         filename: Option<&str>,
         fs: &T,
-    ) -> Result<RenderedObject, Box<dyn Error>> {
+    ) -> Result<RenderedObject> {
         self.get_object(object_name, filename, fs)
             .map(|o| o.rendered(&self.field_config))
     }
@@ -268,7 +258,7 @@ impl Site {
         &self,
         fs: &T,
         sort: Option<impl Fn(&Object, &Object) -> Ordering>,
-    ) -> Result<RenderedObjectMap, Box<dyn Error>> {
+    ) -> Result<RenderedObjectMap> {
         let objects = self.get_objects_sorted(fs, sort)?;
         Ok(objects.rendered(&self.field_config))
     }
@@ -285,12 +275,12 @@ impl Site {
         &mut self,
         fs: &mut T,
         modify: impl FnOnce(&mut Manifest),
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         modify(&mut self.manifest);
         fs.write_str(MANIFEST_FILE_NAME, self.manifest.to_toml()?)
     }
 
-    pub fn manifest_content<T: FileSystemAPI>(&self, fs: &T) -> Result<String, Box<dyn Error>> {
+    pub fn manifest_content<T: FileSystemAPI>(&self, fs: &T) -> Result<String> {
         fs.read_to_string(MANIFEST_FILE_NAME)
             .map(|m| m.unwrap_or_default())
     }
@@ -301,7 +291,7 @@ impl Site {
         object_name: &str,
         filename: Option<&str>,
         fs: &T,
-    ) -> Result<Object, Box<dyn Error>> {
+    ) -> Result<Object> {
         let object_def = self
             .object_definitions
             .get(object_name)
@@ -333,7 +323,7 @@ impl Site {
         &self,
         fs: &T,
         sort: Option<impl Fn(&Object, &Object) -> Ordering>,
-    ) -> Result<ObjectMap, Box<dyn Error>> {
+    ) -> Result<ObjectMap> {
         let mut all_objects: ObjectMap = ObjectMap::new();
         let objects_dir = &self.manifest.objects_dir;
         for (object_name, object_def) in self.object_definitions.iter() {
@@ -397,7 +387,7 @@ impl Site {
         object_def: &ObjectDefinition,
         cache: &mut HashMap<PathBuf, Object>,
         fs: &T,
-    ) -> Result<Object, Box<dyn Error>> {
+    ) -> Result<Object> {
         let ext = path
             .extension()
             .ok_or_else(|| InvalidFileError::MissingFileExtension(path.to_path_buf()))?;
@@ -429,7 +419,7 @@ impl Site {
     }
 
     #[instrument(skip(fs))]
-    pub fn sync_static_files<T: FileSystemAPI>(&self, fs: &mut T) -> Result<(), Box<dyn Error>> {
+    pub fn sync_static_files<T: FileSystemAPI>(&self, fs: &mut T) -> Result<()> {
         let Manifest {
             static_dir,
             build_dir,
@@ -482,7 +472,7 @@ impl Site {
     }
 
     #[instrument(skip(fs))]
-    pub fn build<T: FileSystemAPI>(&self, fs: &mut T) -> Result<(), Box<dyn Error>> {
+    pub fn build<T: FileSystemAPI>(&self, fs: &mut T) -> Result<()> {
         let Manifest {
             objects_dir,
             layout_dir,
@@ -664,7 +654,7 @@ impl Site {
         globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
         build_cache: &RwLock<HashMap<PathBuf, u64>>,
-    ) -> Result<(PathBuf, u64), Box<dyn Error>> {
+    ) -> Result<(PathBuf, u64)> {
         let page = Page::new_with_template(
             object.filename.clone(),
             object_def,
@@ -715,7 +705,7 @@ impl Site {
         globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
         build_cache: &RwLock<HashMap<PathBuf, u64>>,
-    ) -> Result<(Option<PathBuf>, u64), Box<dyn Error>> {
+    ) -> Result<(Option<PathBuf>, u64)> {
         if let Some(template_str) = fs.read_to_string(file_path)? {
             let page = Page::new(
                 page_name.to_string(),

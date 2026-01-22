@@ -3,6 +3,7 @@ use crate::{
     object_definition::ObjectDefinition,
     FieldConfig, ObjectDefinitions, ObjectMap,
 };
+use anyhow::Result;
 use liquid::{model::ScalarCow, ValueView};
 use liquid_core::Value;
 use once_cell::sync::Lazy;
@@ -206,7 +207,7 @@ impl<'a> Page<'a> {
         objects_map: &ObjectMap,
         definitions: &ObjectDefinitions,
         field_config: &FieldConfig,
-    ) -> Result<String, Box<dyn Error>> {
+    ) -> Result<String> {
         #[cfg(feature = "verbose-logging")]
         tracing::debug!("rendering {}", self.name);
         let mut globals = liquid::object!({ "page": self.name });
@@ -477,7 +478,7 @@ here is a liquid variable: {{site_url}}
     }
 
     #[test]
-    fn regular_page() -> Result<(), Box<dyn Error>> {
+    fn regular_page() -> Result<()> {
         let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
         let globals = RenderGlobals {
             site_url: "https://foo.bar".into(),
@@ -527,7 +528,7 @@ here is a liquid variable: {{site_url}}
         Ok(())
     }
     #[test]
-    fn template_page() -> Result<(), Box<dyn Error>> {
+    fn template_page() -> Result<()> {
         let globals = RenderGlobals {
             site_url: "https://foo.bar".into(),
         };

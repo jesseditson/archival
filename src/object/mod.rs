@@ -8,6 +8,7 @@ use crate::{
     util::integer_decode,
     FieldConfig,
 };
+use anyhow::Result;
 use liquid::{
     model::{KString, Value},
     ObjectView, ValueView,
@@ -15,7 +16,6 @@ use liquid::{
 use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 use std::{
-    error::Error,
     fmt::Debug,
     hash::Hash,
     path::{Path, PathBuf},
@@ -133,7 +133,7 @@ impl Object {
         definition: &ObjectDefinition,
         custom_types: &EditorTypes,
         skip_validation: bool,
-    ) -> Result<ObjectValues, Box<dyn Error>> {
+    ) -> Result<ObjectValues> {
         // liquid-rust only supports strict parsing. This is reasonable but we
         // also want to allow empty root keys, so we fill in defaults for any
         // missing definition keys
@@ -198,7 +198,7 @@ impl Object {
         table: &Table,
         custom_types: &EditorTypes,
         skip_validation: bool,
-    ) -> Result<Object, Box<dyn Error>> {
+    ) -> Result<Object> {
         let values =
             Object::values_from_table(file, table, definition, custom_types, skip_validation)?;
         let mut order = None;
@@ -226,7 +226,7 @@ impl Object {
         filename: &str,
         order: Option<f64>,
         defaults: Vec<AddObjectValue>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self> {
         let path = Path::new(&definition.name).join(filename);
         let values =
             Object::values_from_table(&path, &Table::new(), definition, &OrderMap::new(), true)?;

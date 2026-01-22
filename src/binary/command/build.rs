@@ -7,6 +7,7 @@ use crate::{
     file_system_stdlib,
     site::Site,
 };
+use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches};
 use std::{
     path::PathBuf,
@@ -29,7 +30,7 @@ impl BinaryCommand for Command {
         &self,
         args: &ArgMatches,
         _quit: Arc<AtomicBool>,
-    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+    ) -> Result<crate::binary::ExitStatus> {
         let root_dir = command_root(args);
         let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         let upload_prefix = args.get_one::<String>("upload-prefix").map(|s| s.as_str());

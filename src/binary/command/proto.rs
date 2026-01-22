@@ -8,10 +8,10 @@ use crate::{
     file_system_stdlib::{self, NativeFileSystem},
     Archival,
 };
+use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches};
 use prost::Message;
 use std::{
-    error::Error,
     fs,
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
@@ -44,7 +44,7 @@ impl BinaryCommand for Command {
         &self,
         args: &ArgMatches,
         _quit: Arc<AtomicBool>,
-    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+    ) -> Result<crate::binary::ExitStatus> {
         if let Some((name, sub_m)) = args.subcommand() {
             if name == "dump" {
                 if let Some((sub_name, m)) = sub_m.subcommand() {
@@ -75,10 +75,7 @@ impl BinaryCommand for Command {
 }
 
 impl Command {
-    fn get_archival(
-        &self,
-        args: &ArgMatches,
-    ) -> Result<Archival<NativeFileSystem>, Box<dyn Error>> {
+    fn get_archival(&self, args: &ArgMatches) -> Result<Archival<NativeFileSystem>> {
         let root_dir = command_root(args);
         let fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         Archival::new_with_upload_prefix(fs, "")

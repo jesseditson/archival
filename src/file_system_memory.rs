@@ -1,7 +1,7 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    error::Error,
     fmt::Debug,
     hash::Hash,
     ops::Deref,
@@ -131,7 +131,7 @@ impl FileSystemAPI for MemoryFileSystem {
     fn root_dir(&self) -> &Path {
         Path::new("<memory>")
     }
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>> {
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool> {
         if self
             .fs
             .contains_key(&path.as_ref().to_string_lossy().to_lowercase())
@@ -142,53 +142,49 @@ impl FileSystemAPI for MemoryFileSystem {
             Ok(false)
         }
     }
-    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>> {
+    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool> {
         Ok(self.tree.contains_key(&FileGraphNode::key(path)))
     }
-    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.remove_from_graph(path);
         Ok(())
     }
-    fn create_dir_all(&mut self, _path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+    fn create_dir_all(&mut self, _path: impl AsRef<Path>) -> Result<()> {
         // dirs are implicitly created when files are created in them
         Ok(())
     }
-    fn read(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+    fn read(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>> {
         Ok(self.read_file(path))
     }
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>, Box<dyn Error>> {
+    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>> {
         if let Some(file) = self.read_file(path) {
             Ok(Some(std::str::from_utf8(&file)?.to_string()))
         } else {
             Ok(None)
         }
     }
-    fn delete(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+    fn delete(&mut self, path: impl AsRef<Path>) -> Result<()> {
         if self.is_dir(&path)? {
             return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
         }
         self.delete_file(path);
         Ok(())
     }
-    fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<(), Box<dyn Error>> {
+    fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<()> {
         if self.is_dir(&path)? {
             return Err(ArchivalError::new("cannot write to a folder").into());
         }
         self.write_file(path, contents);
         Ok(())
     }
-    fn write_str(
-        &mut self,
-        path: impl AsRef<Path>,
-        contents: String,
-    ) -> Result<(), Box<dyn Error>> {
+    fn write_str(&mut self, path: impl AsRef<Path>, contents: String) -> Result<()> {
         self.write(path, contents.as_bytes().to_vec())
     }
     fn walk_dir(
         &self,
         path: impl AsRef<Path>,
         include_dirs: bool,
-    ) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>> {
+    ) -> Result<Box<dyn Iterator<Item = PathBuf>>> {
         let children = self.all_children(&path);
         let mut all_files: Vec<PathBuf> = vec![];
         for child in children {

@@ -644,7 +644,7 @@ impl<'de> Deserialize<'de> for ValuePath {
 pub mod tests {
 
     use super::*;
-    use std::error::Error;
+    use anyhow::Result;
 
     fn object() -> Object {
         Object {
@@ -678,7 +678,7 @@ pub mod tests {
     }
 
     #[test]
-    fn get_object_values() -> Result<(), Box<dyn Error>> {
+    fn get_object_values() -> Result<()> {
         let object = object();
         let child_vp = ValuePath::from_string("children.1");
 

@@ -8,6 +8,7 @@ use crate::{
     json_schema::{generate_json_schema, generate_root_json_schema, ObjectSchemaOptions},
     site::Site,
 };
+use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches};
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -41,7 +42,7 @@ impl BinaryCommand for Command {
         &self,
         args: &ArgMatches,
         _quit: Arc<AtomicBool>,
-    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+    ) -> Result<crate::binary::ExitStatus> {
         let root_dir = command_root(args);
         let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
         let object = args.get_one::<String>("object");

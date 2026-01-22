@@ -1,12 +1,10 @@
 mod tests {
-    use std::{
-        error::Error,
-        path::{Path, PathBuf},
-    };
+    use anyhow::Result;
+    use std::path::{Path, PathBuf};
 
     use crate::{file_system::unpack_zip, test_utils::as_path_str, FileSystemAPI};
 
-    pub fn write_and_read_files(mut fs: impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
+    pub fn write_and_read_files(mut fs: impl FileSystemAPI) -> Result<()> {
         let dir = Path::new("some/deep/path");
         let file = dir.join("myfile.txt");
         let content = "foo bar baz".to_string();
@@ -31,7 +29,7 @@ mod tests {
         Ok(())
     }
 
-    pub fn unzip_to_fs(mut fs: impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
+    pub fn unzip_to_fs(mut fs: impl FileSystemAPI) -> Result<()> {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
         let ob_def = fs.read_to_string(Path::new("objects.toml"))?;
@@ -50,7 +48,7 @@ mod tests {
 macro_rules! gen_test {
     ($test_fn: ident, $fs_impl:expr) => {
         #[test]
-        fn $test_fn() -> Result<(), Box<dyn std::error::Error>> {
+        fn $test_fn() -> anyhow::Result<()> {
             tests::$test_fn($fs_impl)?;
             Ok(())
         }

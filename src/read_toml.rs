@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::{error::Error, fmt::Display, path::Path};
 
 use toml::Table;
@@ -18,7 +19,7 @@ impl Error for NotFoundError {}
 
 #[derive(Debug)]
 struct TomlError {
-    error: Box<dyn Error>,
+    error: anyhow::Error,
     file: String,
 }
 impl Display for TomlError {
@@ -29,7 +30,7 @@ impl Display for TomlError {
 impl Error for TomlError {}
 
 #[instrument(skip(fs))]
-pub fn read_toml(path: &Path, fs: &impl FileSystemAPI) -> Result<Table, Box<dyn Error>> {
+pub fn read_toml(path: &Path, fs: &impl FileSystemAPI) -> Result<Table> {
     let toml = match fs.read_to_string(path) {
         Ok(c) => match c {
             Some(c) => c,

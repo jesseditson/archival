@@ -1,4 +1,5 @@
 use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, server, site::Site};
+use anyhow::Result;
 use console::{style, Term};
 use indicatif::ProgressBar;
 use rsa::pkcs8::der::Writer;
@@ -44,7 +45,7 @@ pub fn watch(
     change_sender: Option<mpsc::Sender<Vec<PathBuf>>>,
     watch_paths: Option<Vec<String>>,
     quit: Arc<AtomicBool>,
-) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+) -> Result<crate::binary::ExitStatus> {
     let mut term = Term::stdout();
     let is_interactive = term.features().is_attended();
     let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);

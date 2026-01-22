@@ -1,12 +1,10 @@
 use super::InvalidFieldError;
+use anyhow::Result;
 use liquid::model;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::{
-    error::Error,
-    fmt::{self, Debug, Display},
-};
+use std::fmt::{self, Debug, Display};
 use time::{
     format_description, macros::format_description, OffsetDateTime as DateTimeImpl, UtcOffset,
 };
@@ -97,7 +95,7 @@ impl DateTime {
     //
     // * `+HHMM`
     // * `-HHMM`
-    pub fn parse_date_string(mut date_str: String) -> Result<String, Box<dyn Error>> {
+    pub fn parse_date_string(mut date_str: String) -> Result<String> {
         // Legacy: support year-first formats:
         date_str = YEAR_FIRST_FMT_RE
             .replace(&date_str, "$month/$day/$year")

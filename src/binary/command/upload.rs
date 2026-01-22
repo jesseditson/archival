@@ -11,6 +11,7 @@ use crate::{
     object::ValuePath,
     Archival, FieldValue,
 };
+use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches};
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
@@ -88,7 +89,7 @@ impl BinaryCommand for Command {
         &self,
         args: &ArgMatches,
         _quit: Arc<AtomicBool>,
-    ) -> Result<crate::binary::ExitStatus, Box<dyn std::error::Error>> {
+    ) -> Result<crate::binary::ExitStatus> {
         let root_dir = command_root(args);
         // Fail fast if we aren't logged in
         let config = ArchivalConfig::get();

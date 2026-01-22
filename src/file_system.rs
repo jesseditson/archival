@@ -1,5 +1,5 @@
+use anyhow::Result;
 use std::{
-    error::Error,
     io::{Cursor, Read, Seek},
     path::{Path, PathBuf},
 };
@@ -8,21 +8,20 @@ use tracing::debug;
 
 pub trait FileSystemAPI: Send + Sync + Default {
     fn root_dir(&self) -> &Path;
-    fn exists(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>>;
-    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool, Box<dyn Error>>;
-    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>>;
-    fn create_dir_all(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>>;
-    fn read(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>, Box<dyn Error>>;
-    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>, Box<dyn Error>>;
-    fn delete(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>>;
-    fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<(), Box<dyn Error>>;
-    fn write_str(&mut self, path: impl AsRef<Path>, contents: String)
-        -> Result<(), Box<dyn Error>>;
+    fn exists(&self, path: impl AsRef<Path>) -> Result<bool>;
+    fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool>;
+    fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<()>;
+    fn create_dir_all(&mut self, path: impl AsRef<Path>) -> Result<()>;
+    fn read(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>>;
+    fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>>;
+    fn delete(&mut self, path: impl AsRef<Path>) -> Result<()>;
+    fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<()>;
+    fn write_str(&mut self, path: impl AsRef<Path>, contents: String) -> Result<()>;
     fn walk_dir(
         &self,
         path: impl AsRef<Path>,
         include_dirs: bool,
-    ) -> Result<Box<dyn Iterator<Item = PathBuf>>, Box<dyn Error>>;
+    ) -> Result<Box<dyn Iterator<Item = PathBuf>>>;
 }
 
 // Orphan rules prevent this blanket impl so it must be implemented for each
@@ -56,7 +55,7 @@ pub trait WatchableFileSystemAPI {
         root: PathBuf,
         watch_paths: Vec<String>,
         changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
-    ) -> Result<Box<dyn FnOnce() + '_>, Box<dyn Error>>;
+    ) -> Result<Box<dyn FnOnce() + '_>>;
 }
 
 fn has_toplevel<S: Read + Seek>(
@@ -82,7 +81,7 @@ fn has_toplevel<S: Read + Seek>(
     Ok(true)
 }
 
-pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<(), Box<dyn Error>> {
+pub fn unpack_zip(zipball: Vec<u8>, fs: &mut impl FileSystemAPI) -> Result<()> {
     let mut archive = zip::ZipArchive::new(Cursor::new(zipball))?;
 
     let do_strip_toplevel = has_toplevel(&mut archive)?;

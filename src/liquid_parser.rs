@@ -1,8 +1,9 @@
 use crate::{page::TemplateType, tags::layout::LayoutTag, FileSystemAPI};
+use anyhow::Result;
 use liquid_core::partials::{EagerCompiler, PartialSource};
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::{borrow::Cow, collections::HashMap, error::Error, path::Path};
+use std::{borrow::Cow, collections::HashMap, path::Path};
 #[cfg(feature = "verbose-logging")]
 use tracing::debug;
 use tracing::error;
@@ -19,7 +20,7 @@ impl ArchivalPartialSource {
         pages_path: Option<&Path>,
         layout_path: Option<&Path>,
         fs: &impl FileSystemAPI,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self> {
         let mut partials = HashMap::new();
         // Add layouts
         if let Some(path) = layout_path {
@@ -89,7 +90,7 @@ pub fn get(
     pages_path: Option<&Path>,
     layout_path: Option<&Path>,
     fs: &impl FileSystemAPI,
-) -> Result<liquid::Parser, Box<dyn Error>> {
+) -> Result<liquid::Parser> {
     let partials = EagerCompiler::new(ArchivalPartialSource::new(pages_path, layout_path, fs)?);
     let parser = liquid::ParserBuilder::with_stdlib()
         .tag(LayoutTag)

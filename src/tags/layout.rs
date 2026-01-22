@@ -140,8 +140,8 @@ pub fn post_process(mut rendered: String) -> String {
 
 #[cfg(test)]
 mod test {
+    use anyhow::Result;
     use std::borrow;
-    use std::error::Error;
 
     use liquid_core::partials::PartialCompiler;
     use liquid_core::runtime::RuntimeBuilder;
@@ -152,10 +152,10 @@ mod test {
     use super::*;
 
     pub trait ToTemplate {
-        fn to_template(&self, options: &Language) -> Result<Template, Box<dyn Error>>;
+        fn to_template(&self, options: &Language) -> Result<Template>;
     }
     impl ToTemplate for &str {
-        fn to_template(&self, options: &Language) -> Result<Template, Box<dyn Error>> {
+        fn to_template(&self, options: &Language) -> Result<Template> {
             Ok(parser::parse(self, options).map(runtime::Template::new)?)
         }
     }
@@ -198,7 +198,7 @@ mod test {
     }
 
     #[test]
-    fn layout_tag_quotes() -> Result<(), Box<dyn Error>> {
+    fn layout_tag_quotes() -> Result<()> {
         let options = options();
         let template = "{% layout 'example.liquid' %}\ntest test".to_template(&options)?;
 
@@ -216,7 +216,7 @@ mod test {
     }
 
     #[test]
-    fn layout_variable() -> Result<(), Box<dyn Error>> {
+    fn layout_variable() -> Result<()> {
         let options = options();
         let template =
             "{% layout 'example_var.liquid' example_var:\"hello\" %}".to_template(&options)?;
@@ -233,7 +233,7 @@ mod test {
     }
 
     #[test]
-    fn layout_multiple_variables() -> Result<(), Box<dyn Error>> {
+    fn layout_multiple_variables() -> Result<()> {
         let options = options();
         let template =
             "{% layout 'example_multi_var.liquid' example_var:\"hello\", example:\"world\" %}"
@@ -251,7 +251,7 @@ mod test {
     }
 
     #[test]
-    fn layout_multiple_variables_trailing_comma() -> Result<(), Box<dyn Error>> {
+    fn layout_multiple_variables_trailing_comma() -> Result<()> {
         let options = options();
         let template =
             "{% layout 'example_multi_var.liquid' example_var:\"hello\", example:\"dogs\", %}"
@@ -269,7 +269,7 @@ mod test {
     }
 
     #[test]
-    fn json() -> Result<(), Box<dyn Error>> {
+    fn json() -> Result<()> {
         let options = options();
         let template = "{% layout 'example_json.json' example_var:\"hello\", example:\"dogs\", %}"
             .to_template(&options)?;
@@ -289,7 +289,7 @@ mod test {
     }
 
     #[test]
-    fn no_file() -> Result<(), Box<dyn Error>> {
+    fn no_file() -> Result<()> {
         let options = options();
         let template = "{% layout 'file_does_not_exist.liquid' %}".to_template(&options)?;
 

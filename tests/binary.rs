@@ -1,7 +1,6 @@
 #[cfg(feature = "binary")]
 mod binary_tests {
     use std::{
-        error::Error,
         fs,
         io::Read,
         path::Path,
@@ -56,7 +55,7 @@ mod binary_tests {
 
     #[test]
     #[traced_test]
-    fn run_watcher() -> Result<(), Box<dyn Error>> {
+    fn run_watcher() -> anyhow::Result<()> {
         // TODO: spawn a thread and send sigint
         // archival::binary(get_args(vec!["run", "tests/fixtures/website"]))?;
         Ok(())
@@ -64,7 +63,7 @@ mod binary_tests {
 
     #[test]
     #[traced_test]
-    fn compatiblity_ok() -> Result<(), Box<dyn Error>> {
+    fn compatiblity_ok() -> anyhow::Result<()> {
         assert!(matches!(
             archival::binary::binary(get_args(vec!["compat", "0.12.0"]), None)?,
             ExitStatus::Ok
@@ -74,7 +73,7 @@ mod binary_tests {
 
     #[test]
     #[traced_test]
-    fn compatiblity_not_ok() -> Result<(), Box<dyn Error>> {
+    fn compatiblity_not_ok() -> anyhow::Result<()> {
         assert!(matches!(
             archival::binary::binary(get_args(vec!["compat", "0.1.1"]), None)?,
             ExitStatus::Error

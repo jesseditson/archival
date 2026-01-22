@@ -17,6 +17,7 @@ mod tags;
 mod test_utils;
 mod util;
 mod value_path;
+use anyhow::Result;
 use events::{
     AddChildEvent, AddObjectEvent, ArchivalEvent, DeleteObjectEvent, EditFieldEvent,
     EditOrderEvent, RemoveChildEvent, RenameObjectEvent,
@@ -29,7 +30,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use site::Site;
 use std::cmp::Ordering;
-use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hasher;
 use std::path::{Path, PathBuf};
@@ -131,7 +131,7 @@ pub struct Archival<F: FileSystemAPI + Clone + Debug> {
 }
 
 impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
-    pub fn is_compatible(fs: &F) -> Result<bool, Box<dyn Error>> {
+    pub fn is_compatible(fs: &F) -> Result<bool> {
         let site = Site::load(fs, Some(""))?;
         if let Some(version_str) = &site.manifest.archival_version {
             let (ok, msg) = check_compatibility(version_str);
@@ -143,7 +143,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             Ok(true)
         }
     }
-    pub fn new(fs: F) -> Result<Self, Box<dyn Error>> {
+    pub fn new(fs: F) -> Result<Self> {
         let site = Site::load(&fs, None)?;
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self {
@@ -152,7 +152,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             last_build_id: AtomicU64::new(0),
         })
     }
-    pub fn new_with_upload_prefix(fs: F, upload_prefix: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn new_with_upload_prefix(fs: F, upload_prefix: &str) -> Result<Self> {
         let site = Site::load(&fs, Some(upload_prefix))?;
         let fs_mutex = FileSystemMutex::init(fs);
         Ok(Self {
@@ -161,7 +161,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             last_build_id: AtomicU64::new(0),
         })
     }
-    pub fn build(&self, options: BuildOptions) -> Result<ArchivalBuildId, Box<dyn Error>> {
+    pub fn build(&self, options: BuildOptions) -> Result<ArchivalBuildId> {
         let build_id = self.fs_mutex.with_fs(|fs| {
             if !options.skip_static {
                 self.site.sync_static_files(fs)?;
@@ -184,7 +184,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(self.last_build_id.load(AtomicOrdering::Relaxed))
     }
     #[cfg(feature = "json-schema")]
-    pub fn dump_schemas(&self) -> Result<(), Box<dyn Error>> {
+    pub fn dump_schemas(&self) -> Result<()> {
         debug!("dump schemas {}", self.site);
         self.fs_mutex.with_fs(|fs| self.site.dump_schemas(fs))
     }
@@ -233,7 +233,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             .unwrap();
         files
     }
-    pub fn object_exists(&self, obj_type: &str, filename: &str) -> Result<bool, Box<dyn Error>> {
+    pub fn object_exists(&self, obj_type: &str, filename: &str) -> Result<bool> {
         self.fs_mutex
             .with_fs(|fs| fs.exists(&self.object_path_impl(obj_type, filename, fs)?))
     }
@@ -245,18 +245,16 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn build_id(&self) -> u64 {
         self.site.build_id()
     }
-    pub fn fs_id(&self) -> Result<u64, Box<dyn Error>> {
+    pub fn fs_id(&self) -> Result<u64> {
         self.fs_mutex.with_fs(|fs| self.fs_id_for_fs(fs))
     }
-    pub fn list_build_files(
-        &self,
-    ) -> Result<impl Iterator<Item = PathBuf> + use<'_, F>, Box<dyn Error>> {
+    pub fn list_build_files(&self) -> Result<impl Iterator<Item = PathBuf> + use<'_, F>> {
         self.fs_mutex.with_fs(|fs| self.list_build_files_for_fs(fs))
     }
     fn list_build_files_for_fs(
         &self,
         fs: &F,
-    ) -> Result<impl Iterator<Item = PathBuf> + use<'_, F>, Box<dyn Error>> {
+    ) -> Result<impl Iterator<Item = PathBuf> + use<'_, F>> {
         let Manifest {
             object_definition_file,
             pages_dir,
@@ -279,7 +277,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                     .map(|p| objects_dir.join(p)),
             ))
     }
-    fn fs_id_for_fs(&self, fs: &F) -> Result<u64, Box<dyn Error>> {
+    fn fs_id_for_fs(&self, fs: &F) -> Result<u64> {
         let mut hasher = SeaHasher::new();
         for path in self.list_build_files_for_fs(fs)? {
             if let Some(file) = fs.read(&path)? {
@@ -290,12 +288,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         }
         Ok(hasher.finish())
     }
-    fn object_path_impl(
-        &self,
-        obj_type: &str,
-        filename: &str,
-        fs: &F,
-    ) -> Result<PathBuf, Box<dyn Error>> {
+    fn object_path_impl(&self, obj_type: &str, filename: &str, fs: &F) -> Result<PathBuf> {
         let objects = self.site.get_objects(fs)?;
         let entry = objects.get(obj_type).ok_or(ArchivalError::new(&format!(
             "object type not found: {}",
@@ -314,11 +307,11 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 .join(Path::new(&format!("{}.toml", filename)))
         })
     }
-    pub fn object_file(&self, obj_type: &str, filename: &str) -> Result<String, Box<dyn Error>> {
+    pub fn object_file(&self, obj_type: &str, filename: &str) -> Result<String> {
         self.fs_mutex
             .with_fs(|fs| self.modify_object_file(obj_type, filename, |o| Ok(o), fs))
     }
-    pub fn sha_for_file(&self, file: &Path) -> Result<String, Box<dyn Error>> {
+    pub fn sha_for_file(&self, file: &Path) -> Result<String> {
         let file_data = self
             .fs_mutex
             .with_fs(|fs| fs.read(file))?
@@ -329,12 +322,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(data_encoding::HEXLOWER.encode(&hasher.finalize()))
     }
 
-    pub fn write_file(
-        &self,
-        obj_type: &str,
-        filename: &str,
-        contents: String,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn write_file(&self, obj_type: &str, filename: &str, contents: String) -> Result<()> {
         // Validate toml
         let obj_def = self.get_object_definition(obj_type)?;
         let table: toml::Table = toml::from_str(&contents)?;
@@ -354,9 +342,9 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         &self,
         obj_type: &str,
         filename: &str,
-        obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
+        obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object>,
         fs: &F,
-    ) -> Result<String, Box<dyn Error>> {
+    ) -> Result<String> {
         let mut all_objects = self.site.get_objects(fs)?;
         let definitions = &self.site.object_definitions;
         if let Some(objects) = all_objects.get_mut(obj_type) {
@@ -394,7 +382,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         &self,
         event: ArchivalEvent,
         build_options: Option<BuildOptions>,
-    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    ) -> Result<ArchivalEventResponse> {
         let r = match event {
             ArchivalEvent::AddObject(event) => self.add_object(event)?,
             ArchivalEvent::RenameObject(event) => self.rename_object(event)?,
@@ -412,10 +400,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     }
 
     // Internal
-    fn add_root_object(
-        &self,
-        event: AddRootObjectEvent,
-    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    fn add_root_object(&self, event: AddRootObjectEvent) -> Result<ArchivalEventResponse> {
         let obj_def = self.get_object_definition(&event.object)?;
         self.fs_mutex.with_fs(|fs| {
             let dir_path = self
@@ -450,7 +435,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(ArchivalEventResponse::None)
     }
 
-    fn add_object(&self, event: AddObjectEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    fn add_object(&self, event: AddObjectEvent) -> Result<ArchivalEventResponse> {
         let obj_def = self.get_object_definition(&event.object)?;
         self.fs_mutex.with_fs(|fs| {
             let obj_dir = self
@@ -490,10 +475,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(ArchivalEventResponse::None)
     }
 
-    fn rename_object(
-        &self,
-        event: RenameObjectEvent,
-    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    fn rename_object(&self, event: RenameObjectEvent) -> Result<ArchivalEventResponse> {
         let obj_def = self.get_object_definition(&event.object)?;
         self.fs_mutex.with_fs(|fs| {
             let root_objects = self.site.root_objects(fs);
@@ -518,10 +500,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(ArchivalEventResponse::None)
     }
 
-    fn delete_object(
-        &self,
-        event: DeleteObjectEvent,
-    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    fn delete_object(&self, event: DeleteObjectEvent) -> Result<ArchivalEventResponse> {
         let obj_def = self.get_object_definition(&event.object)?;
         self.fs_mutex.with_fs(|fs| {
             let path = self.object_path_impl(&obj_def.name, &event.filename, fs)?;
@@ -532,7 +511,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(ArchivalEventResponse::None)
     }
 
-    pub fn manifest_content(&self) -> Result<String, Box<dyn Error>> {
+    pub fn manifest_content(&self) -> Result<String> {
         self.fs_mutex.with_fs(|fs| self.site.manifest_content(fs))
     }
 
@@ -543,11 +522,11 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             .ok_or(ArchivalError::new(&format!("object not found: {}", name)))
     }
 
-    pub fn get_objects(&self) -> Result<ObjectMap, Box<dyn Error>> {
+    pub fn get_objects(&self) -> Result<ObjectMap> {
         self.fs_mutex.with_fs(|fs| self.site.get_objects(fs))
     }
 
-    pub fn get_object(&self, name: &str, filename: Option<&str>) -> Result<Object, Box<dyn Error>> {
+    pub fn get_object(&self, name: &str, filename: Option<&str>) -> Result<Object> {
         self.fs_mutex
             .with_fs(|fs| self.site.get_object(name, filename, fs))
     }
@@ -555,12 +534,12 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn get_objects_sorted(
         &self,
         sort: impl Fn(&Object, &Object) -> Ordering,
-    ) -> Result<ObjectMap, Box<dyn Error>> {
+    ) -> Result<ObjectMap> {
         self.fs_mutex
             .with_fs(|fs| self.site.get_objects_sorted(fs, Some(sort)))
     }
 
-    pub fn get_rendered_objects(&self) -> Result<RenderedObjectMap, Box<dyn Error>> {
+    pub fn get_rendered_objects(&self) -> Result<RenderedObjectMap> {
         self.fs_mutex
             .with_fs(|fs| self.site.get_rendered_objects(fs))
     }
@@ -569,7 +548,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         &self,
         name: &str,
         filename: Option<&str>,
-    ) -> Result<RenderedObject, Box<dyn Error>> {
+    ) -> Result<RenderedObject> {
         self.fs_mutex
             .with_fs(|fs| self.site.get_rendered_object(name, filename, fs))
     }
@@ -577,12 +556,12 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn get_rendered_objects_sorted(
         &self,
         sort: impl Fn(&Object, &Object) -> Ordering,
-    ) -> Result<RenderedObjectMap, Box<dyn Error>> {
+    ) -> Result<RenderedObjectMap> {
         self.fs_mutex
             .with_fs(|fs| self.site.get_rendered_objects_sorted(fs, Some(sort)))
     }
 
-    fn edit_field(&self, event: EditFieldEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    fn edit_field(&self, event: EditFieldEvent) -> Result<ArchivalEventResponse> {
         let def = self
             .site
             .object_definitions
@@ -609,7 +588,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         })?;
         Ok(ArchivalEventResponse::None)
     }
-    fn edit_order(&self, event: EditOrderEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    fn edit_order(&self, event: EditOrderEvent) -> Result<ArchivalEventResponse> {
         self.write_object(&event.object, &event.filename, |existing| {
             existing.order = event.order;
             Ok(existing)
@@ -622,7 +601,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         obj_type: impl AsRef<str>,
         filename: impl AsRef<str>,
         child_path: &ValuePath,
-    ) -> Result<usize, Box<dyn Error>> {
+    ) -> Result<usize> {
         let mut object = self.get_object(obj_type.as_ref(), Some(filename.as_ref()))?;
         let index = child_path.modify_children(&mut object, |children| {
             let len = children.len();
@@ -635,7 +614,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(index)
     }
 
-    fn add_child(&self, event: AddChildEvent) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    fn add_child(&self, event: AddChildEvent) -> Result<ArchivalEventResponse> {
         let mut added_idx = usize::MAX;
         let def = self
             .site
@@ -663,10 +642,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         })?;
         Ok(ArchivalEventResponse::Index(added_idx))
     }
-    fn remove_child(
-        &self,
-        event: RemoveChildEvent,
-    ) -> Result<ArchivalEventResponse, Box<dyn Error>> {
+    fn remove_child(&self, event: RemoveChildEvent) -> Result<ArchivalEventResponse> {
         self.write_object(&event.object, &event.filename, move |existing| {
             let mut path = event.path;
             path.remove_child(existing)?;
@@ -679,8 +655,8 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         &self,
         obj_type: &str,
         filename: &str,
-        obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object, Box<dyn Error>>,
-    ) -> Result<(), Box<dyn Error>> {
+        obj_cb: impl FnOnce(&mut Object) -> Result<&mut Object>,
+    ) -> Result<()> {
         debug!("write object {}: {}", obj_type, filename);
         self.fs_mutex.with_fs(|fs| {
             let path = self.object_path_impl(obj_type, filename, fs)?;
@@ -691,10 +667,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         })
     }
 
-    pub fn modify_manifest(
-        &mut self,
-        modify: impl FnOnce(&mut Manifest),
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn modify_manifest(&mut self, modify: impl FnOnce(&mut Manifest)) -> Result<()> {
         self.fs_mutex.with_fs(|fs| {
             self.site.modify_manifest(fs, modify)?;
             Ok(())
@@ -709,7 +682,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         &self,
         object_names: impl IntoIterator<Item = impl AsRef<str>>,
         keep_objects: Option<Vec<ValuePath>>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<()> {
         let objects = self.get_objects()?;
         self.fs_mutex.with_fs(|fs| {
             for on in object_names {
@@ -751,14 +724,14 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn take_fs(self) -> F {
         self.fs_mutex.take_fs()
     }
-    pub fn clone_fs(&self) -> Result<F, Box<dyn Error>> {
+    pub fn clone_fs(&self) -> Result<F> {
         self.fs_mutex.with_fs(|fs| Ok(fs.clone()))
     }
 }
 
 #[cfg(test)]
 mod lib {
-    use std::error::Error;
+    use anyhow::Result;
 
     use crate::{file_system::unpack_zip, test_utils::as_path_str, value_path::ValuePath};
     use events::AddObjectValue;
@@ -768,7 +741,7 @@ mod lib {
 
     #[test]
     #[traced_test]
-    fn load_and_build_site_from_zip() -> Result<(), Box<dyn Error>> {
+    fn load_and_build_site_from_zip() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -827,7 +800,7 @@ mod lib {
     }
 
     #[test]
-    fn add_object_to_site() -> Result<(), Box<dyn Error>> {
+    fn add_object_to_site() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -868,7 +841,7 @@ mod lib {
     }
 
     #[test]
-    fn edit_object() -> Result<(), Box<dyn Error>> {
+    fn edit_object() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -895,7 +868,7 @@ mod lib {
     }
 
     #[test]
-    fn delete_object() -> Result<(), Box<dyn Error>> {
+    fn delete_object() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -926,7 +899,7 @@ mod lib {
     }
 
     #[test]
-    fn rename_object() -> Result<(), Box<dyn Error>> {
+    fn rename_object() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -957,7 +930,7 @@ mod lib {
     }
 
     #[test]
-    fn rename_object_with_modifications() -> Result<(), Box<dyn Error>> {
+    fn rename_object_with_modifications() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -1033,7 +1006,7 @@ mod lib {
 
     #[test]
     #[traced_test]
-    fn edit_object_order() -> Result<(), Box<dyn Error>> {
+    fn edit_object_order() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -1153,7 +1126,7 @@ mod lib {
     }
 
     #[test]
-    fn remove_child() -> Result<(), Box<dyn Error>> {
+    fn remove_child() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -1192,7 +1165,7 @@ mod lib {
     }
 
     #[test]
-    fn modify_manifest() -> Result<(), Box<dyn Error>> {
+    fn modify_manifest() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -1213,7 +1186,7 @@ mod lib {
     }
 
     #[test]
-    fn bulk_delete_objects() -> Result<(), Box<dyn Error>> {
+    fn bulk_delete_objects() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -1239,7 +1212,7 @@ mod lib {
 
     #[test]
     #[traced_test]
-    fn build_ids() -> Result<(), Box<dyn Error>> {
+    fn build_ids() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -1284,7 +1257,7 @@ mod lib {
         Ok(())
     }
     #[test]
-    fn edit_enum() -> Result<(), Box<dyn Error>> {
+    fn edit_enum() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -1317,7 +1290,7 @@ mod lib {
         Ok(())
     }
     #[test]
-    fn edit_enum_fails_when_invalid() -> Result<(), Box<dyn Error>> {
+    fn edit_enum_fails_when_invalid() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
