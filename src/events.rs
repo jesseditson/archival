@@ -72,6 +72,11 @@ impl ArchivalEvent {
                     Object::from_def(obj_def, &evt.filename, evt.order, evt.values.clone())?;
                 Ok(object.to_toml(obj_def)?)
             }
+            ArchivalEvent::AddRootObject(evt) => {
+                let obj_def = archival.get_object_definition(&evt.object)?;
+                let object = Object::from_def(obj_def, &evt.object, None, evt.values.clone())?;
+                Ok(object.to_toml(obj_def)?)
+            }
             evt => archival.object_file(evt.object_name(), evt.filename()),
         }
     }
@@ -257,5 +262,149 @@ mod export_types {
         };
         write_definition_file::<_, ArchivalEvent>(&mut buf, options).unwrap();
         fs::write("./events.d.ts", buf).expect("Failed to write file");
+    }
+}
+
+#[cfg(test)]
+mod content_tests {
+    use super::*;
+    use crate::{file_system::unpack_zip, Archival, MemoryFileSystem};
+    use anyhow::Result;
+
+    fn setup_test_archival() -> Result<Archival<MemoryFileSystem>> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        Archival::new(fs)
+    }
+
+    #[test]
+    fn test_delete_object_content() -> Result<()> {
+        let archival = setup_test_archival()?;
+        let event = ArchivalEvent::DeleteObject(DeleteObjectEvent {
+            object: "section".to_string(),
+            filename: "first".to_string(),
+            source: None,
+        });
+        let content = event.content(&archival)?;
+        assert!(!content.is_empty());
+        assert!(content.contains("name"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_rename_object_content() -> Result<()> {
+        let archival = setup_test_archival()?;
+        let event = ArchivalEvent::RenameObject(RenameObjectEvent {
+            object: "section".to_string(),
+            from: "first".to_string(),
+            to: "renamed".to_string(),
+        });
+        let content = event.content(&archival)?;
+        assert!(!content.is_empty());
+        assert!(content.contains("name"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_object_content() -> Result<()> {
+        let archival = setup_test_archival()?;
+        let event = ArchivalEvent::AddObject(AddObjectEvent {
+            object: "childlist".to_string(),
+            filename: "new-childlist".to_string(),
+            order: Some(5.0),
+            values: vec![AddObjectValue {
+                path: ValuePath::from_string("name"),
+                value: FieldValue::String("New Child List".to_string()),
+            }],
+        });
+        let content = event.content(&archival)?;
+        assert!(!content.is_empty());
+        assert!(content.contains("New Child List"));
+        assert!(content.contains("order = 5"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_root_object_content() -> Result<()> {
+        let archival = setup_test_archival()?;
+        let event = ArchivalEvent::AddRootObject(AddRootObjectEvent {
+            object: "childlist".to_string(),
+            values: vec![AddObjectValue {
+                path: ValuePath::from_string("name"),
+                value: FieldValue::String("Root List".to_string()),
+            }],
+        });
+        let content = event.content(&archival)?;
+        assert!(!content.is_empty());
+        println!("content: {content}");
+        assert!(content.contains("Root List"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_edit_field_content() -> Result<()> {
+        let archival = setup_test_archival()?;
+        let event = ArchivalEvent::EditField(EditFieldEvent {
+            object: "section".to_string(),
+            filename: "first".to_string(),
+            path: ValuePath::empty(),
+            field: "name".to_string(),
+            value: Some(FieldValue::String("Updated Name".to_string())),
+            source: None,
+        });
+        let content = event.content(&archival)?;
+        assert!(!content.is_empty());
+        assert!(content.contains("name"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_edit_order_content() -> Result<()> {
+        let archival = setup_test_archival()?;
+        let event = ArchivalEvent::EditOrder(EditOrderEvent {
+            object: "section".to_string(),
+            filename: "first".to_string(),
+            order: Some(10.0),
+            source: None,
+        });
+        let content = event.content(&archival)?;
+        assert!(!content.is_empty());
+        assert!(content.contains("name"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_child_content() -> Result<()> {
+        let archival = setup_test_archival()?;
+        let event = ArchivalEvent::AddChild(AddChildEvent {
+            object: "post".to_string(),
+            filename: "a-post".to_string(),
+            path: ValuePath::default().append(ValuePath::key("links")),
+            values: vec![AddObjectValue {
+                path: ValuePath::from_string("url"),
+                value: FieldValue::String("https://example.com".to_string()),
+            }],
+            index: None,
+        });
+        let content = event.content(&archival)?;
+        assert!(!content.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_remove_child_content() -> Result<()> {
+        let archival = setup_test_archival()?;
+        let event = ArchivalEvent::RemoveChild(RemoveChildEvent {
+            object: "post".to_string(),
+            filename: "a-post".to_string(),
+            path: ValuePath::default()
+                .append(ValuePath::key("links"))
+                .append(ValuePath::index(0)),
+            source: None,
+        });
+        let content = event.content(&archival)?;
+        assert!(!content.is_empty());
+        Ok(())
     }
 }
