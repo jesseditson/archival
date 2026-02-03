@@ -1,4 +1,6 @@
 mod archival_error;
+#[cfg(test)]
+mod build_id_tests;
 mod file_system;
 mod file_system_memory;
 mod file_system_mutex;
@@ -162,25 +164,32 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         })
     }
     pub fn build(&self, options: BuildOptions) -> Result<ArchivalBuildId> {
-        let build_id = self.fs_mutex.with_fs(|fs| {
+        let (build_id, built) = self.fs_mutex.with_fs(|fs| {
             if !options.skip_static {
                 self.site.sync_static_files(fs)?;
             }
             let build_id = self.site.build_id();
-            if build_id == 0 || self.last_build_id.load(AtomicOrdering::Relaxed) != build_id {
+            let should_build =
+                build_id == 0 || self.last_build_id.load(AtomicOrdering::Relaxed) != build_id;
+            if should_build {
                 debug!("build {} {:#?}", self.site, options);
                 self.site.build(fs)?;
             } else {
                 #[cfg(feature = "verbose-logging")]
                 debug!("skipping duplicate build");
             }
-            Ok(build_id)
+            // Recompute build_id after site.build() populates the cache
+            let final_build_id = self.site.build_id();
+            Ok((final_build_id, should_build))
         })?;
-        self.last_build_id
-            .fetch_update(AtomicOrdering::Relaxed, AtomicOrdering::Relaxed, |_| {
-                Some(build_id)
-            })
-            .unwrap();
+        // Only update last_build_id if we actually built
+        if built {
+            self.last_build_id
+                .fetch_update(AtomicOrdering::Relaxed, AtomicOrdering::Relaxed, |_| {
+                    Some(build_id)
+                })
+                .unwrap();
+        }
         Ok(self.last_build_id.load(AtomicOrdering::Relaxed))
     }
     #[cfg(feature = "json-schema")]
@@ -1210,52 +1219,6 @@ mod lib {
         Ok(())
     }
 
-    #[test]
-    #[traced_test]
-    fn build_ids() -> Result<()> {
-        let mut fs = MemoryFileSystem::default();
-        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
-        unpack_zip(zip.to_vec(), &mut fs)?;
-        let archival = Archival::new(fs)?;
-        let initial_fs_id = archival.fs_id()?;
-        debug!("INITIAL FS ID: {:?}", initial_fs_id);
-        archival.build(BuildOptions::default())?;
-        let initial_build_id = archival.build_id();
-        debug!("INITIAL BUILD ID: {:?}", initial_build_id);
-        assert_eq!(
-            archival.fs_id()?,
-            initial_fs_id,
-            "fs id changed but there was no change"
-        );
-        archival.send_event(
-            ArchivalEvent::EditField(EditFieldEvent {
-                object: "section".to_string(),
-                filename: "first".to_string(),
-                path: ValuePath::empty(),
-                field: "name".to_string(),
-                value: Some(FieldValue::String("This is the new name".to_string())),
-                source: None,
-            }),
-            None,
-        )?;
-        assert_ne!(
-            archival.fs_id()?,
-            initial_fs_id,
-            "fs id did not change after file changes"
-        );
-        assert_eq!(
-            archival.build_id(),
-            initial_build_id,
-            "build id changed without a dist change"
-        );
-        archival.build(BuildOptions::default())?;
-        assert_ne!(
-            archival.build_id(),
-            initial_build_id,
-            "build id did not change after build"
-        );
-        Ok(())
-    }
     #[test]
     fn edit_enum() -> Result<()> {
         let mut fs = MemoryFileSystem::default();

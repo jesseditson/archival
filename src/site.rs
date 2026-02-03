@@ -20,7 +20,10 @@ use std::{
     collections::{HashMap, HashSet},
     hash::Hasher,
     path::{Path, PathBuf},
-    sync::RwLock,
+    sync::{
+        atomic::{self, AtomicU64},
+        RwLock,
+    },
 };
 use thiserror::Error;
 use tracing::{debug, error, instrument, trace_span, warn};
@@ -61,6 +64,8 @@ pub struct Site {
     static_file_cache: RwLock<HashMap<PathBuf, u64>>,
     #[serde(skip)]
     build_cache: RwLock<HashMap<PathBuf, u64>>,
+    #[serde(skip)]
+    cache_generation: AtomicU64,
 }
 
 impl std::fmt::Display for Site {
@@ -137,6 +142,7 @@ impl Site {
             obj_cache: RwLock::new(HashMap::new()),
             static_file_cache: RwLock::new(HashMap::new()),
             build_cache: RwLock::new(HashMap::new()),
+            cache_generation: AtomicU64::new(0),
         })
     }
 
@@ -150,6 +156,9 @@ impl Site {
             let hash_slice = hash.to_ne_bytes();
             hasher.write(&hash_slice);
         }
+        // Include cache generation to ensure build_id changes after invalidation
+        let generation = self.cache_generation.load(atomic::Ordering::Relaxed);
+        hasher.write(&generation.to_ne_bytes());
         hasher.finish()
     }
 
@@ -268,6 +277,11 @@ impl Site {
         #[cfg(feature = "verbose-logging")]
         debug!("invalidate {}", file.display());
         self.obj_cache.write().unwrap().remove(file);
+        // Increment cache generation to ensure build_id changes after invalidation.
+        // We don't clear build_cache here because it's needed for file cleanup
+        // in site.build() - it tracks which output files need to be deleted.
+        self.cache_generation
+            .fetch_add(1, atomic::Ordering::Relaxed);
     }
 
     #[instrument(skip(fs, modify))]
