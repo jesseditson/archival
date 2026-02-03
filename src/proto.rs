@@ -1,5 +1,5 @@
 pub mod archival_proto {
-    include!(concat!(env!("OUT_DIR"), "/archival_proto.rs"));
+    include!(concat!(env!("OUT_DIR"), "/archival.v1.rs"));
 }
 
 use crate::events::ArchivalEvent;
@@ -20,6 +20,7 @@ impl From<archival_proto::DisplayType> for DisplayType {
             archival_proto::DisplayType::Video => DisplayType::Video,
             archival_proto::DisplayType::Audio => DisplayType::Audio,
             archival_proto::DisplayType::Download => DisplayType::Download,
+            archival_proto::DisplayType::Unspecified => DisplayType::Download,
         }
     }
 }
