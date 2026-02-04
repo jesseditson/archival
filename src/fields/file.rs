@@ -54,7 +54,7 @@ impl From<&str> for DisplayType {
             "audio" => DisplayType::Audio,
             "video" => DisplayType::Video,
             "upload" => DisplayType::Download,
-            &_ => todo!(),
+            t => panic!("invalid file type {}", t),
         }
     }
 }
