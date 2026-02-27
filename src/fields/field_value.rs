@@ -759,7 +759,10 @@ impl FieldValue {
         object_definition: &ObjectDefinition,
     ) -> Result<Option<Self>> {
         match value {
-            serde_json::Value::String(s) => Ok(Some(FieldValue::String(s.to_string()))),
+            serde_json::Value::String(s) => Ok(Some(match field_type {
+                FieldType::Markdown => FieldValue::Markdown(s.to_string()),
+                _ => FieldValue::String(s.to_string()),
+            })),
             serde_json::Value::Bool(b) => Ok(Some(FieldValue::Boolean(*b))),
             serde_json::Value::Number(n) => Ok(Some(FieldValue::Number(n.as_f64().unwrap()))),
             serde_json::Value::Null => Ok(Some(FieldValue::String("".into()))),
