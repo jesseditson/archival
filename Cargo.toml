@@ -36,6 +36,7 @@ import-csv = ["dep:csv"]
 json-schema = []
 stdlib-fs = ["dep:notify", "dep:walkdir"]
 verbose-logging = []
+backtrace = ["anyhow/backtrace"]
 
 [[bin]]
 name = "archival"
