@@ -1,3 +1,4 @@
+use crate::BuildOptions;
 use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, server, site::Site};
 use anyhow::Result;
 use console::{style, Term};
@@ -57,7 +58,7 @@ pub fn watch(
     }
     site.sync_static_files(&mut fs)?;
     let (tx, rx) = mpsc::channel();
-    let initial_build = site.build(&mut fs);
+    let initial_build = site.build(&mut fs, BuildOptions::default());
     let mut init_message = format!("Watching site: {}", &site);
     let change_queue = Arc::new(RwLock::new(vec![]));
     let queue_changes = change_sender.is_some();
@@ -139,7 +140,7 @@ pub fn watch(
             };
             let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
             site.sync_static_files(&mut fs).unwrap();
-            let output = if let Err(e) = site.build(&mut fs) {
+            let output = if let Err(e) = site.build(&mut fs, BuildOptions::default()) {
                 format!("{} {}", style("Build failed:").red(), style(e).red())
             } else {
                 format!(

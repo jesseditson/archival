@@ -6,6 +6,7 @@ use crate::{
     },
     file_system_stdlib,
     site::Site,
+    BuildOptions,
 };
 use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches};
@@ -24,6 +25,8 @@ impl BinaryCommand for Command {
             // NOTE: weird long form quoting due to https://github.com/clap-rs/clap/issues/3586
             arg!(-b --"build-dir" <build_dir> "Override the directory to build to (defaults to the manifest's build_dir)")
                 .value_parser(value_parser!(PathBuf)),
+        ).arg(
+            arg!(-s --"skip-failures" "If a page fails to build, continue building other pages rather than erroring early, and skip the failing page.").required(false),
         ), CommandConfig::archival_site())
     }
     fn handler(
@@ -41,7 +44,11 @@ impl BinaryCommand for Command {
             site.manifest.build_dir = cwd.join(build_dir_arg);
         }
         site.sync_static_files(&mut fs)?;
-        site.build(&mut fs)?;
+        let mut options = BuildOptions::default();
+        if args.get_flag("skip-failures") {
+            options.skip_failures = true;
+        }
+        site.build(&mut fs, options)?;
         Ok(ExitStatus::Ok)
     }
 }

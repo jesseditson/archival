@@ -10,7 +10,7 @@ use crate::{
     page::{Page, RenderGlobals, TemplateType},
     read_toml::read_toml,
     tags::layout,
-    ArchivalError, FieldConfig, FileSystemAPI, ObjectMap,
+    ArchivalError, BuildOptions, FieldConfig, FileSystemAPI, ObjectMap,
 };
 use anyhow::Result;
 use seahash::SeaHasher;
@@ -486,7 +486,7 @@ impl Site {
     }
 
     #[instrument(skip(fs))]
-    pub fn build<T: FileSystemAPI>(&self, fs: &mut T) -> Result<()> {
+    pub fn build<T: FileSystemAPI>(&self, fs: &mut T, options: BuildOptions) -> Result<()> {
         let Manifest {
             objects_dir,
             layout_dir,
@@ -550,13 +550,21 @@ impl Site {
                 #[cfg(feature = "verbose-logging")]
                 debug!("rendering template objects for {}", template_path.display());
                 if !fs.exists(&template_path)? {
-                    return Err(
-                        BuildError::MissingTemplate(template_path.display().to_string()).into(),
-                    );
+                    let err =
+                        BuildError::MissingTemplate(template_path.display().to_string()).into();
+                    if options.skip_failures {
+                        warn!("skipping error: {err}");
+                        continue;
+                    } else {
+                        return Err(err);
+                    }
                 }
                 let template_r = fs.read_to_string(&template_path);
-                if template_r.is_err() {
-                    warn!("failed rendering {}", template_path.display());
+                if let Err(e) = &template_r {
+                    warn!("failed rendering {}: {e}", template_path.display());
+                    if options.skip_failures {
+                        continue;
+                    }
                 }
                 let template_str = template_r?;
                 if let Some(template_str) = template_str {
@@ -564,7 +572,7 @@ impl Site {
                         for object in t_objects.into_iter() {
                             #[cfg(feature = "verbose-logging")]
                             debug!("rendering {}", object.filename);
-                            let (path, hash) = Self::render_template_page(
+                            let result = Self::render_template_page(
                                 object,
                                 object_def,
                                 &template_str,
@@ -584,7 +592,14 @@ impl Site {
                                     template.to_string(),
                                     error.to_string(),
                                 )
-                            })?;
+                            });
+                            if let Err(e) = &result {
+                                warn!("failed rendering {}: {e}", template_path.display());
+                                if options.skip_failures {
+                                    continue;
+                                }
+                            }
+                            let (path, hash) = result?;
                             built_hashes.insert(path, hash);
                         }
                     }
@@ -619,7 +634,7 @@ impl Site {
                         file_path.display(),
                         page_type.extension()
                     );
-                    let (path, hash) = Self::render_page(
+                    let result = Self::render_page(
                         &rel_path,
                         &file_path,
                         page_name,
@@ -635,7 +650,14 @@ impl Site {
                     )
                     .map_err(|error| {
                         BuildError::PageRenderError(page_name.to_string(), error.to_string())
-                    })?;
+                    });
+                    if let Err(e) = &result {
+                        warn!("failed rendering {page_name}: {e}");
+                        if options.skip_failures {
+                            continue;
+                        }
+                    }
+                    let (path, hash) = result?;
                     if let Some(path) = path {
                         built_hashes.insert(path, hash);
                     }

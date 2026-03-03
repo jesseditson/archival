@@ -82,11 +82,21 @@ pub mod typedefs {
 #[derive(Debug, Default)]
 pub struct BuildOptions {
     pub skip_static: bool,
+    pub skip_failures: bool,
 }
 
 impl BuildOptions {
     pub fn no_static() -> Self {
-        Self { skip_static: true }
+        Self {
+            skip_static: true,
+            skip_failures: false,
+        }
+    }
+    pub fn intermediate() -> Self {
+        Self {
+            skip_static: true,
+            skip_failures: true,
+        }
     }
 }
 
@@ -173,7 +183,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 build_id == 0 || self.last_build_id.load(AtomicOrdering::Relaxed) != build_id;
             if should_build {
                 debug!("build {} {:#?}", self.site, options);
-                self.site.build(fs)?;
+                self.site.build(fs, options)?;
             } else {
                 #[cfg(feature = "verbose-logging")]
                 debug!("skipping duplicate build");
