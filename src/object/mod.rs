@@ -229,7 +229,7 @@ impl Object {
     ) -> Result<Self> {
         let path = Path::new(&definition.name).join(filename);
         let values =
-            Object::values_from_table(&path, &Table::new(), definition, &OrderMap::new(), true)?;
+            Object::values_from_table(&path, &Table::new(), definition, &OrderMap::new(), false)?;
         let mut object = Self {
             filename: filename.to_owned(),
             object_name: definition.name.clone(),
@@ -310,11 +310,11 @@ mod tests {
         [media]
         type = \"video\"
         value = {sha = \"fake-sha\", name = \"Video Name\", filename = \"video.mp4\", mime = \"video/mpeg4\"}
-      
+
       [[tour_dates]]
       date = \"12/22/2022\"
       ticket_link = \"foo.com\"
-    
+
       [[videos]]
       video = {sha = \"fake-sha\", name = \"Video Name\", filename = \"video.mp4\", mime = \"video/mpeg4\"}
 

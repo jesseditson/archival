@@ -554,6 +554,7 @@ impl Site {
                         BuildError::MissingTemplate(template_path.display().to_string()).into();
                     if options.skip_failures {
                         warn!("skipping error: {err}");
+                        eprintln!("skipping error: {err}");
                         continue;
                     } else {
                         return Err(err);
@@ -562,6 +563,7 @@ impl Site {
                 let template_r = fs.read_to_string(&template_path);
                 if let Err(e) = &template_r {
                     warn!("failed rendering {}: {e}", template_path.display());
+                    eprintln!("failed rendering {}: {e}", template_path.display());
                     if options.skip_failures {
                         continue;
                     }
@@ -595,6 +597,7 @@ impl Site {
                             });
                             if let Err(e) = &result {
                                 warn!("failed rendering {}: {e}", template_path.display());
+                                eprintln!("failed rendering {}: {e}", template_path.display());
                                 if options.skip_failures {
                                     continue;
                                 }
@@ -652,7 +655,8 @@ impl Site {
                         BuildError::PageRenderError(page_name.to_string(), error.to_string())
                     });
                     if let Err(e) = &result {
-                        warn!("failed rendering {page_name}: {e}");
+                        warn!("{e}");
+                        eprintln!("{e}");
                         if options.skip_failures {
                             continue;
                         }
