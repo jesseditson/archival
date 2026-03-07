@@ -12,6 +12,8 @@ use thiserror::Error;
 pub enum ValuePathError {
     #[error("Child definition not found for path {0} in {1}")]
     ChildDefNotFound(ValuePath, String),
+    #[error("Empty ValuePath passed unexpectedly {0}")]
+    UnexpectedEmptyValuePath(String),
     #[error("Path {0} was not a children type in {1}")]
     NotChildren(ValuePath, String),
     #[error("Path {0} was not found in {1}")]
@@ -38,6 +40,12 @@ impl ValuePathComponent {
             ValuePathComponent::Key(_) => None,
             ValuePathComponent::Index(i) => Some(i),
         }
+    }
+    pub fn is_key(&self) -> bool {
+        matches!(self, ValuePathComponent::Key(_))
+    }
+    pub fn is_index(&self) -> bool {
+        matches!(self, ValuePathComponent::Index(_))
     }
 }
 
@@ -195,6 +203,9 @@ impl ValuePath {
 
     pub fn first(&self) -> Option<&ValuePathComponent> {
         self.0.first()
+    }
+    pub fn last(&self) -> Option<&ValuePathComponent> {
+        self.0.last()
     }
 
     pub fn unshift(&mut self) -> Option<ValuePathComponent> {
@@ -425,6 +436,11 @@ impl ValuePath {
         &self,
         def: &'a ObjectDefinition,
     ) -> Result<&'a ObjectDefinition, ValuePathError> {
+        if self.is_empty() {
+            return Err(ValuePathError::UnexpectedEmptyValuePath(
+                "get_definition".to_string(),
+            ));
+        }
         let mut last_val = def;
         for cmp in self.0.iter() {
             match cmp {

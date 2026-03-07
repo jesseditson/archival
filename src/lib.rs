@@ -615,24 +615,6 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
         Ok(ArchivalEventResponse::None)
     }
 
-    pub fn next_child_index(
-        &self,
-        obj_type: impl AsRef<str>,
-        filename: impl AsRef<str>,
-        child_path: &ValuePath,
-    ) -> Result<usize> {
-        let mut object = self.get_object(obj_type.as_ref(), Some(filename.as_ref()))?;
-        let index = child_path.modify_children(&mut object, |children| {
-            let len = children.len();
-            if len == 0 {
-                0
-            } else {
-                len - 1
-            }
-        })?;
-        Ok(index)
-    }
-
     fn add_child(&self, event: AddChildEvent) -> Result<ArchivalEventResponse> {
         let mut added_idx = usize::MAX;
         let def = self
