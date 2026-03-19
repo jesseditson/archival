@@ -16,7 +16,13 @@ pub trait FileSystemAPI: Send + Sync + Default {
     fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>>;
     fn delete(&mut self, path: impl AsRef<Path>) -> Result<()>;
     fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<()>;
+    fn rename(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()>;
     fn write_str(&mut self, path: impl AsRef<Path>, contents: String) -> Result<()>;
+    fn list_dir(
+        &self,
+        path: impl AsRef<Path>,
+        recursive: bool,
+    ) -> Result<Box<dyn Iterator<Item = PathBuf>>>;
     fn walk_dir(
         &self,
         path: impl AsRef<Path>,

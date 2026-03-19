@@ -7,8 +7,8 @@ mod file_system_mutex;
 #[cfg(test)]
 mod file_system_tests;
 mod filters;
+mod lib_fs;
 mod liquid_parser;
-pub mod manifest;
 mod object_definition;
 mod page;
 mod read_toml;
@@ -53,6 +53,7 @@ use semver::{Version, VersionReq};
 // Re-exports
 pub mod events;
 pub mod fields;
+pub mod manifest;
 pub mod object;
 #[cfg(feature = "proto")]
 pub mod proto;

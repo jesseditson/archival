@@ -180,6 +180,26 @@ impl FileSystemAPI for MemoryFileSystem {
     fn write_str(&mut self, path: impl AsRef<Path>, contents: String) -> Result<()> {
         self.write(path, contents.as_bytes().to_vec())
     }
+    fn rename(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
+        if let Some(contents) = self.read_file(&from) {
+            self.write(to, contents)?;
+            self.delete(&from)?;
+            Ok(())
+        } else {
+            Err(ArchivalError::new("file not found").into())
+        }
+    }
+    fn list_dir(
+        &self,
+        path: impl AsRef<Path>,
+        recursive: bool,
+    ) -> Result<Box<dyn Iterator<Item = PathBuf>>> {
+        if recursive {
+            self.walk_dir(path, true)
+        } else {
+            Ok(Box::new(self.all_children(path).into_iter()))
+        }
+    }
     fn walk_dir(
         &self,
         path: impl AsRef<Path>,

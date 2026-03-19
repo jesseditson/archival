@@ -63,6 +63,27 @@ impl FileSystemAPI for NativeFileSystem {
     fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<()> {
         Ok(fs::write(self.get_path(path), contents)?)
     }
+    fn rename(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
+        Ok(fs::rename(self.get_path(from), self.get_path(to))?)
+    }
+    fn list_dir(
+        &self,
+        path: impl AsRef<Path>,
+        recursive: bool,
+    ) -> Result<Box<dyn Iterator<Item = PathBuf>>> {
+        if recursive {
+            self.walk_dir(path, true)
+        } else {
+            let files_iter = fs::read_dir(self.get_path(path))?
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| {
+                    !p.file_name()
+                        .is_some_and(|f| f.to_string_lossy().starts_with("."))
+                });
+            Ok(Box::new(files_iter))
+        }
+    }
     fn walk_dir(
         &self,
         path: impl AsRef<Path>,
