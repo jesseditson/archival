@@ -25,7 +25,13 @@ impl NativeFileSystem {
     }
 
     fn get_path(&self, rel: impl AsRef<Path>) -> PathBuf {
-        self.root.join(rel)
+        let rel_path = rel.as_ref();
+        let normalized = if rel_path.is_absolute() {
+            rel_path.strip_prefix("/").unwrap_or(rel_path)
+        } else {
+            rel_path
+        };
+        self.root.join(normalized)
     }
 }
 
@@ -119,7 +125,7 @@ impl WatchableFileSystemAPI for NativeFileSystem {
         watch_paths: Vec<String>,
         changed: impl Fn(Vec<PathBuf>) + Send + Sync + 'static,
     ) -> Result<Box<dyn FnOnce()>> {
-        let root = fs::canonicalize(self.get_path(&root)).unwrap();
+        let root = fs::canonicalize(root).unwrap();
         let watch_path = root.to_owned();
         changed(vec![watch_path.to_path_buf()]);
         let mut watcher = notify::recommended_watcher(

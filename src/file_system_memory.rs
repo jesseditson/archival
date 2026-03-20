@@ -127,6 +127,17 @@ impl Debug for MemoryFileSystem {
     }
 }
 
+impl MemoryFileSystem {
+    fn normalize_dir(&self, rel: impl AsRef<Path>) -> PathBuf {
+        let rel_path = rel.as_ref();
+        if rel_path.is_absolute() {
+            rel_path.strip_prefix("/").unwrap_or(rel_path).to_path_buf()
+        } else {
+            rel_path.to_path_buf()
+        }
+    }
+}
+
 impl FileSystemAPI for MemoryFileSystem {
     fn root_dir(&self) -> &Path {
         Path::new("<memory>")
@@ -197,7 +208,10 @@ impl FileSystemAPI for MemoryFileSystem {
         if recursive {
             self.walk_dir(path, true)
         } else {
-            Ok(Box::new(self.all_children(path).into_iter()))
+            Ok(Box::new(
+                self.all_children(self.normalize_dir(path), recursive, false)
+                    .into_iter(),
+            ))
         }
     }
     fn walk_dir(
@@ -205,7 +219,8 @@ impl FileSystemAPI for MemoryFileSystem {
         path: impl AsRef<Path>,
         include_dirs: bool,
     ) -> Result<Box<dyn Iterator<Item = PathBuf>>> {
-        let children = self.all_children(&path);
+        let normalized = self.normalize_dir(&path);
+        let children = self.all_children(&normalized, true, true);
         let mut all_files: Vec<PathBuf> = vec![];
         for child in children {
             let node = self.get_node(&child);
@@ -217,7 +232,7 @@ impl FileSystemAPI for MemoryFileSystem {
                         if !include_dirs && !de.is_file {
                             return None;
                         }
-                        match de.path.strip_prefix(&path) {
+                        match de.path.strip_prefix(&normalized) {
                             Ok(path) => Some(path.to_owned()),
                             Err(e) => {
                                 error!(
@@ -270,13 +285,24 @@ impl MemoryFileSystem {
         }
     }
 
-    fn all_children(&self, path: impl AsRef<Path>) -> Vec<PathBuf> {
+    fn all_children(
+        &self,
+        path: impl AsRef<Path>,
+        recursive: bool,
+        include_self: bool,
+    ) -> Vec<PathBuf> {
         // All children of this directory will use keys prefixed with this
-        // directory's key.
-        let node_key = FileGraphNode::key(path);
+        // directory's key, but exclude nested descendants.
+        let node_key = FileGraphNode::key(&path);
+        let parent_separator_count = node_key.matches('/').count();
         self.tree
             .keys()
-            .filter(|k| k.starts_with(&node_key))
+            .chain(self.fs.keys())
+            .filter(|k| {
+                (include_self || Path::new(k) != path.as_ref())
+                    && k.starts_with(&node_key)
+                    && (recursive || k.matches('/').count() == parent_separator_count + 1)
+            })
             .map(PathBuf::from)
             .collect()
     }
@@ -285,7 +311,7 @@ impl MemoryFileSystem {
         // If this is a directory, remove it and its children from the graph
         let node = self.get_node(&path);
         if !node.is_empty() {
-            for path in self.all_children(&path) {
+            for path in self.all_children(&path, true, true) {
                 // delete the node and object
                 self.tree.remove(&FileGraphNode::key(&path));
                 self.delete_file_only(&path);
