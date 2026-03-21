@@ -28,6 +28,8 @@ use std::{
 use thiserror::Error;
 use tracing::{debug, error, instrument, trace_span, warn};
 
+type ObjectSort<'a> = dyn Fn(&Object, &Object) -> Ordering + 'a;
+
 #[derive(Error, Debug, Clone)]
 pub enum InvalidFileError {
     #[error("missing extension in path ({0})")]
@@ -52,7 +54,40 @@ pub enum BuildError {
     PageRenderError(String, String),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(not(feature = "binary"), allow(dead_code))]
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct PendingRebuild {
+    reload_site: bool,
+    static_files_changed: bool,
+    objects_changed: bool,
+    templates_changed: bool,
+}
+
+impl PendingRebuild {
+    #[cfg(feature = "binary")]
+    pub(crate) fn needs_site_reload(&self) -> bool {
+        self.reload_site
+    }
+
+    #[cfg(feature = "binary")]
+    pub(crate) fn needs_static_sync(&self) -> bool {
+        self.reload_site || self.static_files_changed
+    }
+
+    #[cfg(feature = "binary")]
+    pub(crate) fn needs_content_build(&self) -> bool {
+        self.reload_site || self.objects_changed || self.templates_changed
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.reload_site |= other.reload_site;
+        self.static_files_changed |= other.static_files_changed;
+        self.objects_changed |= other.objects_changed;
+        self.templates_changed |= other.templates_changed;
+    }
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct Site {
     pub object_definitions: ObjectDefinitions,
     pub field_config: FieldConfig,
@@ -61,11 +96,27 @@ pub struct Site {
     #[serde(skip)]
     obj_cache: RwLock<HashMap<PathBuf, Object>>,
     #[serde(skip)]
+    objects_cache: RwLock<Option<ObjectMap>>,
+    #[serde(skip)]
     static_file_cache: RwLock<HashMap<PathBuf, u64>>,
     #[serde(skip)]
     build_cache: RwLock<HashMap<PathBuf, u64>>,
     #[serde(skip)]
+    parser_cache: RwLock<Option<liquid::Parser>>,
+    #[serde(skip)]
+    pending_rebuild: RwLock<PendingRebuild>,
+    #[serde(skip)]
     cache_generation: AtomicU64,
+}
+
+impl std::fmt::Debug for Site {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Site")
+            .field("object_definitions", &self.object_definitions)
+            .field("field_config", &self.field_config)
+            .field("manifest", &self.manifest)
+            .finish_non_exhaustive()
+    }
 }
 
 impl std::fmt::Display for Site {
@@ -140,10 +191,46 @@ impl Site {
             manifest,
             object_definitions: objects,
             obj_cache: RwLock::new(HashMap::new()),
+            objects_cache: RwLock::new(None),
             static_file_cache: RwLock::new(HashMap::new()),
             build_cache: RwLock::new(HashMap::new()),
+            parser_cache: RwLock::new(None),
+            pending_rebuild: RwLock::new(PendingRebuild::default()),
             cache_generation: AtomicU64::new(0),
         })
+    }
+
+    #[cfg(feature = "binary")]
+    pub(crate) fn reload(
+        &mut self,
+        fs: &impl FileSystemAPI,
+        upload_prefix: Option<&str>,
+    ) -> Result<()> {
+        let build_cache = std::mem::take(self.build_cache.get_mut().unwrap());
+        let static_file_cache = std::mem::take(self.static_file_cache.get_mut().unwrap());
+        let cache_generation = self.cache_generation.load(atomic::Ordering::Relaxed);
+        let reloaded = Self::load(fs, upload_prefix)?;
+
+        self.object_definitions = reloaded.object_definitions;
+        self.field_config = reloaded.field_config;
+        self.manifest = reloaded.manifest;
+        *self.obj_cache.get_mut().unwrap() = HashMap::new();
+        *self.objects_cache.get_mut().unwrap() = None;
+        *self.static_file_cache.get_mut().unwrap() = static_file_cache;
+        *self.build_cache.get_mut().unwrap() = build_cache;
+        *self.parser_cache.get_mut().unwrap() = None;
+        *self.pending_rebuild.get_mut().unwrap() = PendingRebuild::default();
+        self.cache_generation
+            .store(cache_generation, atomic::Ordering::Relaxed);
+        Ok(())
+    }
+
+    #[cfg(feature = "binary")]
+    pub(crate) fn apply_uploads_url(&mut self, uploads_url: Option<&str>) {
+        if let Some(uploads_url) = uploads_url {
+            self.manifest.uploads_url = Some(uploads_url.to_string());
+            self.field_config.uploads_url = uploads_url.to_string();
+        }
     }
 
     pub fn build_id(&self) -> u64 {
@@ -240,10 +327,14 @@ impl Site {
 
     #[instrument(skip(fs))]
     pub fn get_objects<T: FileSystemAPI>(&self, fs: &T) -> Result<ObjectMap> {
-        self.get_objects_sorted(
-            fs,
-            Some(|a: &_, b: &_| get_order(a).partial_cmp(&get_order(b)).unwrap()),
-        )
+        if let Some(objects) = self.objects_cache.read().unwrap().as_ref() {
+            return Ok(objects.clone());
+        }
+        let default_sort =
+            |a: &Object, b: &Object| get_order(a).partial_cmp(&get_order(b)).unwrap();
+        let objects = self.load_objects_sorted(fs, Some(&default_sort))?;
+        *self.objects_cache.write().unwrap() = Some(objects.clone());
+        Ok(objects)
     }
     #[instrument(skip(fs))]
     pub fn get_rendered_objects<T: FileSystemAPI>(&self, fs: &T) -> Result<RenderedObjectMap> {
@@ -277,11 +368,79 @@ impl Site {
         #[cfg(feature = "verbose-logging")]
         debug!("invalidate {}", file.display());
         self.obj_cache.write().unwrap().remove(file);
+        let pending = self.classify_changed_file(file);
+        if pending.reload_site {
+            self.obj_cache.write().unwrap().clear();
+            self.objects_cache.write().unwrap().take();
+            self.parser_cache.write().unwrap().take();
+        } else {
+            if pending.objects_changed {
+                self.objects_cache.write().unwrap().take();
+            }
+            if pending.templates_changed {
+                self.parser_cache.write().unwrap().take();
+            }
+        }
+        self.pending_rebuild.write().unwrap().merge(pending);
         // Increment cache generation to ensure build_id changes after invalidation.
         // We don't clear build_cache here because it's needed for file cleanup
         // in site.build() - it tracks which output files need to be deleted.
         self.cache_generation
             .fetch_add(1, atomic::Ordering::Relaxed);
+    }
+
+    #[cfg(feature = "binary")]
+    pub(crate) fn take_pending_rebuild(&self) -> PendingRebuild {
+        std::mem::take(&mut *self.pending_rebuild.write().unwrap())
+    }
+
+    fn get_liquid_parser<T: FileSystemAPI>(&self, fs: &T) -> Result<liquid::Parser> {
+        if let Some(parser) = self.parser_cache.read().unwrap().as_ref() {
+            return Ok(parser.clone());
+        }
+        let parser = liquid_parser::get(
+            Some(&self.manifest.pages_dir),
+            if fs.exists(&self.manifest.layout_dir)? {
+                Some(&self.manifest.layout_dir)
+            } else {
+                None
+            },
+            fs,
+        )?;
+        *self.parser_cache.write().unwrap() = Some(parser.clone());
+        Ok(parser)
+    }
+
+    fn classify_changed_file(&self, file: &Path) -> PendingRebuild {
+        if file == Path::new(MANIFEST_FILE_NAME) || file == self.manifest.object_definition_file {
+            return PendingRebuild {
+                reload_site: true,
+                ..PendingRebuild::default()
+            };
+        }
+        if file.starts_with(&self.manifest.objects_dir) {
+            return PendingRebuild {
+                objects_changed: true,
+                ..PendingRebuild::default()
+            };
+        }
+        if file.starts_with(&self.manifest.pages_dir) || file.starts_with(&self.manifest.layout_dir)
+        {
+            return PendingRebuild {
+                templates_changed: true,
+                ..PendingRebuild::default()
+            };
+        }
+        if file.starts_with(&self.manifest.static_dir) {
+            return PendingRebuild {
+                static_files_changed: true,
+                ..PendingRebuild::default()
+            };
+        }
+        PendingRebuild {
+            reload_site: true,
+            ..PendingRebuild::default()
+        }
     }
 
     #[instrument(skip(fs, modify))]
@@ -291,6 +450,9 @@ impl Site {
         modify: impl FnOnce(&mut Manifest),
     ) -> Result<()> {
         modify(&mut self.manifest);
+        self.obj_cache.write().unwrap().clear();
+        self.objects_cache.write().unwrap().take();
+        self.parser_cache.write().unwrap().take();
         fs.write_str(MANIFEST_FILE_NAME, self.manifest.to_toml()?)
     }
 
@@ -338,6 +500,18 @@ impl Site {
         fs: &T,
         sort: Option<impl Fn(&Object, &Object) -> Ordering>,
     ) -> Result<ObjectMap> {
+        match sort {
+            Some(sort) => self.load_objects_sorted(fs, Some(&sort)),
+            None => self.load_objects_sorted(fs, None),
+        }
+    }
+
+    #[instrument(skip(fs, sort))]
+    fn load_objects_sorted<T: FileSystemAPI>(
+        &self,
+        fs: &T,
+        sort: Option<&ObjectSort<'_>>,
+    ) -> Result<ObjectMap> {
         let mut all_objects: ObjectMap = ObjectMap::new();
         let objects_dir = &self.manifest.objects_dir;
         for (object_name, object_def) in self.object_definitions.iter() {
@@ -368,7 +542,7 @@ impl Site {
                 // Sort objects by order key
                 if let Some(sort) = &sort {
                     trace_span!("sort objects");
-                    objects.sort_by(sort);
+                    objects.sort_by(|a, b| sort(a, b));
                 }
                 all_objects.insert(object_name.clone(), ObjectEntry::from_vec(objects));
             } else if fs.exists(&object_file_path)? {
@@ -489,7 +663,6 @@ impl Site {
     pub fn build<T: FileSystemAPI>(&self, fs: &mut T, options: BuildOptions) -> Result<()> {
         let Manifest {
             objects_dir,
-            layout_dir,
             pages_dir,
             build_dir,
             site_url,
@@ -533,15 +706,7 @@ impl Site {
         //     }
         // }
 
-        let liquid_parser = liquid_parser::get(
-            Some(pages_dir),
-            if fs.exists(layout_dir)? {
-                Some(layout_dir)
-            } else {
-                None
-            },
-            fs,
-        )?;
+        let liquid_parser = self.get_liquid_parser(fs)?;
 
         // Render template pages
         for (name, object_def) in self.object_definitions.iter() {

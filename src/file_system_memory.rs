@@ -52,12 +52,6 @@ impl DirEntry {
             is_file,
         }
     }
-    fn copy(&self) -> Self {
-        Self {
-            path: self.path.to_owned(),
-            is_file: self.is_file,
-        }
-    }
 }
 
 impl Deref for DirEntry {
@@ -93,12 +87,6 @@ impl FileGraphNode {
         // Since we impl Ord (which is what BTreeSet uses for comparison),
         // is_file doesn't matter for comparison
         self.files.remove(&DirEntry::new(path, false));
-    }
-    pub fn copy(&self) -> Self {
-        Self {
-            path: self.path.to_path_buf(),
-            files: self.files.iter().map(|r| r.copy()).collect(),
-        }
     }
 }
 
@@ -168,8 +156,8 @@ impl FileSystemAPI for MemoryFileSystem {
         Ok(self.read_file(path))
     }
     fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>> {
-        if let Some(file) = self.read_file(path) {
-            Ok(Some(std::str::from_utf8(&file)?.to_string()))
+        if let Some(file) = self.fs.get(&path.as_ref().to_string_lossy().to_lowercase()) {
+            Ok(Some(std::str::from_utf8(file)?.to_string()))
         } else {
             Ok(None)
         }
@@ -223,29 +211,20 @@ impl FileSystemAPI for MemoryFileSystem {
         let children = self.all_children(&normalized, true, true);
         let mut all_files: Vec<PathBuf> = vec![];
         for child in children {
-            let node = self.get_node(&child);
-            all_files.append(
-                &mut node
-                    .files
-                    .into_iter()
-                    .filter_map(|de| {
-                        if !include_dirs && !de.is_file {
-                            return None;
+            if let Some(node) = self.tree.get(&FileGraphNode::key(&child)) {
+                all_files.extend(node.files.iter().filter_map(|de| {
+                    if !include_dirs && !de.is_file {
+                        return None;
+                    }
+                    match de.path.strip_prefix(&normalized) {
+                        Ok(path) => Some(path.to_owned()),
+                        Err(e) => {
+                            error!("Ignorning invalid path {} ({})", path.as_ref().display(), e);
+                            None
                         }
-                        match de.path.strip_prefix(&normalized) {
-                            Ok(path) => Some(path.to_owned()),
-                            Err(e) => {
-                                error!(
-                                    "Ignorning invalid path {} ({})",
-                                    path.as_ref().display(),
-                                    e
-                                );
-                                None
-                            }
-                        }
-                    })
-                    .collect(),
-            );
+                    }
+                }));
+            }
         }
         Ok(Box::new(all_files.into_iter()))
     }
@@ -268,20 +247,15 @@ impl MemoryFileSystem {
             let a_path = ancestor.to_path_buf();
             // Skip the actual file path, since only directories are nodes
             if a_path.to_string_lossy() != path.as_ref().to_string_lossy() {
-                let mut node = self.get_node(&a_path);
+                let node = self
+                    .tree
+                    .entry(FileGraphNode::key(&a_path))
+                    .or_insert_with(|| FileGraphNode::new(&a_path));
                 node.add(&last_path, is_file);
                 // After we add the first file, everything else will be directories.
                 is_file = false;
-                self.tree.insert(FileGraphNode::key(&a_path), node);
             }
             a_path.clone_into(&mut last_path);
-        }
-    }
-
-    fn get_node(&self, path: impl AsRef<Path>) -> FileGraphNode {
-        match self.tree.get(&FileGraphNode::key(&path)) {
-            Some(n) => n.copy(),
-            None => FileGraphNode::new(path),
         }
     }
 
@@ -309,8 +283,8 @@ impl MemoryFileSystem {
 
     fn remove_from_graph(&mut self, path: impl AsRef<Path>) {
         // If this is a directory, remove it and its children from the graph
-        let node = self.get_node(&path);
-        if !node.is_empty() {
+        let path_key = FileGraphNode::key(&path);
+        if self.tree.contains_key(&path_key) {
             for path in self.all_children(&path, true, true) {
                 // delete the node and object
                 self.tree.remove(&FileGraphNode::key(&path));
@@ -325,15 +299,17 @@ impl MemoryFileSystem {
                 // We've handled the leaf above
                 continue;
             }
-            let mut node = self.get_node(&a_path);
-            node.remove(&last_path);
-            if node.is_empty() {
+            let key = FileGraphNode::key(&a_path);
+            let mut should_remove = false;
+            if let Some(node) = self.tree.get_mut(&key) {
+                node.remove(&last_path);
+                should_remove = node.is_empty();
+            }
+            if should_remove {
                 // If this is the last item in a node, remove the node entirely.
-                self.tree.remove(&FileGraphNode::key(&a_path));
+                self.tree.remove(&key);
             } else {
-                // If the file has siblings, just write the updated value and
-                // stop traversing.
-                self.tree.insert(FileGraphNode::key(&a_path), node);
+                // If the file has siblings, just stop traversing.
                 break;
             }
             a_path.clone_into(&mut last_path);

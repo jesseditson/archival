@@ -11,7 +11,7 @@ use std::{
 use toml::{Table, Value};
 
 use crate::{
-    constants::{LAYOUT_DIR_NAME, NESTED_TYPES, SCHEMAS_DIR_NAME},
+    constants::{LAYOUT_DIR_NAME, MANIFEST_FILE_NAME, NESTED_TYPES, SCHEMAS_DIR_NAME},
     file_system::FileSystemAPI,
     object::ValuePath,
 };
@@ -733,6 +733,7 @@ impl Manifest {
 
     pub fn watched_paths(&self) -> Vec<String> {
         [
+            Path::new(MANIFEST_FILE_NAME),
             &self.object_definition_file,
             &self.objects_dir,
             &self.pages_dir,

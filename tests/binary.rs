@@ -151,6 +151,60 @@ mod binary_tests {
         // _ = fs::remove_dir_all(site_path);
     }
 
+    #[test]
+    #[traced_test]
+    fn run_updates_static_files_without_full_rebuild() {
+        _ = fs::remove_dir_all("tests/fixtures/website/dist");
+        _ = fs::create_dir("tests/fixtures/tmp");
+        let site_path = format!("tests/fixtures/tmp/{}", nanoid!());
+        copy_dir_all("tests/fixtures/website", &site_path).unwrap();
+
+        let mut run_cmd = Command::new("cargo")
+            .args(["run", "run", &site_path, "--upload-prefix", "test"])
+            .current_dir(std::env::current_dir().unwrap())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stream = run_cmd.stdout.take().unwrap();
+        let (sender, receiver) = sync::mpsc::channel();
+        thread::spawn(move || loop {
+            let mut buf = [0];
+            match stream.read(&mut buf) {
+                Err(err) => {
+                    panic!("{}] Error reading from stream: {}", line!(), err);
+                }
+                Ok(len) => {
+                    if len > 0 {
+                        sender.send(buf).expect("send failed");
+                    }
+                }
+            }
+        });
+
+        let s = run_until(&receiver, "Serving", Duration::from_millis(60_000));
+        println!("-------- initial build: {}", String::from_utf8_lossy(&s));
+
+        let static_rel_path = "public/rebuild-static.txt";
+        let static_path = format!("{site_path}/{static_rel_path}");
+        fs::write(&static_path, "static update").unwrap();
+        let s = run_until(
+            &receiver,
+            "Updated static files",
+            Duration::from_millis(2_000),
+        );
+        println!("-------- static update: {}", String::from_utf8_lossy(&s));
+
+        let built_static_path = format!("{site_path}/dist/rebuild-static.txt");
+        assert_eq!(
+            fs::read_to_string(&built_static_path).unwrap(),
+            "static update"
+        );
+
+        run_cmd.kill().unwrap();
+        run_cmd.wait().unwrap();
+    }
+
     fn run_until(
         receiver: &sync::mpsc::Receiver<[u8; 1]>,
         until_seen: &str,

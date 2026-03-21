@@ -51,11 +51,7 @@ pub fn watch(
     let is_interactive = term.features().is_attended();
     let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
     let mut site = Site::load(&fs, uploads_config.prefix)?;
-    if let Some(uploads_url) = uploads_config.url {
-        site.modify_manifest(&mut fs, |manifest| {
-            manifest.uploads_url = Some(uploads_url.to_string());
-        })?;
-    }
+    site.apply_uploads_url(uploads_config.url);
     site.sync_static_files(&mut fs)?;
     let (tx, rx) = mpsc::channel();
     let initial_build = site.build(&mut fs, BuildOptions::default());
@@ -109,7 +105,11 @@ pub fn watch(
     loop {
         match rx.try_recv() {
             Ok(path) => {
-                site.invalidate_file(path.strip_prefix(&root_dir).unwrap());
+                let rel_path = path.strip_prefix(&root_dir).unwrap();
+                if rel_path.as_os_str().is_empty() {
+                    continue;
+                }
+                site.invalidate_file(rel_path);
                 changed = true;
             }
             Err(mpsc::TryRecvError::Empty) => {}
@@ -139,13 +139,28 @@ pub fn watch(
                 None
             };
             let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
-            site.sync_static_files(&mut fs).unwrap();
-            let output = if let Err(e) = site.build(&mut fs, BuildOptions::default()) {
-                format!("{} {}", style("Build failed:").red(), style(e).red())
+            let pending = site.take_pending_rebuild();
+            if pending.needs_site_reload() {
+                site.reload(&fs, uploads_config.prefix).unwrap();
+                site.apply_uploads_url(uploads_config.url);
+            }
+            if pending.needs_static_sync() {
+                site.sync_static_files(&mut fs).unwrap();
+            }
+            let output = if pending.needs_content_build() {
+                if let Err(e) = site.build(&mut fs, BuildOptions::default()) {
+                    format!("{} {}", style("Build failed:").red(), style(e).red())
+                } else {
+                    format!(
+                        "{} {:?}",
+                        style("Rebuilt in").green(),
+                        style(Instant::now() - last_build).green()
+                    )
+                }
             } else {
                 format!(
                     "{} {:?}",
-                    style("Rebuilt in").green(),
+                    style("Updated static files in").green(),
                     style(Instant::now() - last_build).green()
                 )
             };
