@@ -93,6 +93,8 @@ mod lib_fs_stdlib {
         let archival = archival_for_fixture_site()?;
 
         let recursive_files = archival.fs_list_files("/", true, None)?;
+        assert_not_contains!(recursive_files, &PathBuf::from(""));
+        assert_not_contains!(recursive_files, &PathBuf::from("/"));
         assert_contains!(
             recursive_files,
             &PathBuf::from("objects/subpage/hello.toml")

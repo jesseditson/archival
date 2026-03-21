@@ -107,12 +107,15 @@ impl FileSystemAPI for NativeFileSystem {
                 }
             })
             .filter_map(|e| e.ok())
-            .filter(|e| !e.file_name().to_string_lossy().starts_with("."))
             .filter_map(move |e| {
-                e.into_path()
-                    .strip_prefix(&root)
-                    .ok()
-                    .map(|p| p.to_path_buf())
+                if e.path() == root {
+                    None
+                } else {
+                    e.into_path()
+                        .strip_prefix(&root)
+                        .ok()
+                        .map(|p| p.to_path_buf())
+                }
             });
         Ok(Box::new(iterator))
     }

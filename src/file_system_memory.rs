@@ -130,10 +130,15 @@ impl Debug for MemoryFileSystem {
 impl MemoryFileSystem {
     fn normalize_dir(&self, rel: impl AsRef<Path>) -> PathBuf {
         let rel_path = rel.as_ref();
-        if rel_path.is_absolute() {
-            rel_path.strip_prefix("/").unwrap_or(rel_path).to_path_buf()
+        let raw = rel_path.to_string_lossy();
+        let trimmed = raw.trim_start_matches('/');
+
+        // In wasm targets, absolute-path detection can differ from host behavior.
+        // Normalize by string shape so both "/" and "" map to the root key.
+        if trimmed.is_empty() {
+            PathBuf::new()
         } else {
-            rel_path.to_path_buf()
+            PathBuf::from(trimmed)
         }
     }
 }
@@ -295,13 +300,18 @@ impl MemoryFileSystem {
         // directory's key, but exclude nested descendants.
         let node_key = FileGraphNode::key(&path);
         let parent_separator_count = node_key.matches('/').count();
+        let direct_child_depth = if node_key.is_empty() {
+            0
+        } else {
+            parent_separator_count + 1
+        };
         self.tree
             .keys()
             .chain(self.fs.keys())
             .filter(|k| {
                 (include_self || Path::new(k) != path.as_ref())
                     && k.starts_with(&node_key)
-                    && (recursive || k.matches('/').count() == parent_separator_count + 1)
+                    && (recursive || k.matches('/').count() == direct_child_depth)
             })
             .map(PathBuf::from)
             .collect()
