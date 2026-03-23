@@ -146,6 +146,8 @@ mod lib_fs_stdlib {
         let archival = archival_for_fixture_site()?;
         let contents = archival.fs_read_file("objects/subpage/hello.toml")?;
         assert_eq!(contents.trim(), "name = \"hello\"");
+        let abs_contents = archival.fs_read_file("/objects/subpage/hello.toml")?;
+        assert_eq!(abs_contents, contents);
         Ok(())
     }
 
@@ -313,6 +315,8 @@ mod lib_fs_memory {
         let archival = archival_for_fixture_site()?;
         let contents = archival.fs_read_file("objects/subpage/hello.toml")?;
         assert_eq!(contents.trim(), "name = \"hello\"");
+        let abs_contents = archival.fs_read_file("/objects/subpage/hello.toml")?;
+        assert_eq!(abs_contents, contents);
         Ok(())
     }
 

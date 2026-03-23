@@ -64,10 +64,18 @@ impl FileSystemAPI for NativeFileSystem {
         Ok(fs::remove_file(self.get_path(path))?)
     }
     fn write_str(&mut self, path: impl AsRef<Path>, contents: String) -> Result<()> {
-        Ok(fs::write(self.get_path(path), contents)?)
+        let full = self.get_path(path);
+        if let Some(parent) = full.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        Ok(fs::write(full, contents)?)
     }
     fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<()> {
-        Ok(fs::write(self.get_path(path), contents)?)
+        let full = self.get_path(path);
+        if let Some(parent) = full.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        Ok(fs::write(full, contents)?)
     }
     fn rename(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
         Ok(fs::rename(self.get_path(from), self.get_path(to))?)

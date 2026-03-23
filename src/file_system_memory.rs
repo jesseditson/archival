@@ -128,7 +128,7 @@ impl Debug for MemoryFileSystem {
 }
 
 impl MemoryFileSystem {
-    fn normalize_dir(&self, rel: impl AsRef<Path>) -> PathBuf {
+    fn normalize(&self, rel: impl AsRef<Path>) -> PathBuf {
         let rel_path = rel.as_ref();
         let raw = rel_path.to_string_lossy();
         let trimmed = raw.trim_start_matches('/');
@@ -148,21 +148,20 @@ impl FileSystemAPI for MemoryFileSystem {
         Path::new("<memory>")
     }
     fn exists(&self, path: impl AsRef<Path>) -> Result<bool> {
-        if self
-            .fs
-            .contains_key(&path.as_ref().to_string_lossy().to_lowercase())
-            || self.is_dir(path)?
-        {
+        let path = self.normalize(path);
+        if self.fs.contains_key(&path.to_string_lossy().to_lowercase()) || self.is_dir(&path)? {
             Ok(true)
         } else {
             Ok(false)
         }
     }
     fn is_dir(&self, path: impl AsRef<Path>) -> Result<bool> {
-        Ok(self.tree.contains_key(&FileGraphNode::key(path)))
+        Ok(self
+            .tree
+            .contains_key(&FileGraphNode::key(self.normalize(path))))
     }
     fn remove_dir_all(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        self.remove_from_graph(path);
+        self.remove_from_graph(self.normalize(path));
         Ok(())
     }
     fn create_dir_all(&mut self, _path: impl AsRef<Path>) -> Result<()> {
@@ -170,16 +169,17 @@ impl FileSystemAPI for MemoryFileSystem {
         Ok(())
     }
     fn read(&self, path: impl AsRef<Path>) -> Result<Option<Vec<u8>>> {
-        Ok(self.read_file(path))
+        Ok(self.read_file(self.normalize(path)))
     }
     fn read_to_string(&self, path: impl AsRef<Path>) -> Result<Option<String>> {
-        if let Some(file) = self.read_file(path) {
+        if let Some(file) = self.read_file(self.normalize(path)) {
             Ok(Some(std::str::from_utf8(&file)?.to_string()))
         } else {
             Ok(None)
         }
     }
     fn delete(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        let path = self.normalize(path);
         if self.is_dir(&path)? {
             return Err(ArchivalError::new("use remove_dir_all to delete directories").into());
         }
@@ -187,6 +187,7 @@ impl FileSystemAPI for MemoryFileSystem {
         Ok(())
     }
     fn write(&mut self, path: impl AsRef<Path>, contents: Vec<u8>) -> Result<()> {
+        let path = self.normalize(path);
         if self.is_dir(&path)? {
             return Err(ArchivalError::new("cannot write to a folder").into());
         }
@@ -197,6 +198,8 @@ impl FileSystemAPI for MemoryFileSystem {
         self.write(path, contents.as_bytes().to_vec())
     }
     fn rename(&mut self, from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
+        let from = self.normalize(from);
+        let to = self.normalize(to);
         if let Some(contents) = self.read_file(&from) {
             self.write(to, contents)?;
             self.delete(&from)?;
@@ -214,7 +217,7 @@ impl FileSystemAPI for MemoryFileSystem {
             self.walk_dir(path, true)
         } else {
             Ok(Box::new(
-                self.all_children(self.normalize_dir(path), recursive, false)
+                self.all_children(self.normalize(path), recursive, false)
                     .into_iter(),
             ))
         }
@@ -224,7 +227,7 @@ impl FileSystemAPI for MemoryFileSystem {
         path: impl AsRef<Path>,
         include_dirs: bool,
     ) -> Result<Box<dyn Iterator<Item = PathBuf>>> {
-        let normalized = self.normalize_dir(&path);
+        let normalized = self.normalize(&path);
         let children = self.all_children(&normalized, true, true);
         let mut all_files: Vec<PathBuf> = vec![];
         for child in children {

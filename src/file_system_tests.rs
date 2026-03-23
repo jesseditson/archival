@@ -29,6 +29,69 @@ mod tests {
         Ok(())
     }
 
+    pub fn absolute_paths(mut fs: impl FileSystemAPI) -> Result<()> {
+        // Write via relative path, read back via absolute path (leading /)
+        let rel = Path::new("dir/file.txt");
+        let abs = Path::new("/dir/file.txt");
+        let content = "hello".to_string();
+        fs.write_str(rel, content.clone())?;
+
+        assert!(fs.exists(abs)?, "exists should find absolute path");
+        assert!(fs.exists(rel)?, "exists should find relative path");
+
+        let read_abs = fs.read_to_string(abs)?;
+        assert_eq!(read_abs.unwrap(), content, "read via absolute path");
+
+        let read_rel = fs.read_to_string(rel)?;
+        assert_eq!(read_rel.unwrap(), content, "read via relative path");
+
+        assert!(fs.is_dir(Path::new("/dir"))?, "is_dir via absolute path");
+        assert!(fs.is_dir(Path::new("dir"))?, "is_dir via relative path");
+
+        // Write via absolute path, read back via relative path
+        let abs2 = Path::new("/dir/file2.txt");
+        let rel2 = Path::new("dir/file2.txt");
+        let content2 = "world".to_string();
+        fs.write_str(abs2, content2.clone())?;
+        let read_rel2 = fs.read_to_string(rel2)?;
+        assert_eq!(
+            read_rel2.unwrap(),
+            content2,
+            "read relative after abs write"
+        );
+
+        // rename via absolute path
+        fs.rename(abs, Path::new("/dir/renamed.txt"))?;
+        assert!(!fs.exists(rel)?, "old path gone after rename");
+        assert!(
+            fs.exists(Path::new("dir/renamed.txt"))?,
+            "new relative path present after rename"
+        );
+
+        // delete via absolute path
+        fs.delete(abs2)?;
+        assert!(!fs.exists(rel2)?, "relative path gone after abs delete");
+
+        // walk_dir / list_dir normalise the root as well
+        fs.write_str(Path::new("/a/b.txt"), "x".to_string())?;
+        let walked: Vec<PathBuf> = fs.walk_dir(Path::new("/"), false)?.collect();
+        let walked_rel: Vec<PathBuf> = fs.walk_dir(Path::new(""), false)?.collect();
+        assert_eq!(
+            walked.len(),
+            walked_rel.len(),
+            "walk_dir('/') and walk_dir('') return same count"
+        );
+
+        // remove_dir_all via absolute path
+        fs.remove_dir_all(Path::new("/dir"))?;
+        assert!(
+            !fs.exists(Path::new("dir/renamed.txt"))?,
+            "file gone after remove_dir_all via abs path"
+        );
+
+        Ok(())
+    }
+
     pub fn unzip_to_fs(mut fs: impl FileSystemAPI) -> Result<()> {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
@@ -64,6 +127,7 @@ mod memory {
     }
     gen_test!(write_and_read_files, get_fs());
     gen_test!(unzip_to_fs, get_fs());
+    gen_test!(absolute_paths, get_fs());
 }
 
 #[cfg(feature = "stdlib-fs")]
@@ -87,4 +151,5 @@ mod stdlib {
     }
     gen_test!(write_and_read_files, get_fs());
     gen_test!(unzip_to_fs, get_fs());
+    gen_test!(absolute_paths, get_fs());
 }
