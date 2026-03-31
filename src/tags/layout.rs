@@ -9,7 +9,22 @@ use liquid_core::{Error, Result};
 use liquid_core::{ParseTag, TagReflection, TagTokenIter};
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::cell::RefCell;
 use std::io::Write;
+
+thread_local! {
+    static ACTIVE_LAYOUT_STACK: RefCell<Vec<String>> = const { RefCell::new(vec![]) };
+}
+
+struct LayoutStackGuard;
+impl Drop for LayoutStackGuard {
+    fn drop(&mut self) {
+        ACTIVE_LAYOUT_STACK.with(|stack| {
+            let mut stack = stack.borrow_mut();
+            let _ = stack.pop();
+        });
+    }
+}
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct LayoutTag;
@@ -94,6 +109,25 @@ impl Renderable for Layout {
                 .into_err();
         }
         let name = value.to_kstr().into_owned();
+
+        let cycle = ACTIVE_LAYOUT_STACK.with(|stack| {
+            let stack = stack.borrow();
+            stack.iter().any(|entry| entry == name.as_str())
+        });
+        if cycle {
+            let chain = ACTIVE_LAYOUT_STACK.with(|stack| {
+                let mut names = stack.borrow().clone();
+                names.push(name.to_string());
+                names.join(" -> ")
+            });
+            return Error::with_msg("Recursive layout include detected")
+                .context("layout_chain", chain)
+                .into_err();
+        }
+        ACTIVE_LAYOUT_STACK.with(|stack| {
+            stack.borrow_mut().push(name.to_string());
+        });
+        let _layout_guard = LayoutStackGuard;
 
         {
             // if there our additional variables creates a layout object to access all the variables
@@ -301,6 +335,42 @@ mod test {
             .build();
         runtime.set_global("num".into(), Value::scalar(5f64));
         runtime.set_global("numTwo".into(), Value::scalar(10f64));
+        let output = template.render(&runtime);
+        assert!(output.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn recursive_layout_fails_fast() -> Result<()> {
+        let options = options();
+        let template = "{% layout 'loop.liquid' %}".to_template(&options)?;
+
+        #[derive(Default, Debug, Clone, Copy)]
+        struct RecursiveSource;
+
+        impl partials::PartialSource for RecursiveSource {
+            fn contains(&self, _name: &str) -> bool {
+                true
+            }
+
+            fn names(&self) -> Vec<&str> {
+                vec![]
+            }
+
+            fn try_get<'a>(&'a self, name: &str) -> Option<borrow::Cow<'a, str>> {
+                match name {
+                    "loop.liquid" => Some("{% layout 'loop.liquid' %}".into()),
+                    _ => None,
+                }
+            }
+        }
+
+        let partials = partials::OnDemandCompiler::<RecursiveSource>::empty()
+            .compile(::std::sync::Arc::new(options))
+            .unwrap();
+        let runtime = RuntimeBuilder::new()
+            .set_partials(partials.as_ref())
+            .build();
         let output = template.render(&runtime);
         assert!(output.is_err());
         Ok(())
