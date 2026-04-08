@@ -31,11 +31,15 @@ runs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
     - name: Install Archival
-      id: archival-install
+      id: maybe-archival-install
       uses: haya14busa/action-cond@v1
       with:
         cond: ${{ inputs.archival-bin == '' }}
         if_true: "cargo install archival --version ${{ inputs.archival-version }}"
+        if_false: "echo 'skipping install, manual archival path provided'"
+    - name: Run Install
+      run: ${{ steps.maybe-archival-install.outputs.value }}
+      shell: bash
     - name: Determine Archival Binary Name
       id: archival-bin
       uses: haya14busa/action-cond@v1
