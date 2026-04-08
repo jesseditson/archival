@@ -28,11 +28,34 @@ runs:
       uses: actions/checkout@v4
     - name: Setup Node
       uses: actions/setup-node@v4
-    - name: Setup Rust
+    # 1) Try fast path (binstall via moonrepo). Allow it to fail so we can
+    #    fallback. We've seen 4xx failures in binstall mirrors though.
+    - name: Setup Rust (binstall)
+      id: setup-rust
       if: ${{ inputs.archival-bin == '' }}
+      continue-on-error: true
       uses: moonrepo/setup-rust@v1
       with:
         bins: archival@${{ inputs.archival-version }}
+    # 2) Fallback path: cargo install if binstall step failed. We also ensure
+    #    the cargo bin dir is on PATH.
+    - name: Setup Rust (fallback cargo install)
+      if: ${{ inputs.archival-bin == '' && steps.setup-rust.outcome != 'success' }}
+      shell: bash
+      run: |
+        set -euxo pipefail
+
+        # Ensure cargo bin is on PATH for subsequent steps in *this* composite action.
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+        # Make sure Rust toolchain exists (ubuntu-latest usually has it, but be defensive)
+        if ! command -v cargo >/dev/null 2>&1; then
+          curl -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        fi
+
+        # Install the pinned version.
+        cargo install archival --version "${{ inputs.archival-version }}" --locked
     - name: Determine Archival Binary Name
       id: archival-bin
       uses: haya14busa/action-cond@v1
