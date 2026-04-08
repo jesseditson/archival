@@ -30,13 +30,21 @@ runs:
       uses: actions/setup-node@v4
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+    - name: Cache Archival Binary
+      id: cache-archival
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/archival
+        key: archival-bin-${{ runner.os }}-${{ runner.arch }}-${{ inputs.archival-version }}
     - name: Install Archival
       id: maybe-archival-install
       uses: haya14busa/action-cond@v1
       with:
-        cond: ${{ inputs.archival-bin == '' }}
+        cond: ${{ inputs.archival-bin == '' && steps.cache-archival.outputs.cache-hit != 'true' }}
         if_true: "cargo install archival --version ${{ inputs.archival-version }}"
-        if_false: "echo 'skipping install, manual archival path provided'"
+        if_false: "echo 'skipping install, manual archival path provided or cached archival binary found'"
     - name: Run Install
       run: ${{ steps.maybe-archival-install.outputs.value }}
       shell: bash
