@@ -30,8 +30,6 @@ runs:
       uses: actions/setup-node@v4
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
-    - name: Cache cargo
-      uses: Swatinem/rust-cache@v2
     - name: Install Archival
       id: archival-install
       uses: haya14busa/action-cond@v1
