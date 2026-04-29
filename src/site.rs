@@ -700,7 +700,9 @@ impl Site {
             object_def,
             object,
             template_str.to_owned(),
-            TemplateType::Default,
+            TemplateType::parse_path(&template_path.display().to_string())
+                .unwrap_or_default()
+                .1,
             globals,
             template_path,
         );
