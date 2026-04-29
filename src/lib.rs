@@ -1194,7 +1194,7 @@ mod lib {
         unpack_zip(zip.to_vec(), &mut fs)?;
         let archival = Archival::new(fs)?;
         archival.delete_objects(
-            vec!["section", "site"].into_iter(),
+            vec!["section", "site"],
             Some(vec![ValuePath::from_string("section.second")]),
         )?;
         // This should result in the relevant files being missing
