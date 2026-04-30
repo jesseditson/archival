@@ -47,6 +47,16 @@ message File {
   string description = 6;
 }
 
+message RenderedFile {
+  DisplayType display_type = 1;
+  string filename = 2;
+  string sha = 3;
+  string mime = 4;
+  string name = 5;
+  string description = 6;
+  string url = 7;
+}
+
 message OneofValue {
   string name = 1;
   FieldValue value = 2;
