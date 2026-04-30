@@ -6,7 +6,7 @@ pub(crate) mod meta;
 pub use date_time::DateTime;
 pub use field_type::{FieldType, InvalidFieldError, OneofOption};
 pub use field_value::{FieldValue, ObjectValues, RenderedFieldValue, RenderedObjectValues};
-pub use file::{DisplayType, File};
+pub use file::{DisplayType, File, RenderedFile};
 pub use meta::{Meta, MetaValue};
 use serde::{Deserialize, Serialize};
 

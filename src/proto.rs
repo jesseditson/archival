@@ -5,7 +5,7 @@ pub mod archival_proto {
 use crate::events::ArchivalEvent;
 use crate::fields::field_type::OneofOption;
 use crate::fields::meta::Meta;
-use crate::fields::{DateTime, DisplayType, FieldType, FieldValue, File, MetaValue};
+use crate::fields::{DateTime, DisplayType, FieldType, FieldValue, File, MetaValue, RenderedFile};
 use crate::object::{Object, ObjectEntry, ObjectMap};
 use crate::object_definition::ObjectDefinition;
 use crate::value_path::{ValuePath, ValuePathComponent};
@@ -72,6 +72,47 @@ impl From<File> for archival_proto::File {
             mime: f.mime,
             name: f.name.unwrap_or_default(),
             description: f.description.unwrap_or_default(),
+        }
+    }
+}
+
+// RenderedFile
+impl From<archival_proto::RenderedFile> for RenderedFile {
+    fn from(proto: archival_proto::RenderedFile) -> Self {
+        RenderedFile {
+            display_type: archival_proto::DisplayType::try_from(proto.display_type)
+                .ok()
+                .unwrap_or(archival_proto::DisplayType::Download)
+                .into(),
+            filename: proto.filename,
+            sha: proto.sha,
+            mime: proto.mime,
+            name: if proto.name.is_empty() {
+                None
+            } else {
+                Some(proto.name)
+            },
+            description: if proto.description.is_empty() {
+                None
+            } else {
+                Some(proto.description)
+            },
+            url: proto.url,
+        }
+    }
+}
+
+// RenderedFile -> proto
+impl From<RenderedFile> for archival_proto::RenderedFile {
+    fn from(f: RenderedFile) -> Self {
+        archival_proto::RenderedFile {
+            display_type: archival_proto::DisplayType::from(f.display_type) as i32,
+            filename: f.filename,
+            sha: f.sha,
+            mime: f.mime,
+            name: f.name.unwrap_or_default(),
+            description: f.description.unwrap_or_default(),
+            url: f.url,
         }
     }
 }
@@ -934,6 +975,18 @@ mod proto_tests {
     });
     proto_test!(archival_proto::File => fields::File, file_test {
         fields::File::download();
+    });
+
+    proto_test!(archival_proto::RenderedFile => fields::RenderedFile, rendered_file_test {
+        fields::RenderedFile {
+            display_type: fields::DisplayType::Image,
+            filename: "photo.jpg".to_string(),
+            sha: "abc123".to_string(),
+            mime: "image/jpeg".to_string(),
+            name: Some("cover".to_string()),
+            description: Some("Hero image".to_string()),
+            url: "/uploads/photo.jpg".to_string(),
+        };
     });
 
     proto_test!(archival_proto::MetaValue => fields::MetaValue, meta_value_test {
