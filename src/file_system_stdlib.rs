@@ -26,12 +26,18 @@ impl NativeFileSystem {
 
     fn get_path(&self, rel: impl AsRef<Path>) -> PathBuf {
         let rel_path = rel.as_ref();
-        let normalized = if rel_path.is_absolute() {
-            rel_path.strip_prefix("/").unwrap_or(rel_path)
+        if rel_path.is_absolute() {
+            // If the path is already inside root, use it as-is (e.g. an
+            // absolute build-dir passed via CLI). Otherwise treat it as a
+            // root-relative absolute path (e.g. "/pages/foo.liquid").
+            if rel_path.starts_with(&self.root) {
+                return rel_path.to_path_buf();
+            }
+            let normalized = rel_path.strip_prefix("/").unwrap_or(rel_path);
+            self.root.join(normalized)
         } else {
-            rel_path
-        };
-        self.root.join(normalized)
+            self.root.join(rel_path)
+        }
     }
 }
 

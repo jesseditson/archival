@@ -11,9 +11,25 @@ use crate::{
 use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches};
 use std::{
-    path::PathBuf,
+    path::{Component, Path, PathBuf},
     sync::{atomic::AtomicBool, Arc},
 };
+
+/// Resolve `..` and `.` components in `path` without requiring the path to
+/// exist on disk (unlike `std::fs::canonicalize`).
+fn lexical_normalize(path: impl AsRef<Path>) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.as_ref().components() {
+        match component {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            c => out.push(c),
+        }
+    }
+    out
+}
 
 pub struct Command {}
 impl BinaryCommand for Command {
@@ -41,7 +57,7 @@ impl BinaryCommand for Command {
         println!("Building site: {}", &site);
         if let Some(build_dir_arg) = args.get_one::<PathBuf>("build-dir") {
             let cwd = std::env::current_dir().unwrap();
-            site.manifest.build_dir = cwd.join(build_dir_arg);
+            site.manifest.build_dir = lexical_normalize(cwd.join(build_dir_arg));
         }
         site.sync_static_files(&mut fs)?;
         let mut options = BuildOptions::default();
