@@ -15,6 +15,7 @@ use tracing::warn;
 pub enum DevServerMode {
     #[default]
     NoServe,
+    NoServeStreamLogs,
     Serve(Option<u16>),
 }
 
@@ -48,7 +49,8 @@ pub fn watch(
     quit: Arc<AtomicBool>,
 ) -> Result<crate::binary::ExitStatus> {
     let mut term = Term::stdout();
-    let is_interactive = term.features().is_attended();
+    let is_interactive =
+        term.features().is_attended() && !matches!(mode, DevServerMode::NoServeStreamLogs);
     let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
     let mut site = Site::load(&fs, uploads_config.prefix)?;
     if let Some(uploads_url) = uploads_config.url {
@@ -98,9 +100,6 @@ pub fn watch(
     })?;
     let mut last_build = Instant::now();
     let mut changed = false;
-    if is_interactive {
-        term.clear_screen()?;
-    }
     term.write(init_message.as_bytes())?;
     if let Err(e) = initial_build {
         let bar = ProgressBar::new_spinner();
