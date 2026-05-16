@@ -12,3 +12,9 @@ profile.json
 
 # editors
 .idea
+
+# npm
+node_modules/
+bin/archival
+bin/archival.exe
+bin/archival.cmd
