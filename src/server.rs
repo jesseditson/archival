@@ -172,10 +172,22 @@ fn static_file_handler(
 
     let mut serve_path = if path.is_file() {
         // try to point the serve path to `path` if it corresponds to a file
-        path
-    } else {
+        path.clone()
+    } else if path.join("index.html").exists() {
         // try to point the serve path into a "index.html" file in the requested
-        // path
+        // path (e.g. /foo/ → /foo/index.html)
+        path.join("index.html")
+    } else if path.extension().is_none() {
+        // for extension-less URLs, also try <path>.html before giving up
+        // (e.g. /about → /about.html, matching Cloudflare auto-trailing-slash rules)
+        let mut html_path = path.clone();
+        html_path.set_extension("html");
+        if html_path.is_file() {
+            html_path
+        } else {
+            path.join("index.html")
+        }
+    } else {
         path.join("index.html")
     };
     if let Some(nfp) = not_found_path {
