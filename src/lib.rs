@@ -1128,6 +1128,69 @@ mod lib {
     }
 
     #[test]
+    fn add_child_after_add_object() -> Result<()> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+        archival.build(BuildOptions::default())?;
+        archival.send_event(
+            ArchivalEvent::AddObject(AddObjectEvent {
+                object: "post".to_string(),
+                filename: "new-name".to_string(),
+                order: None,
+                values: vec![
+                    AddObjectValue {
+                        path: ValuePath::from_string("title"),
+                        value: FieldValue::String("new-name".to_string()),
+                    },
+                    AddObjectValue {
+                        path: ValuePath::from_string("date"),
+                        value: FieldValue::Date(fields::DateTime::from_ymd(2024, 4, 22)),
+                    },
+                    AddObjectValue {
+                        path: ValuePath::from_string("content"),
+                        value: FieldValue::Markdown("content".to_string()),
+                    },
+                ],
+            }),
+            None,
+        )?;
+
+        let result = archival.send_event(
+            ArchivalEvent::AddChild(AddChildEvent {
+                object: "post".to_string(),
+                filename: "new-name".to_string(),
+                path: ValuePath::default().append(ValuePath::key("links")),
+                values: vec![
+                    AddObjectValue {
+                        path: ValuePath::from_string("name"),
+                        value: FieldValue::String("added child".to_string()),
+                    },
+                    AddObjectValue {
+                        path: ValuePath::from_string("url"),
+                        value: FieldValue::String("https://foo.test".to_string()),
+                    },
+                ],
+                index: None,
+            }),
+            None,
+        )?;
+        assert!(matches!(result, ArchivalEventResponse::Index(0)));
+
+        let post = archival.get_object("post", Some("new-name"))?;
+        let links = ValuePath::from_string("links")
+            .get_in_object(&post)
+            .unwrap();
+        assert!(matches!(links, FieldValue::Objects(_)));
+        if let FieldValue::Objects(links) = links {
+            assert_eq!(links.len(), 1);
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn remove_child() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
