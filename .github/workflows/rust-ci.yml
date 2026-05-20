@@ -178,6 +178,22 @@ jobs:
       - name: cargo publish
         run: cargo publish --dry-run --all-features --target ${{ matrix.target }}
 
+  create_release:
+    name: Create Release
+    runs-on: ubuntu-22.04
+    if: ${{ startsWith(github.ref, 'refs/tags/') && needs.publish-check.result == 'success' }}
+    needs: publish-check
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release:
     name: Release
     env:
@@ -186,7 +202,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     if: ${{ startsWith(github.ref, 'refs/tags/') && needs.publish-check.result == 'success' }}
-    needs: publish-check
+    needs: [publish-check, create_release]
     strategy:
       matrix:
         include:
@@ -233,11 +249,20 @@ jobs:
           NAME: archival
           TARGET: ${{ matrix.target }}
         run: .github/scripts/package.sh
-      - name: Publish
+      - name: Upload Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "archival*"
+          draft: true
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish Release
+        if: matrix.os == 'ubuntu-22.04' && matrix.target == 'x86_64-unknown-linux-musl'
         uses: softprops/action-gh-release@v1
         with:
           draft: false
-          files: "archival*"
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
