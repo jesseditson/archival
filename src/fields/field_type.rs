@@ -204,10 +204,9 @@ impl FieldType {
                     schema.insert("description".into(), description.into());
                     schema.insert("type".into(), "string".into());
                     if let Some(date) = options.set_dates_to {
-                        let fmt = time::format_description::parse(
-                            "[year]-[month]-[day] [hour]:[minute]:[second]",
-                        )
-                        .unwrap();
+                        let fmt = time::macros::format_description!(
+                            "[year]-[month]-[day] [hour]:[minute]:[second]"
+                        );
                         let date_str = date.with_time(time::Time::MIDNIGHT).format(&fmt).unwrap();
                         schema.insert("const".into(), date_str.into());
                     } else {

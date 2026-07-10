@@ -113,8 +113,10 @@ impl DateTime {
 
     pub fn maybe_local_offset_str() -> Option<String> {
         UtcOffset::current_local_offset().ok().and_then(|offset| {
-            let fmt =
-                format_description::parse("[offset_hour sign:mandatory][offset_minute]").ok()?;
+            let fmt = format_description::parse_borrowed::<1>(
+                "[offset_hour sign:mandatory][offset_minute]",
+            )
+            .ok()?;
             offset.format(&fmt).ok()
         })
     }
