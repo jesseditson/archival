@@ -100,6 +100,10 @@ pub fn watch(
     })?;
     let mut last_build = Instant::now();
     let mut changed = false;
+    // The object definition file (the "objects file" the manifest points to) is
+    // parsed into memory once at load time; invalidate_file only clears caches
+    // and never refreshes it. Track edits to it so we can reload the site.
+    let mut object_definitions_changed = false;
     term.write(init_message.as_bytes())?;
     if let Err(e) = initial_build {
         let bar = ProgressBar::new_spinner();
@@ -108,7 +112,11 @@ pub fn watch(
     loop {
         match rx.try_recv() {
             Ok(path) => {
-                site.invalidate_file(path.strip_prefix(&root_dir).unwrap());
+                let changed_file = path.strip_prefix(&root_dir).unwrap();
+                if changed_file == site.manifest.object_definition_file {
+                    object_definitions_changed = true;
+                }
+                site.invalidate_file(changed_file);
                 changed = true;
             }
             Err(mpsc::TryRecvError::Empty) => {}
@@ -138,15 +146,35 @@ pub fn watch(
                 None
             };
             let mut fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
-            site.sync_static_files(&mut fs).unwrap();
-            let output = if let Err(e) = site.build(&mut fs, BuildOptions::default()) {
-                format!("{} {}", style("Build failed:").red(), style(e).red())
+            // When the object definition file changed, reload the site so the
+            // rebuild picks up the latest definitions. On failure we keep the
+            // previously loaded site so the dev server stays up.
+            let mut reload_error = None;
+            if object_definitions_changed {
+                object_definitions_changed = false;
+                match Site::load(&fs, uploads_config.prefix) {
+                    Ok(mut reloaded) => {
+                        if let Some(uploads_url) = uploads_config.url {
+                            reloaded.manifest.uploads_url = Some(uploads_url.to_string());
+                        }
+                        site = reloaded;
+                    }
+                    Err(e) => reload_error = Some(e),
+                }
+            }
+            let output = if let Some(e) = reload_error {
+                format!("{} {}", style("Reload failed:").red(), style(e).red())
             } else {
-                format!(
-                    "{} {:?}",
-                    style("Rebuilt in").green(),
-                    style(Instant::now() - last_build).green()
-                )
+                site.sync_static_files(&mut fs).unwrap();
+                if let Err(e) = site.build(&mut fs, BuildOptions::default()) {
+                    format!("{} {}", style("Build failed:").red(), style(e).red())
+                } else {
+                    format!(
+                        "{} {:?}",
+                        style("Rebuilt in").green(),
+                        style(Instant::now() - last_build).green()
+                    )
+                }
             };
             if let Some(bar) = bar {
                 bar.finish_with_message(output);
