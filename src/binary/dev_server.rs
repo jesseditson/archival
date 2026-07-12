@@ -61,7 +61,7 @@ pub fn watch(
     site.sync_static_files(&mut fs)?;
     let (tx, rx) = mpsc::channel();
     let initial_build = site.build(&mut fs, BuildOptions::default());
-    let mut init_message = format!("Watching site: {}", &site);
+    let mut init_message = format!("Watching site: {}", site);
     let change_queue = Arc::new(RwLock::new(vec![]));
     let queue_changes = change_sender.is_some();
     // This won't leak because the process is ended when we

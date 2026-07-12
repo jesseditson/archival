@@ -413,10 +413,7 @@ impl ValuePath {
                         current_def = child;
                         continue;
                     } else {
-                        return Err(ValuePathError::NotFound(
-                            self.clone(),
-                            format!("{:?}", &def),
-                        ));
+                        return Err(ValuePathError::NotFound(self.clone(), format!("{:?}", def)));
                     }
                 }
                 ValuePathComponent::Index(_) => {
@@ -426,10 +423,7 @@ impl ValuePath {
                 }
             }
         }
-        Err(ValuePathError::NotFound(
-            self.clone(),
-            format!("{:?}", &def),
-        ))
+        Err(ValuePathError::NotFound(self.clone(), format!("{:?}", def)))
     }
 
     pub fn get_definition<'a>(
