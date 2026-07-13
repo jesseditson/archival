@@ -79,14 +79,30 @@ impl TemplateType {
     }
 }
 
-#[derive(Debug)]
 pub struct PageTemplate<'a> {
     pub definition: &'a ObjectDefinition,
     pub object: &'a Object,
     pub content: String,
+    /// A pre-parsed template. When set, `content` is not parsed again; this
+    /// lets builds parse each template file once and share it across every
+    /// object rendered with it.
+    pub parsed: Option<&'a liquid::Template>,
     #[allow(dead_code)]
     pub file_type: TemplateType,
     pub debug_path: PathBuf,
+}
+
+impl fmt::Debug for PageTemplate<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("PageTemplate")
+            .field("definition", &self.definition)
+            .field("object", &self.object)
+            .field("content", &self.content)
+            .field("parsed", &self.parsed.map(|_| "<template>"))
+            .field("file_type", &self.file_type)
+            .field("debug_path", &self.debug_path)
+            .finish()
+    }
 }
 
 #[derive(Debug)]
@@ -105,8 +121,174 @@ pub struct Page<'a> {
     content: Option<String>,
     template: Option<PageTemplate<'a>>,
     file_type: TemplateType,
-    globals: &'a RenderGlobals<'a>,
     pub debug_path: Option<PathBuf>,
+}
+
+/// Convert all objects into the liquid context shared by every page in a
+/// build. This is by far the most expensive part of setting up a render
+/// (markdown fields are converted to html here), so builds create it once and
+/// share it across pages via [`LayeredContext`].
+pub fn build_context(
+    objects_map: &ObjectMap,
+    definitions: &ObjectDefinitions,
+    field_config: &FieldConfig,
+    globals: &RenderGlobals,
+) -> liquid::Object {
+    let _span = tracing::trace_span!("build_context").entered();
+    let mut context = liquid::Object::new();
+    let mut objects = liquid::Object::new();
+    for (name, obj_entry) in objects_map {
+        let definition = definitions
+            .get(name)
+            .unwrap_or_else(|| panic!("missing object definition {}", name));
+        let values = match obj_entry {
+            ObjectEntry::List(l) => {
+                Value::array(l.iter().map(|o| o.liquid_object(definition, field_config)))
+            }
+            ObjectEntry::Object(o) => o.liquid_object(definition, field_config),
+        };
+        objects.insert(name.into(), values.clone());
+        context.insert(
+            pluralize(name, if obj_entry.is_list() { 2 } else { 1 }, false).into(),
+            values,
+        );
+    }
+    globals.inject(&mut context);
+    context.insert("objects".into(), objects.into());
+    context
+}
+
+/// A render context composed of a small per-page overlay on top of the shared
+/// per-build context. Lookups check the overlay first, so pages can shadow
+/// shared keys without deep-cloning the (large) shared context for every page.
+#[derive(Debug)]
+struct LayeredContext<'a> {
+    overlay: &'a liquid::Object,
+    base: &'a liquid::Object,
+}
+
+impl LayeredContext<'_> {
+    fn merged(&self) -> liquid::Object {
+        let mut merged = self.base.clone();
+        merged.extend(self.overlay.iter().map(|(k, v)| (k.clone(), v.clone())));
+        merged
+    }
+}
+
+impl fmt::Display for LayeredContext<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (k, v) in liquid::ObjectView::iter(self) {
+            write!(f, "{}: {} ", k, v.render())?;
+        }
+        Ok(())
+    }
+}
+
+impl ValueView for LayeredContext<'_> {
+    fn as_debug(&self) -> &dyn fmt::Debug {
+        self
+    }
+    fn render(&self) -> liquid::model::DisplayCow<'_> {
+        liquid::model::DisplayCow::Owned(Box::new(self))
+    }
+    fn source(&self) -> liquid::model::DisplayCow<'_> {
+        liquid::model::DisplayCow::Owned(Box::new(self))
+    }
+    fn type_name(&self) -> &'static str {
+        "object"
+    }
+    fn query_state(&self, state: liquid::model::State) -> bool {
+        match state {
+            liquid::model::State::Truthy => true,
+            liquid::model::State::DefaultValue
+            | liquid::model::State::Empty
+            | liquid::model::State::Blank => liquid::ObjectView::size(self) == 0,
+        }
+    }
+    fn to_kstr(&self) -> liquid::model::KStringCow<'_> {
+        liquid::model::KStringCow::from_string(self.to_string())
+    }
+    fn to_value(&self) -> Value {
+        Value::Object(self.merged())
+    }
+    fn as_object(&self) -> Option<&dyn liquid::ObjectView> {
+        Some(self)
+    }
+}
+
+impl liquid::ObjectView for LayeredContext<'_> {
+    fn as_value(&self) -> &dyn ValueView {
+        self
+    }
+    fn size(&self) -> i64 {
+        liquid::ObjectView::keys(self).count() as i64
+    }
+    fn keys<'k>(&'k self) -> Box<dyn Iterator<Item = liquid::model::KStringCow<'k>> + 'k> {
+        Box::new(
+            self.overlay
+                .keys()
+                .chain(
+                    self.base
+                        .keys()
+                        .filter(|k| !self.overlay.contains_key(k.as_str())),
+                )
+                .map(|k| k.as_ref().into()),
+        )
+    }
+    fn values<'k>(&'k self) -> Box<dyn Iterator<Item = &'k dyn ValueView> + 'k> {
+        Box::new(liquid::ObjectView::iter(self).map(|(_, v)| v))
+    }
+    fn iter<'k>(
+        &'k self,
+    ) -> Box<dyn Iterator<Item = (liquid::model::KStringCow<'k>, &'k dyn ValueView)> + 'k> {
+        Box::new(
+            self.overlay
+                .iter()
+                .chain(
+                    self.base
+                        .iter()
+                        .filter(|(k, _)| !self.overlay.contains_key(k.as_str())),
+                )
+                .map(|(k, v)| (k.as_ref().into(), v.as_view())),
+        )
+    }
+    fn contains_key(&self, index: &str) -> bool {
+        self.overlay.contains_key(index) || self.base.contains_key(index)
+    }
+    fn get<'s>(&'s self, index: &str) -> Option<&'s dyn ValueView> {
+        self.overlay
+            .get(index)
+            .or_else(|| self.base.get(index))
+            .map(|v| v.as_view())
+    }
+}
+
+/// Rendered output can only require a second render pass if it still contains
+/// liquid syntax (variables or tags embedded in markdown fields). Parsing is
+/// by far the most expensive part of rendering, so pages that render to plain
+/// output skip the second pass entirely.
+fn may_contain_liquid(rendered: &str) -> bool {
+    rendered.contains("{{") || rendered.contains("{%")
+}
+
+/// Render `template`, then re-parse and re-render the output if (and only if)
+/// it may still contain liquid syntax introduced by rendered field values.
+fn render_passes(
+    template: &liquid::Template,
+    parser: &liquid::Parser,
+    context: &LayeredContext,
+) -> Result<String, liquid_core::Error> {
+    let first_span = tracing::trace_span!("first_render").entered();
+    let rendered = template.render(context)?;
+    drop(first_span);
+    if !may_contain_liquid(&rendered) {
+        return Ok(rendered);
+    }
+    let parse_span = tracing::trace_span!("second_parse").entered();
+    let reparsed = parser.parse(&rendered)?;
+    drop(parse_span);
+    let _second_span = tracing::trace_span!("second_render").entered();
+    reparsed.render(context)
 }
 
 pub(crate) fn debug_context(object: &liquid::Object, lp: usize) -> String {
@@ -161,13 +343,16 @@ pub(crate) fn debug_context(object: &liquid::Object, lp: usize) -> String {
 }
 
 impl<'a> Page<'a> {
+    // Builds use `new_with_parsed_template` to share one parsed template
+    // across objects; this un-parsed variant is kept for callers (and tests)
+    // that render a single page.
+    #[allow(dead_code)]
     pub fn new_with_template(
         name: String,
         definition: &'a ObjectDefinition,
         object: &'a Object,
         content: String,
         file_type: TemplateType,
-        globals: &'a RenderGlobals<'a>,
         template_debug_path: &Path,
     ) -> Page<'a> {
         Page {
@@ -177,11 +362,34 @@ impl<'a> Page<'a> {
                 definition,
                 object,
                 content,
+                parsed: None,
                 file_type: file_type.clone(),
                 debug_path: template_debug_path.to_path_buf(),
             }),
             file_type,
-            globals,
+            debug_path: None,
+        }
+    }
+    pub fn new_with_parsed_template(
+        name: String,
+        definition: &'a ObjectDefinition,
+        object: &'a Object,
+        parsed: &'a liquid::Template,
+        file_type: TemplateType,
+        template_debug_path: &Path,
+    ) -> Page<'a> {
+        Page {
+            name,
+            content: None,
+            template: Some(PageTemplate {
+                definition,
+                object,
+                content: String::new(),
+                parsed: Some(parsed),
+                file_type: file_type.clone(),
+                debug_path: template_debug_path.to_path_buf(),
+            }),
+            file_type,
             debug_path: None,
         }
     }
@@ -189,7 +397,6 @@ impl<'a> Page<'a> {
         name: String,
         content: String,
         file_type: TemplateType,
-        globals: &'a RenderGlobals<'a>,
         debug_path: &Path,
     ) -> Page<'a> {
         Page {
@@ -197,41 +404,28 @@ impl<'a> Page<'a> {
             content: Some(content),
             template: None,
             file_type,
-            globals,
             debug_path: Some(debug_path.to_path_buf()),
         }
     }
     pub fn render(
         &self,
         parser: &liquid::Parser,
-        objects_map: &ObjectMap,
-        definitions: &ObjectDefinitions,
+        base_context: &liquid::Object,
         field_config: &FieldConfig,
     ) -> Result<String> {
         #[cfg(feature = "verbose-logging")]
         tracing::debug!("rendering {}", self.name);
-        let mut globals = liquid::object!({ "page": self.name });
-        let mut objects = liquid::object!({});
-        for (name, obj_entry) in objects_map {
-            let definition = definitions
-                .get(name)
-                .unwrap_or_else(|| panic!("missing object definition {}", name));
-            let values = match obj_entry {
-                ObjectEntry::List(l) => {
-                    Value::array(l.iter().map(|o| o.liquid_object(definition, field_config)))
-                }
-                ObjectEntry::Object(o) => o.liquid_object(definition, field_config),
-            };
-            objects.insert(name.into(), values.clone());
-            globals.insert(
-                pluralize(name, if obj_entry.is_list() { 2 } else { 1 }, false).into(),
-                values,
-            );
-            self.globals.inject(&mut globals);
-        }
-        globals.insert("objects".into(), objects.into());
+        let mut overlay = liquid::object!({ "page": self.name });
         if let Some(template_info) = &self.template {
-            let template = parser.parse(&template_info.content)?;
+            let parsed;
+            let template = match template_info.parsed {
+                Some(t) => t,
+                None => {
+                    let _span = tracing::trace_span!("parse_template").entered();
+                    parsed = parser.parse(&template_info.content)?;
+                    &parsed
+                }
+            };
             let mut object_vals = match template_info
                 .object
                 .liquid_object(template_info.definition, field_config)
@@ -244,41 +438,43 @@ impl<'a> Page<'a> {
                 "order": template_info.object.order,
                 "path": template_info.object.path(),
             }));
-            let mut context = globals.clone();
-            context.extend(liquid::object!({
-              template_info.definition.name.to_owned(): object_vals
-            }));
-            template
-                .render(&context)
-                .and_then(|rendered| {
-                    // We now have a rendered string, but because of possible variables
-                    // in markdown, we actually need to render one more time
-                    parser.parse(&rendered)?.render(&context)
-                })
-                .map_err(|error| {
-                    error
-                        .trace(format!("{}", template_info.debug_path.to_string_lossy()))
-                        .trace(format!("context (template):{}", debug_context(&context, 0)))
-                        .into()
-                })
+            overlay.insert(
+                template_info.definition.name.to_owned().into(),
+                Value::Object(object_vals),
+            );
+            let context = LayeredContext {
+                overlay: &overlay,
+                base: base_context,
+            };
+            render_passes(template, parser, &context).map_err(|error| {
+                error
+                    .trace(format!("{}", template_info.debug_path.to_string_lossy()))
+                    .trace(format!(
+                        "context (template):{}",
+                        debug_context(&context.merged(), 0)
+                    ))
+                    .into()
+            })
         } else if let Some(content) = &self.content {
+            let parse_span = tracing::trace_span!("parse_template").entered();
             let template = parser.parse(content)?;
-            template
-                .render(&globals)
-                .and_then(|rendered| {
-                    // We now have a rendered string, but because of possible variables
-                    // in markdown, we actually need to render one more time
-                    parser.parse(&rendered)?.render(&globals)
-                })
-                .map_err(|error| {
-                    error
-                        .trace(format!(
-                            "{}",
-                            self.debug_path.as_ref().unwrap().to_string_lossy()
-                        ))
-                        .trace(format!("context (page):{}", debug_context(&globals, 0)))
-                        .into()
-                })
+            drop(parse_span);
+            let context = LayeredContext {
+                overlay: &overlay,
+                base: base_context,
+            };
+            render_passes(&template, parser, &context).map_err(|error| {
+                error
+                    .trace(format!(
+                        "{}",
+                        self.debug_path.as_ref().unwrap().to_string_lossy()
+                    ))
+                    .trace(format!(
+                        "context (page):{}",
+                        debug_context(&context.merged(), 0)
+                    ))
+                    .into()
+            })
         } else {
             panic!("Pages must have either a template or a path");
         }
@@ -489,14 +685,14 @@ here is a liquid variable: {{site_url}}
         };
         let objects_map = get_objects_map();
         let definition_map = get_definition_map();
+        let base_context = build_context(&objects_map, &definition_map, &field_config, &globals);
         let page = Page::new(
             "home".to_string(),
             page_content().to_string(),
             TemplateType::Default,
-            &globals,
             Path::new("objects/home.toml"),
         );
-        let rendered = page.render(&liquid_parser, &objects_map, &definition_map, &field_config)?;
+        let rendered = page.render(&liquid_parser, &base_context, &field_config)?;
         println!("rendered: {}", rendered);
         assert!(rendered.contains("name: home"), "filtered object");
         assert!(
@@ -542,16 +738,16 @@ here is a liquid variable: {{site_url}}
         let object = objects_map["artist"].into_iter().next().unwrap();
         println!("OBJ: {:#?}", object);
         let artist_def = artist_definition();
+        let base_context = build_context(&objects_map, &definition_map, &field_config, &globals);
         let page = Page::new_with_template(
             "tormenta-rey".to_string(),
             &artist_def,
             object,
             artist_template_content().to_string(),
             TemplateType::Default,
-            &globals,
             Path::new("objects/template.toml"),
         );
-        let rendered = page.render(&liquid_parser, &objects_map, &definition_map, &field_config)?;
+        let rendered = page.render(&liquid_parser, &base_context, &field_config)?;
         println!("rendered: {}", rendered);
         assert!(rendered.contains("name: Tormenta Rey"), "root field");
         assert!(

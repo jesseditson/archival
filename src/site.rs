@@ -7,7 +7,7 @@ use crate::{
     manifest::Manifest,
     object::{Object, ObjectEntry, Renderable, RenderedObject, RenderedObjectMap},
     object_definition::{ObjectDefinition, ObjectDefinitions},
-    page::{Page, RenderGlobals, TemplateType},
+    page::{build_context, Page, RenderGlobals, TemplateType},
     read_toml::read_toml,
     tags::layout,
     ArchivalError, BuildOptions, FieldConfig, FileSystemAPI, ObjectMap,
@@ -46,6 +46,8 @@ pub enum InvalidFileError {
 pub enum BuildError {
     #[error("template file {0} does not exist.")]
     MissingTemplate(String),
+    #[error("failed parsing template {0}:\n{1}")]
+    TemplateParseError(String, String),
     #[error("failed rendering object {0} to {1} template:\n{2}")]
     TemplateRenderError(String, String, String),
     #[error("page {0} failed rendering:\n{1}")]
@@ -543,6 +545,16 @@ impl Site {
             fs,
         )?;
 
+        // Build the shared render context once; it is identical for every
+        // page and converting objects to liquid values (including rendering
+        // markdown) is the expensive part of a render.
+        let base_context = build_context(
+            &all_objects,
+            &self.object_definitions,
+            &self.field_config,
+            &globals,
+        );
+
         // Render template pages
         for (name, object_def) in self.object_definitions.iter() {
             if let Some(template) = &object_def.template {
@@ -570,6 +582,25 @@ impl Site {
                 }
                 let template_str = template_r?;
                 if let Some(template_str) = template_str {
+                    // Parse each template once and share it across all of the
+                    // objects rendered with it.
+                    let parsed_template = match liquid_parser.parse(&template_str) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            let err = BuildError::TemplateParseError(
+                                template_path.display().to_string(),
+                                e.to_string(),
+                            )
+                            .into();
+                            if options.skip_failures {
+                                warn!("skipping error: {err}");
+                                eprintln!("skipping error: {err}");
+                                continue;
+                            } else {
+                                return Err(err);
+                            }
+                        }
+                    };
                     if let Some(t_objects) = all_objects.get(name) {
                         for object in t_objects.into_iter() {
                             #[cfg(feature = "verbose-logging")]
@@ -577,14 +608,12 @@ impl Site {
                             let result = Self::render_template_page(
                                 object,
                                 object_def,
-                                &template_str,
+                                &parsed_template,
                                 &template_path,
                                 build_dir,
-                                &self.object_definitions,
                                 &self.field_config,
-                                &all_objects,
+                                &base_context,
                                 fs,
-                                &globals,
                                 &liquid_parser,
                                 &self.build_cache,
                             )
@@ -643,11 +672,9 @@ impl Site {
                         page_name,
                         page_type,
                         build_dir,
-                        &self.object_definitions,
                         &self.field_config,
-                        &all_objects,
+                        &base_context,
                         fs,
-                        &globals,
                         &liquid_parser,
                         &self.build_cache,
                     )
@@ -679,34 +706,31 @@ impl Site {
         Ok(())
     }
 
-    #[instrument(skip(all_objects, fs, liquid_parser))]
+    #[instrument(skip(template, base_context, fs, liquid_parser))]
     #[allow(clippy::too_many_arguments)]
     fn render_template_page<T: FileSystemAPI>(
         object: &Object,
         object_def: &ObjectDefinition,
-        template_str: &String,
+        template: &liquid::Template,
         template_path: &PathBuf,
         build_dir: &PathBuf,
-        object_definitions: &ObjectDefinitions,
         field_config: &FieldConfig,
-        all_objects: &ObjectMap,
+        base_context: &liquid::Object,
         fs: &mut T,
-        globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
         build_cache: &RwLock<HashMap<PathBuf, u64>>,
     ) -> Result<(PathBuf, u64)> {
-        let page = Page::new_with_template(
+        let page = Page::new_with_parsed_template(
             object.filename.clone(),
             object_def,
             object,
-            template_str.to_owned(),
+            template,
             TemplateType::parse_path(&template_path.display().to_string())
                 .unwrap_or_default()
                 .1,
-            globals,
             template_path,
         );
-        let render_o = page.render(liquid_parser, all_objects, object_definitions, field_config);
+        let render_o = page.render(liquid_parser, base_context, field_config);
         if render_o.is_err() {
             warn!("failed rendering {}", object.filename);
         }
@@ -732,7 +756,7 @@ impl Site {
         Ok((build_path, hash))
     }
 
-    #[instrument(skip(all_objects, fs, liquid_parser))]
+    #[instrument(skip(base_context, fs, liquid_parser))]
     #[allow(clippy::too_many_arguments)]
     fn render_page<T: FileSystemAPI>(
         rel_path: &PathBuf,
@@ -740,11 +764,9 @@ impl Site {
         page_name: &str,
         page_type: TemplateType,
         build_dir: &PathBuf,
-        object_definitions: &ObjectDefinitions,
         field_config: &FieldConfig,
-        all_objects: &ObjectMap,
+        base_context: &liquid::Object,
         fs: &mut T,
-        globals: &RenderGlobals,
         liquid_parser: &liquid::Parser,
         build_cache: &RwLock<HashMap<PathBuf, u64>>,
     ) -> Result<(Option<PathBuf>, u64)> {
@@ -753,11 +775,9 @@ impl Site {
                 page_name.to_string(),
                 template_str,
                 TemplateType::Default,
-                globals,
                 file_path,
             );
-            let render_o =
-                page.render(liquid_parser, all_objects, object_definitions, field_config);
+            let render_o = page.render(liquid_parser, base_context, field_config);
             if render_o.is_err() {
                 warn!("failed rendering {}", file_path.display());
             }

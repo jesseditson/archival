@@ -104,23 +104,31 @@ pub fn watch(
     // parsed into memory once at load time; invalidate_file only clears caches
     // and never refreshes it. Track edits to it so we can reload the site.
     let mut object_definitions_changed = false;
+    // Static files are synced at startup, so rebuilds only need to re-sync
+    // them when a file inside the static dir actually changed.
+    let mut static_files_changed = false;
     term.write(init_message.as_bytes())?;
     if let Err(e) = initial_build {
         let bar = ProgressBar::new_spinner();
         bar.finish_with_message(format!("Initial build failed: {}", e));
     }
     loop {
-        match rx.try_recv() {
+        // Block (briefly) rather than spinning; the timeout keeps the change
+        // batching and quit checks below responsive.
+        match rx.recv_timeout(Duration::from_millis(50)) {
             Ok(path) => {
                 let changed_file = path.strip_prefix(&root_dir).unwrap();
                 if changed_file == site.manifest.object_definition_file {
                     object_definitions_changed = true;
                 }
+                if changed_file.starts_with(&site.manifest.static_dir) {
+                    static_files_changed = true;
+                }
                 site.invalidate_file(changed_file);
                 changed = true;
             }
-            Err(mpsc::TryRecvError::Empty) => {}
-            Err(mpsc::TryRecvError::Disconnected) => {
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
                 panic!("Build Channel Disconnected.")
             }
         }
@@ -150,6 +158,7 @@ pub fn watch(
             // rebuild picks up the latest definitions. On failure we keep the
             // previously loaded site so the dev server stays up.
             let mut reload_error = None;
+            let mut site_reloaded = false;
             if object_definitions_changed {
                 object_definitions_changed = false;
                 match Site::load(&fs, uploads_config.prefix) {
@@ -158,6 +167,7 @@ pub fn watch(
                             reloaded.manifest.uploads_url = Some(uploads_url.to_string());
                         }
                         site = reloaded;
+                        site_reloaded = true;
                     }
                     Err(e) => reload_error = Some(e),
                 }
@@ -165,7 +175,12 @@ pub fn watch(
             let output = if let Some(e) = reload_error {
                 format!("{} {}", style("Reload failed:").red(), style(e).red())
             } else {
-                site.sync_static_files(&mut fs).unwrap();
+                // Reloading the site clears its static file cache (and may
+                // change the static dir), so sync in that case too.
+                if static_files_changed || site_reloaded {
+                    static_files_changed = false;
+                    site.sync_static_files(&mut fs).unwrap();
+                }
                 if let Err(e) = site.build(&mut fs, BuildOptions::default()) {
                     format!("{} {}", style("Build failed:").red(), style(e).red())
                 } else {

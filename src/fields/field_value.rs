@@ -228,6 +228,28 @@ pub static MARKDOWN_OPTIONS: Lazy<ComrakOptions> = Lazy::new(|| {
     options
 });
 
+// Markdown fields are converted to html every time they are turned into a
+// liquid value, which happens at least once per build and, in long-lived
+// processes like the dev server, once per rebuild. Conversion output only
+// depends on the source, so memoize it. The cap just bounds memory in
+// processes that see many unique documents (e.g. editing sessions).
+const MARKDOWN_CACHE_MAX_ENTRIES: usize = 1024;
+static MARKDOWN_CACHE: Lazy<std::sync::RwLock<std::collections::HashMap<String, String>>> =
+    Lazy::new(|| std::sync::RwLock::new(std::collections::HashMap::new()));
+
+fn markdown_to_html_cached(source: &str) -> String {
+    if let Some(html) = MARKDOWN_CACHE.read().unwrap().get(source) {
+        return html.clone();
+    }
+    let html = markdown_to_html(source, &MARKDOWN_OPTIONS);
+    let mut cache = MARKDOWN_CACHE.write().unwrap();
+    if cache.len() >= MARKDOWN_CACHE_MAX_ENTRIES {
+        cache.clear();
+    }
+    cache.insert(source.to_owned(), html.clone());
+    html
+}
+
 impl FieldValue {
     // Note that this comparison just skips fields that cannot be compared and
     // returns None.
@@ -644,10 +666,7 @@ impl ValueView for FieldValue {
             FieldValue::Number(n) => Some(model::ScalarCow::new(*n)),
             // TODO: should be able to return a datetime value here
             FieldValue::Date(d) => Some(model::ScalarCow::new((*d).as_liquid_datetime())),
-            FieldValue::Markdown(s) => Some(model::ScalarCow::new(markdown_to_html(
-                s,
-                &MARKDOWN_OPTIONS,
-            ))),
+            FieldValue::Markdown(s) => Some(model::ScalarCow::new(markdown_to_html_cached(s))),
             FieldValue::Boolean(b) => Some(model::ScalarCow::new(*b)),
             FieldValue::Objects(_) => None,
             FieldValue::Oneof((_, v)) => v.as_scalar(),
