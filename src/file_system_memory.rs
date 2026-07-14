@@ -104,7 +104,10 @@ impl FileGraphNode {
 
 #[derive(Default, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MemoryFileSystem {
-    fs: BTreeMap<String, Vec<u8>>,
+    // File contents are Arc'd so cloning the filesystem is cheap (editors
+    // clone it to derive reversible changes and to snapshot for caching).
+    // Writes always replace the whole Arc, so clones never observe mutation.
+    fs: BTreeMap<String, std::sync::Arc<Vec<u8>>>,
     tree: BTreeMap<String, FileGraphNode>,
 }
 impl Debug for MemoryFileSystem {
@@ -263,8 +266,10 @@ impl MemoryFileSystem {
     fn write_file(&mut self, path: impl AsRef<Path>, data: Vec<u8>) {
         #[cfg(feature = "verbose-logging")]
         debug!("write: {}", path.as_ref().display());
-        self.fs
-            .insert(path.as_ref().to_string_lossy().to_lowercase(), data);
+        self.fs.insert(
+            path.as_ref().to_string_lossy().to_lowercase(),
+            std::sync::Arc::new(data),
+        );
         self.write_to_graph(path, true);
     }
 

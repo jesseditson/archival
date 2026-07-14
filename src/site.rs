@@ -54,6 +54,29 @@ pub enum BuildError {
     PageRenderError(String, String),
 }
 
+/// Parsing liquid is expensive (a fixed cost to compile partials into a
+/// parser, plus a per-template parse), so parsers and parsed templates are
+/// cached across builds. Both caches are keyed by content hashes so they are
+/// self-invalidating: when any partial or layout changes the parser (and with
+/// it every cached template, which may embed partials) is rebuilt, and when a
+/// template changes only that template is re-parsed.
+struct ParserCache {
+    partials_hash: u64,
+    parser: std::sync::Arc<liquid::Parser>,
+    templates: HashMap<u64, std::sync::Arc<liquid::Template>>,
+}
+
+impl std::fmt::Debug for ParserCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ParserCache")
+            .field("partials_hash", &self.partials_hash)
+            .field("templates", &self.templates.len())
+            .finish()
+    }
+}
+
+const TEMPLATE_CACHE_MAX_ENTRIES: usize = 256;
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Site {
     pub object_definitions: ObjectDefinitions,
@@ -68,6 +91,16 @@ pub struct Site {
     build_cache: RwLock<HashMap<PathBuf, u64>>,
     #[serde(skip)]
     cache_generation: AtomicU64,
+    #[serde(skip)]
+    parser_cache: RwLock<Option<ParserCache>>,
+}
+
+// Site is shared across threads (e.g. the dev server); keep it Send + Sync
+// even as cached liquid types are added.
+#[allow(dead_code)]
+fn _assert_site_send_sync() {
+    fn assert<T: Send + Sync>() {}
+    assert::<Site>();
 }
 
 impl std::fmt::Display for Site {
@@ -145,7 +178,68 @@ impl Site {
             static_file_cache: RwLock::new(HashMap::new()),
             build_cache: RwLock::new(HashMap::new()),
             cache_generation: AtomicU64::new(0),
+            parser_cache: RwLock::new(None),
         })
+    }
+
+    /// Returns a parser for the site's current partials, reusing the cached
+    /// one when no partial or layout has changed since it was built.
+    fn get_or_build_parser<T: FileSystemAPI>(
+        &self,
+        pages_dir: &Path,
+        layout_dir: Option<&Path>,
+        fs: &T,
+    ) -> Result<std::sync::Arc<liquid::Parser>> {
+        let _span = trace_span!("get_or_build_parser").entered();
+        let (source, partials_hash) =
+            liquid_parser::partials_hash(Some(pages_dir), layout_dir, fs)?;
+        if let Some(cache) = self.parser_cache.read().unwrap().as_ref() {
+            if cache.partials_hash == partials_hash {
+                return Ok(cache.parser.clone());
+            }
+        }
+        let parser = std::sync::Arc::new(liquid_parser::build_with_partials(source)?);
+        *self.parser_cache.write().unwrap() = Some(ParserCache {
+            partials_hash,
+            parser: parser.clone(),
+            templates: HashMap::new(),
+        });
+        Ok(parser)
+    }
+
+    /// Parses `source` with `parser`, reusing a previously parsed template for
+    /// identical source. The cache lives inside ParserCache, so it is cleared
+    /// whenever the parser is rebuilt (cached templates may embed partials).
+    fn get_or_parse_template(
+        &self,
+        parser: &liquid::Parser,
+        source: &str,
+    ) -> Result<std::sync::Arc<liquid::Template>, liquid_core::Error> {
+        let mut hasher = SeaHasher::new();
+        hasher.write(source.as_bytes());
+        let key = hasher.finish();
+        if let Some(cache) = self.parser_cache.read().unwrap().as_ref() {
+            if let Some(template) = cache.templates.get(&key) {
+                return Ok(template.clone());
+            }
+        }
+        let _span = trace_span!("parse_template").entered();
+        let template = std::sync::Arc::new(parser.parse(source)?);
+        if let Some(cache) = self.parser_cache.write().unwrap().as_mut() {
+            if cache.templates.len() >= TEMPLATE_CACHE_MAX_ENTRIES {
+                cache.templates.clear();
+            }
+            cache.templates.insert(key, template.clone());
+        }
+        Ok(template)
+    }
+
+    /// A counter that increments whenever object content is invalidated
+    /// (edited, added, deleted, or externally changed). Callers that cache
+    /// state derived from objects can compare generations to skip
+    /// recomputation when nothing has changed.
+    pub fn objects_generation(&self) -> u64 {
+        self.cache_generation.load(atomic::Ordering::Relaxed)
     }
 
     pub fn build_id(&self) -> u64 {
@@ -535,8 +629,8 @@ impl Site {
         //     }
         // }
 
-        let liquid_parser = liquid_parser::get(
-            Some(pages_dir),
+        let liquid_parser = self.get_or_build_parser(
+            pages_dir,
             if fs.exists(layout_dir)? {
                 Some(layout_dir)
             } else {
@@ -583,24 +677,26 @@ impl Site {
                 let template_str = template_r?;
                 if let Some(template_str) = template_str {
                     // Parse each template once and share it across all of the
-                    // objects rendered with it.
-                    let parsed_template = match liquid_parser.parse(&template_str) {
-                        Ok(t) => t,
-                        Err(e) => {
-                            let err = BuildError::TemplateParseError(
-                                template_path.display().to_string(),
-                                e.to_string(),
-                            )
-                            .into();
-                            if options.skip_failures {
-                                warn!("skipping error: {err}");
-                                eprintln!("skipping error: {err}");
-                                continue;
-                            } else {
-                                return Err(err);
+                    // objects rendered with it (and across builds, via the
+                    // template cache).
+                    let parsed_template =
+                        match self.get_or_parse_template(&liquid_parser, &template_str) {
+                            Ok(t) => t,
+                            Err(e) => {
+                                let err = BuildError::TemplateParseError(
+                                    template_path.display().to_string(),
+                                    e.to_string(),
+                                )
+                                .into();
+                                if options.skip_failures {
+                                    warn!("skipping error: {err}");
+                                    eprintln!("skipping error: {err}");
+                                    continue;
+                                } else {
+                                    return Err(err);
+                                }
                             }
-                        }
-                    };
+                        };
                     if let Some(t_objects) = all_objects.get(name) {
                         for object in t_objects.into_iter() {
                             #[cfg(feature = "verbose-logging")]
@@ -666,21 +762,20 @@ impl Site {
                         file_path.display(),
                         page_type.extension()
                     );
-                    let result = Self::render_page(
-                        &rel_path,
-                        &file_path,
-                        page_name,
-                        page_type,
-                        build_dir,
-                        &self.field_config,
-                        &base_context,
-                        fs,
-                        &liquid_parser,
-                        &self.build_cache,
-                    )
-                    .map_err(|error| {
-                        BuildError::PageRenderError(page_name.to_string(), error.to_string())
-                    });
+                    let result = self
+                        .render_page(
+                            &rel_path,
+                            &file_path,
+                            page_name,
+                            page_type,
+                            build_dir,
+                            &base_context,
+                            fs,
+                            &liquid_parser,
+                        )
+                        .map_err(|error| {
+                            BuildError::PageRenderError(page_name.to_string(), error.to_string())
+                        });
                     if let Err(e) = &result {
                         warn!("{e}");
                         eprintln!("{e}");
@@ -756,24 +851,26 @@ impl Site {
         Ok((build_path, hash))
     }
 
-    #[instrument(skip(base_context, fs, liquid_parser))]
+    #[instrument(skip(self, base_context, fs, liquid_parser))]
     #[allow(clippy::too_many_arguments)]
     fn render_page<T: FileSystemAPI>(
+        &self,
         rel_path: &PathBuf,
         file_path: &PathBuf,
         page_name: &str,
         page_type: TemplateType,
         build_dir: &PathBuf,
-        field_config: &FieldConfig,
         base_context: &liquid::Object,
         fs: &mut T,
         liquid_parser: &liquid::Parser,
-        build_cache: &RwLock<HashMap<PathBuf, u64>>,
     ) -> Result<(Option<PathBuf>, u64)> {
+        let field_config = &self.field_config;
+        let build_cache = &self.build_cache;
         if let Some(template_str) = fs.read_to_string(file_path)? {
-            let page = Page::new(
+            let template = self.get_or_parse_template(liquid_parser, &template_str)?;
+            let page = Page::new_with_parsed_content(
                 page_name.to_string(),
-                template_str,
+                &template,
                 TemplateType::Default,
                 file_path,
             );

@@ -265,6 +265,10 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
     pub fn build_id(&self) -> u64 {
         self.site.build_id()
     }
+    /// See [Site::objects_generation].
+    pub fn objects_generation(&self) -> u64 {
+        self.site.objects_generation()
+    }
     pub fn fs_id(&self) -> Result<u64> {
         self.fs_mutex.with_fs(|fs| self.fs_id_for_fs(fs))
     }

@@ -119,6 +119,9 @@ impl RenderGlobals<'_> {
 pub struct Page<'a> {
     name: String,
     content: Option<String>,
+    /// A pre-parsed template for `content`. When set, `content` is not parsed
+    /// again; builds use this to share parsed page templates across builds.
+    content_parsed: Option<&'a liquid::Template>,
     template: Option<PageTemplate<'a>>,
     file_type: TemplateType,
     pub debug_path: Option<PathBuf>,
@@ -358,6 +361,7 @@ impl<'a> Page<'a> {
         Page {
             name,
             content: None,
+            content_parsed: None,
             template: Some(PageTemplate {
                 definition,
                 object,
@@ -381,6 +385,7 @@ impl<'a> Page<'a> {
         Page {
             name,
             content: None,
+            content_parsed: None,
             template: Some(PageTemplate {
                 definition,
                 object,
@@ -393,6 +398,10 @@ impl<'a> Page<'a> {
             debug_path: None,
         }
     }
+    // Builds use `new_with_parsed_content` to share parsed templates across
+    // builds; this un-parsed variant is kept for callers (and tests) that
+    // render a single page.
+    #[allow(dead_code)]
     pub fn new(
         name: String,
         content: String,
@@ -402,6 +411,22 @@ impl<'a> Page<'a> {
         Page {
             name,
             content: Some(content),
+            content_parsed: None,
+            template: None,
+            file_type,
+            debug_path: Some(debug_path.to_path_buf()),
+        }
+    }
+    pub fn new_with_parsed_content(
+        name: String,
+        parsed: &'a liquid::Template,
+        file_type: TemplateType,
+        debug_path: &Path,
+    ) -> Page<'a> {
+        Page {
+            name,
+            content: None,
+            content_parsed: Some(parsed),
             template: None,
             file_type,
             debug_path: Some(debug_path.to_path_buf()),
@@ -455,15 +480,21 @@ impl<'a> Page<'a> {
                     ))
                     .into()
             })
-        } else if let Some(content) = &self.content {
-            let parse_span = tracing::trace_span!("parse_template").entered();
-            let template = parser.parse(content)?;
-            drop(parse_span);
+        } else if self.content_parsed.is_some() || self.content.is_some() {
+            let parsed;
+            let template = match self.content_parsed {
+                Some(t) => t,
+                None => {
+                    let _span = tracing::trace_span!("parse_template").entered();
+                    parsed = parser.parse(self.content.as_ref().unwrap())?;
+                    &parsed
+                }
+            };
             let context = LayeredContext {
                 overlay: &overlay,
                 base: base_context,
             };
-            render_passes(&template, parser, &context).map_err(|error| {
+            render_passes(template, parser, &context).map_err(|error| {
                 error
                     .trace(format!(
                         "{}",

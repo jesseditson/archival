@@ -11,7 +11,7 @@ use tracing::error;
 pub static PARTIAL_FILE_NAME_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^_(.+)\.liquid").unwrap());
 
 #[derive(Default, Debug, Clone)]
-struct ArchivalPartialSource {
+pub(crate) struct ArchivalPartialSource {
     partials: HashMap<String, String>,
 }
 
@@ -68,6 +68,25 @@ impl ArchivalPartialSource {
     }
 }
 
+impl ArchivalPartialSource {
+    /// A stable hash of all partial names and contents. Used to decide whether
+    /// a cached parser (whose compiled partials embed these sources) is still
+    /// valid.
+    pub fn source_hash(&self) -> u64 {
+        use std::hash::Hasher;
+        let mut keys: Vec<&String> = self.partials.keys().collect();
+        keys.sort();
+        let mut hasher = seahash::SeaHasher::new();
+        for key in keys {
+            hasher.write(key.as_bytes());
+            hasher.write(&[0]);
+            hasher.write(self.partials[key].as_bytes());
+            hasher.write(&[0]);
+        }
+        hasher.finish()
+    }
+}
+
 impl PartialSource for ArchivalPartialSource {
     fn contains(&self, name: &str) -> bool {
         self.partials.contains_key(name)
@@ -86,12 +105,34 @@ impl PartialSource for ArchivalPartialSource {
     }
 }
 
+// Builds cache parsers via Site (see partials_hash/build_with_partials); this
+// one-shot constructor is kept for callers (and tests) that need a standalone
+// parser.
+#[allow(dead_code)]
 pub fn get(
     pages_path: Option<&Path>,
     layout_path: Option<&Path>,
     fs: &impl FileSystemAPI,
 ) -> Result<liquid::Parser> {
-    let partials = EagerCompiler::new(ArchivalPartialSource::new(pages_path, layout_path, fs)?);
+    let source = ArchivalPartialSource::new(pages_path, layout_path, fs)?;
+    build_with_partials(source)
+}
+
+/// Reads all partial/layout sources and returns their combined hash. Reading
+/// and hashing sources is much cheaper than compiling them, so builds use this
+/// to decide whether a cached parser can be reused.
+pub(crate) fn partials_hash(
+    pages_path: Option<&Path>,
+    layout_path: Option<&Path>,
+    fs: &impl FileSystemAPI,
+) -> Result<(ArchivalPartialSource, u64)> {
+    let source = ArchivalPartialSource::new(pages_path, layout_path, fs)?;
+    let hash = source.source_hash();
+    Ok((source, hash))
+}
+
+pub(crate) fn build_with_partials(source: ArchivalPartialSource) -> Result<liquid::Parser> {
+    let partials = EagerCompiler::new(source);
     let parser = liquid::ParserBuilder::with_stdlib()
         .tag(LayoutTag)
         .partials(partials);
