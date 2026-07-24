@@ -637,8 +637,14 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
                 &self.site.manifest.editor_types,
             )?;
         }
+        // Seed the new child from its definition so it carries the same field
+        // scaffolding (notably empty child collections) as objects created any
+        // other way - `from_def` does this via `empty_object`. Without it a new
+        // child is a bare map with every value undefined.
+        let child_def = event.path.get_definition(def)?;
         self.write_object(&event.object, &event.filename, |existing| {
             added_idx = event.path.add_child(existing, event.index, |child| {
+                *child = child_def.empty_object();
                 for value in event.values {
                     value.path.set_in_tree(child, Some(value.value))?;
                 }
