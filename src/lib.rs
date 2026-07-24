@@ -17,6 +17,7 @@ mod site;
 mod tags;
 #[cfg(test)]
 mod test_utils;
+mod typescript_defs;
 mod util;
 mod value_path;
 use anyhow::Result;
@@ -71,6 +72,7 @@ pub use object::{ObjectMap, RenderedObject, RenderedObjectMap, ValuePath};
 pub use object_definition::{FieldsMap, ObjectDefinition, ObjectDefinitions};
 #[cfg(feature = "proto")]
 pub use proto::archival_proto;
+pub use typescript_defs::generate_typescript_defs;
 
 pub type ArchivalBuildId = u64;
 

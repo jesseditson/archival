@@ -80,6 +80,35 @@ mod binary_tests {
         ));
         Ok(())
     }
+    #[test]
+    #[traced_test]
+    fn types_writes_a_declaration_file() -> anyhow::Result<()> {
+        let out = "tests/fixtures/website/objects.d.ts";
+        _ = fs::remove_file(out);
+        assert!(matches!(
+            archival::binary::binary(
+                get_args(vec![
+                    "types",
+                    "-o",
+                    "objects.d.ts",
+                    "tests/fixtures/website"
+                ]),
+                None
+            )?,
+            ExitStatus::Ok
+        ));
+        let defs = fs::read_to_string(out)?;
+        assert!(
+            defs.contains("export interface ArchivalObjects {"),
+            "{}",
+            defs
+        );
+        assert!(defs.contains("section: SectionObject[];"), "{}", defs);
+        assert!(defs.contains("body: string | null;"), "{}", defs);
+        _ = fs::remove_file(out);
+        Ok(())
+    }
+
     static SUBPAGE_CONTENT: &str = r#"
         name="HI"
         "#;

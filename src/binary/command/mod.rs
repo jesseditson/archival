@@ -18,6 +18,7 @@ mod proto;
 mod run;
 #[cfg(feature = "json-schema")]
 mod schemas;
+mod types;
 mod upload;
 
 pub enum ExitStatus {
@@ -110,6 +111,7 @@ pub const COMMANDS: &[&'static dyn BinaryCommand] = &[
     &upload::Command {},
     &import::Command {},
     &objects::Command {},
+    &types::Command {},
     #[cfg(feature = "json-schema")]
     &schemas::Command {},
     #[cfg(feature = "proto")]
