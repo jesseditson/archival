@@ -562,6 +562,10 @@ here is a liquid variable: {{site_url}}
                 FieldValue::String("Tormenta Rey".to_string()),
             ),
             (
+                "api_key".to_string(),
+                FieldValue::Secret("hunter2".to_string()),
+            ),
+            (
                 "meta".to_string(),
                 FieldValue::Meta(Meta(MetaMap::from([
                     ("number".to_string(), MetaValue::Number(42.26)),
@@ -616,7 +620,10 @@ here is a liquid variable: {{site_url}}
     }
 
     fn artist_definition() -> ObjectDefinition {
-        let artist_def_fields = FieldsMap::from([("name".to_string(), FieldType::String)]);
+        let artist_def_fields = FieldsMap::from([
+            ("name".to_string(), FieldType::String),
+            ("api_key".to_string(), FieldType::Secret),
+        ]);
         let tour_dates_fields = FieldsMap::from([
             ("date".to_string(), FieldType::Date),
             ("ticket_link".to_string(), FieldType::String),
@@ -752,6 +759,10 @@ here is a liquid variable: {{site_url}}
             rendered.contains("here is a liquid variable: https://foo.bar"),
             "liquid in markdown is parsed"
         );
+        assert!(
+            !rendered.contains("hunter2"),
+            "secrets are not present in page contexts"
+        );
         Ok(())
     }
     #[test]
@@ -789,6 +800,42 @@ here is a liquid variable: {{site_url}}
         assert!(rendered.contains("deep: HELLO!"), "child deep field");
         assert!(rendered.contains("date: Dec 22, 22"), "child date field");
         assert!(rendered.contains("link: foo.com"), "child string field");
+        assert!(
+            !rendered.contains("hunter2"),
+            "secrets are not present in template contexts"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn secret_fields_cannot_be_used_in_templates() -> Result<()> {
+        let globals = RenderGlobals {
+            site_url: "https://foo.bar".into(),
+        };
+        let field_config = FieldConfig::default();
+        let definition_map = get_definition_map();
+        let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
+        let objects_map = get_objects_map();
+        let object = objects_map["artist"].into_iter().next().unwrap();
+        let artist_def = artist_definition();
+        let base_context = build_context(&objects_map, &definition_map, &field_config, &globals);
+        let page = Page::new_with_template(
+            "tormenta-rey".to_string(),
+            &artist_def,
+            object,
+            "api_key: {{artist.api_key}}".to_string(),
+            TemplateType::Default,
+            Path::new("objects/template.toml"),
+        );
+        // Secrets are omitted from contexts entirely, so referencing one is an
+        // unknown index rather than an empty value.
+        let err = page
+            .render(&liquid_parser, &base_context, &field_config)
+            .expect_err("rendering a secret should fail");
+        assert!(
+            !format!("{:?}", err).contains("hunter2"),
+            "the error does not leak the value"
+        );
         Ok(())
     }
 }

@@ -189,6 +189,7 @@ impl From<archival_proto::FieldValue> for FieldValue {
     fn from(proto: archival_proto::FieldValue) -> Self {
         match proto.value {
             Some(archival_proto::field_value::Value::String(s)) => FieldValue::String(s),
+            Some(archival_proto::field_value::Value::Secret(s)) => FieldValue::Secret(s),
             Some(archival_proto::field_value::Value::Enum(e)) => FieldValue::Enum(e),
             Some(archival_proto::field_value::Value::Markdown(m)) => FieldValue::Markdown(m),
             Some(archival_proto::field_value::Value::Number(n)) => FieldValue::Number(n),
@@ -223,6 +224,7 @@ impl From<FieldValue> for archival_proto::FieldValue {
     fn from(fv: FieldValue) -> Self {
         let value = match fv {
             FieldValue::String(s) => archival_proto::field_value::Value::String(s),
+            FieldValue::Secret(s) => archival_proto::field_value::Value::Secret(s),
             FieldValue::Enum(e) => archival_proto::field_value::Value::Enum(e),
             FieldValue::Markdown(m) => archival_proto::field_value::Value::Markdown(m),
             FieldValue::Number(n) => archival_proto::field_value::Value::Number(n),
@@ -446,6 +448,7 @@ impl From<archival_proto::FieldType> for FieldType {
     fn from(proto: archival_proto::FieldType) -> Self {
         match proto.r#type {
             Some(archival_proto::field_type::Type::String(())) => FieldType::String,
+            Some(archival_proto::field_type::Type::Secret(())) => FieldType::Secret,
             Some(archival_proto::field_type::Type::Number(())) => FieldType::Number,
             Some(archival_proto::field_type::Type::Date(())) => FieldType::Date,
             Some(archival_proto::field_type::Type::Enum(values)) => FieldType::Enum(values.values),
@@ -511,6 +514,7 @@ impl From<FieldType> for archival_proto::FieldType {
         use archival_proto::field_type::Type;
         let r#type = match ft {
             FieldType::String => Type::String(()),
+            FieldType::Secret => Type::Secret(()),
             FieldType::Number => Type::Number(()),
             FieldType::Date => Type::Date(()),
             FieldType::Enum(vals) => Type::Enum(archival_proto::EnumFieldType { values: vals }),

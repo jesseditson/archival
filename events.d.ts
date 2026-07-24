@@ -36,6 +36,13 @@ export type Meta = Record<string, MetaValue>;
 export type FieldValue = ({
     "String": string;
 } | {
+
+    /**
+     * A string that is never exposed to templates. Read it from rust with
+     * [`FieldValue::as_secret`].
+     */
+    "Secret": string;
+} | {
     "Enum": string;
 } | {
     "Markdown": string;

@@ -113,6 +113,7 @@ macro_rules! compare_values {
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum RenderedFieldValue {
     String(String),
+    Secret(String),
     Enum(String),
     Markdown(String),
     Number(f64),
@@ -149,6 +150,9 @@ impl Hash for RenderedFieldValue {
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldValue {
     String(String),
+    /// A string that is never exposed to templates. Read it from rust with
+    /// [`FieldValue::as_secret`].
+    Secret(String),
     Enum(String),
     Markdown(String),
     Number(f64),
@@ -184,6 +188,7 @@ impl Renderable for FieldValue {
     fn rendered(self, field_config: &FieldConfig) -> Self::Output {
         match self {
             FieldValue::String(s) => RenderedFieldValue::String(s),
+            FieldValue::Secret(s) => RenderedFieldValue::Secret(s),
             FieldValue::Enum(e) => RenderedFieldValue::Enum(e),
             FieldValue::Markdown(m) => RenderedFieldValue::Markdown(m),
             FieldValue::Number(n) => RenderedFieldValue::Number(n),
@@ -285,9 +290,20 @@ impl FieldValue {
         }
     }
 
+    /// Secret values are stripped from template contexts, so this is the only
+    /// way to read one.
+    pub fn as_secret(&self) -> Option<&str> {
+        match self {
+            FieldValue::Secret(s) => Some(s),
+            FieldValue::Oneof((_, v)) => v.as_ref().as_ref().and_then(|v| v.as_secret()),
+            _ => None,
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         match self {
             FieldValue::String(s) => s.trim().is_empty(),
+            FieldValue::Secret(s) => s.trim().is_empty(),
             FieldValue::Enum(_) => false,
             FieldValue::Markdown(m) => m.trim().is_empty(),
             FieldValue::Number(_) => false,
@@ -337,7 +353,13 @@ impl FieldValue {
                             }
                         }
                         ManifestEditorTypeValidator::Value(v) => {
-                            if !v.validate(&self.to_string()) {
+                            // Secrets are redacted by Display, so validate
+                            // against the actual value.
+                            let value = self
+                                .as_secret()
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| self.to_string());
+                            if !v.validate(&value) {
                                 return Err(FieldValueValidationError::FailedValidation(
                                     self.to_string(),
                                     path.clone(),
@@ -382,6 +404,13 @@ impl FieldValue {
             }
             Self::String(_) => {
                 if !matches!(field_type, FieldType::String) {
+                    field_mismatch()
+                } else {
+                    Ok(())
+                }
+            }
+            Self::Secret(_) => {
+                if !matches!(field_type, FieldType::Secret) {
                     field_mismatch()
                 } else {
                     Ok(())
@@ -566,6 +595,7 @@ impl From<&FieldValue> for Option<toml::Value> {
     fn from(value: &FieldValue) -> Self {
         match value {
             FieldValue::String(v) => Some(toml::Value::String(v.to_owned())),
+            FieldValue::Secret(v) => Some(toml::Value::String(v.to_owned())),
             FieldValue::Enum(v) => Some(toml::Value::String(v.to_owned())),
             FieldValue::Markdown(v) => Some(toml::Value::String(v.to_owned())),
             FieldValue::Number(n) => Some(toml::Value::Float(*n)),
@@ -633,6 +663,7 @@ impl ValueView for FieldValue {
     fn type_name(&self) -> &'static str {
         match self {
             FieldValue::String(_) => "string",
+            FieldValue::Secret(_) => "secret",
             FieldValue::Enum(_) => "enum",
             FieldValue::Markdown(_) => "markdown",
             FieldValue::Number(_) => "number",
@@ -662,6 +693,8 @@ impl ValueView for FieldValue {
     fn as_scalar(&self) -> Option<model::ScalarCow<'_>> {
         match self {
             FieldValue::String(s) => Some(model::ScalarCow::new(s)),
+            // Secrets never resolve to a value in liquid.
+            FieldValue::Secret(_) => None,
             FieldValue::Enum(s) => Some(model::ScalarCow::new(s)),
             FieldValue::Number(n) => Some(model::ScalarCow::new(*n)),
             // TODO: should be able to return a datetime value here
@@ -691,6 +724,7 @@ impl ValueView for FieldValue {
     fn to_value(&self) -> liquid::model::Value {
         match self {
             FieldValue::String(_) => self.as_scalar().to_value(),
+            FieldValue::Secret(_) => liquid::model::Value::Nil,
             FieldValue::Enum(_) => self.as_scalar().to_value(),
             FieldValue::Markdown(_) => self.as_scalar().to_value(),
             FieldValue::Number(_) => self.as_scalar().to_value(),
@@ -719,6 +753,7 @@ impl FieldValue {
             // Defaults
             let default_val = match field_type {
                 FieldType::String => Ok(FieldValue::String(value.clone())),
+                FieldType::Secret => Ok(FieldValue::Secret(value.clone())),
                 FieldType::Markdown => Ok(FieldValue::Markdown(value.clone())),
                 FieldType::Number => Ok(FieldValue::Number(0.0)),
                 FieldType::Boolean => Ok(FieldValue::Boolean(false)),
@@ -730,6 +765,7 @@ impl FieldValue {
         }
         match field_type {
             FieldType::String => Ok(FieldValue::String(value)),
+            FieldType::Secret => Ok(FieldValue::Secret(value)),
             FieldType::Enum(valid_values) => {
                 if !valid_values.contains(&value) {
                     Err(InvalidFieldError::EnumMismatch {
@@ -777,14 +813,23 @@ impl FieldValue {
         parent_path: &ValuePath,
         object_definition: &ObjectDefinition,
     ) -> Result<Option<Self>> {
+        // Aliases are just their underlying type as far as values go.
+        let field_type = match field_type {
+            FieldType::Alias(a) => &a.0,
+            t => t,
+        };
         match value {
             serde_json::Value::String(s) => Ok(Some(match field_type {
                 FieldType::Markdown => FieldValue::Markdown(s.to_string()),
+                FieldType::Secret => FieldValue::Secret(s.to_string()),
                 _ => FieldValue::String(s.to_string()),
             })),
             serde_json::Value::Bool(b) => Ok(Some(FieldValue::Boolean(*b))),
             serde_json::Value::Number(n) => Ok(Some(FieldValue::Number(n.as_f64().unwrap()))),
-            serde_json::Value::Null => Ok(Some(FieldValue::String("".into()))),
+            serde_json::Value::Null => Ok(Some(match field_type {
+                FieldType::Secret => FieldValue::Secret("".into()),
+                _ => FieldValue::String("".into()),
+            })),
             serde_json::Value::Object(o) => match field_type {
                 FieldType::Oneof(options) => {
                     if let (Some(serde_json::Value::String(typ)), val) =
@@ -889,6 +934,16 @@ impl FieldValue {
     pub fn from_toml(key: &String, field_type: &FieldType, value: &Value) -> Result<FieldValue> {
         match field_type {
             FieldType::String => Ok(FieldValue::String(
+                value
+                    .as_str()
+                    .ok_or_else(|| InvalidFieldError::TypeMismatch {
+                        field: key.to_owned(),
+                        field_type: field_type.to_string(),
+                        value: value.to_string(),
+                    })?
+                    .to_string(),
+            )),
+            FieldType::Secret => Ok(FieldValue::Secret(
                 value
                     .as_str()
                     .ok_or_else(|| InvalidFieldError::TypeMismatch {
@@ -1057,9 +1112,12 @@ impl FieldValue {
         }
     }
 
+    // Note that this is the string used to render a value (via Display and
+    // ValueView), so secrets are redacted here - use `as_secret` to read them.
     fn as_string(&self, config: Option<&FieldConfig>) -> String {
         match self {
             FieldValue::String(s) => s.clone(),
+            FieldValue::Secret(_) => String::new(),
             FieldValue::Enum(s) => s.clone(),
             FieldValue::Markdown(n) => n.clone(),
             FieldValue::Number(n) => n.to_string(),

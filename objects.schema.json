@@ -18,7 +18,8 @@
             "video",
             "audio",
             "upload",
-            "meta"
+            "meta",
+            "secret"
           ]
         },
         {

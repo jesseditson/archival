@@ -82,7 +82,8 @@
             "video",
             "audio",
             "upload",
-            "meta"
+            "meta",
+            "secret"
           ],
           "type": "string"
         },

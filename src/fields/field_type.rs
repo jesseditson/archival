@@ -90,6 +90,9 @@ pub struct OneofOption {
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub enum FieldType {
     String,
+    /// A string that is never exposed to templates - it is stripped from page
+    /// contexts and can only be read from rust.
+    Secret,
     Number,
     Date,
     Enum(Vec<String>),
@@ -111,6 +114,7 @@ impl FieldType {
     pub fn as_str<'a>(&'a self) -> Cow<'a, str> {
         match self {
             Self::String => "string".into(),
+            Self::Secret => "secret".into(),
             Self::Number => "number".into(),
             Self::Enum(v) => format!("[{}]", v.join(",")).into(),
             Self::Date => "date".into(),
@@ -131,12 +135,23 @@ impl FieldType {
             Self::Alias(a) => a.0.as_str(),
         }
     }
+    /// Secret fields are never written into page contexts, so anything that
+    /// builds a template context must check this (following aliases) before
+    /// exposing a value.
+    pub fn is_secret(&self) -> bool {
+        match self {
+            Self::Secret => true,
+            Self::Alias(a) => a.0.is_secret(),
+            _ => false,
+        }
+    }
     pub fn from_str(
         string: &str,
         editor_types: &EditorTypes,
     ) -> Result<FieldType, InvalidFieldError> {
         match string {
             "string" => Ok(FieldType::String),
+            "secret" => Ok(FieldType::Secret),
             // Note that enums are only supported via direct instantiation
             "number" => Ok(FieldType::Number),
             "date" => Ok(FieldType::Date),
@@ -261,6 +276,7 @@ impl FieldType {
                         "type".into(),
                         match self {
                             Self::String => "string".into(),
+                            Self::Secret => "string".into(),
                             Self::Number => "number".into(),
                             Self::Markdown => "string".into(),
                             Self::Boolean => "boolean".into(),
