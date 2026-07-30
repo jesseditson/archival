@@ -145,6 +145,15 @@ impl FieldType {
             _ => false,
         }
     }
+    /// The underlying built-in type of this field, following aliases (which may
+    /// themselves alias other editor types).
+    pub fn base_type(&self) -> &FieldType {
+        let mut field_type = self;
+        while let Self::Alias(a) = field_type {
+            field_type = &a.0;
+        }
+        field_type
+    }
     pub fn from_str(
         string: &str,
         editor_types: &EditorTypes,

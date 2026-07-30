@@ -749,6 +749,8 @@ impl FieldValue {
         field_type: &FieldType,
         value: String,
     ) -> Result<FieldValue, InvalidFieldError> {
+        // Aliases are just their underlying type as far as values go.
+        let field_type = field_type.base_type();
         if value.is_empty() {
             // Defaults
             let default_val = match field_type {
@@ -1763,5 +1765,69 @@ mod validate_tests {
             .validate(&path, post_def, &EditorTypes::new())
             .unwrap_err();
         assert!(matches!(err, FieldValueValidationError::TypeMismatch(_, p, _) if p == path));
+    }
+}
+
+#[cfg(test)]
+mod from_string_alias_tests {
+    use super::*;
+    use crate::manifest::Manifest;
+    use std::path::Path;
+
+    fn editor_types() -> EditorTypes {
+        Manifest::from_string(
+            Path::new(""),
+            r#"
+[editor_types.slug]
+type = "string"
+validate = ['[a-z-]+']
+
+[editor_types.short_slug]
+type = "slug"
+
+[editor_types.day]
+type = "date"
+"#
+            .to_string(),
+            None,
+        )
+        .unwrap()
+        .editor_types
+    }
+
+    #[test]
+    fn aliased_types_are_parsed_as_their_underlying_type() {
+        let types = editor_types();
+        let slug = FieldType::from_str("slug", &types).unwrap();
+        assert_eq!(
+            FieldValue::from_string(&"name".to_string(), &slug, "a-slug".to_string()).unwrap(),
+            FieldValue::String("a-slug".to_string())
+        );
+        let day = FieldType::from_str("day", &types).unwrap();
+        assert!(matches!(
+            FieldValue::from_string(&"when".to_string(), &day, "01/21/1987".to_string()).unwrap(),
+            FieldValue::Date(_)
+        ));
+    }
+
+    #[test]
+    fn aliases_of_aliases_are_parsed_as_their_base_type() {
+        let types = editor_types();
+        let short_slug = FieldType::from_str("short_slug", &types).unwrap();
+        assert_eq!(
+            FieldValue::from_string(&"name".to_string(), &short_slug, "a-slug".to_string())
+                .unwrap(),
+            FieldValue::String("a-slug".to_string())
+        );
+    }
+
+    #[test]
+    fn aliased_types_use_their_underlying_default() {
+        let types = editor_types();
+        let slug = FieldType::from_str("slug", &types).unwrap();
+        assert_eq!(
+            FieldValue::from_string(&"name".to_string(), &slug, "".to_string()).unwrap(),
+            FieldValue::String("".to_string())
+        );
     }
 }

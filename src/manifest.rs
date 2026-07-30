@@ -472,8 +472,8 @@ impl Manifest {
                 "object_file" => {
                     manifest.object_definition_file = path_or_err(value, "object_file")?
                 }
-                "editor_types" => manifest.parse_editor_types(value).unwrap(),
-                "metadata" => manifest.parse_metadata(value).unwrap(),
+                "editor_types" => manifest.parse_editor_types(value)?,
+                "metadata" => manifest.parse_metadata(value)?,
                 _ => {}
             }
         }
@@ -854,5 +854,42 @@ baz = "hello!"
         let parsed = Manifest::from_string(Path::new(""), manifest_output, None)?;
         assert_eq!(parsed, m);
         Ok(())
+    }
+
+    #[test]
+    fn invalid_validator_returns_an_error() {
+        let err = Manifest::from_string(
+            Path::new(""),
+            r#"
+[editor_types.broken]
+type = "string"
+validate = ['[unclosed']
+"#
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err.downcast_ref::<InvalidManifestError>(),
+            Some(InvalidManifestError::InvalidValidator(name, _)) if name == "broken"
+        ));
+    }
+
+    #[test]
+    fn invalid_metadata_returns_an_error() {
+        let err = Manifest::from_string(
+            Path::new(""),
+            r#"
+[metadata]
+foo = 12
+"#
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err.downcast_ref::<InvalidManifestError>(),
+            Some(InvalidManifestError::InvalidMetadata(_, field)) if field == "foo"
+        ));
     }
 }
