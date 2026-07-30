@@ -51,6 +51,14 @@ mod binary_tests {
             None,
         )
         .unwrap();
+        // The section body contains `{{ section.name }}`, which only resolves
+        // if liquid in field values is rendered in place, where the loop
+        // variable `section` exists.
+        let index = fs::read_to_string("tests/fixtures/website/dist/index.html").unwrap();
+        assert!(
+            index.contains("about Some Content"),
+            "liquid in a field value did not see the enclosing loop variable:\n{index}"
+        );
     }
 
     #[test]

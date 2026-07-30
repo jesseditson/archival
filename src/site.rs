@@ -60,6 +60,11 @@ pub enum BuildError {
 /// self-invalidating: when any partial or layout changes the parser (and with
 /// it every cached template, which may embed partials) is rebuilt, and when a
 /// template changes only that template is re-parsed.
+///
+/// The parser must outlive any render of the templates it parsed: it owns the
+/// `Language` that `crate::tags::output` holds a `Weak` reference to in order
+/// to render liquid found in field values. Dropping the parser and its
+/// templates together (as replacing this whole struct does) keeps that true.
 struct ParserCache {
     partials_hash: u64,
     parser: std::sync::Arc<liquid::Parser>,
@@ -224,7 +229,7 @@ impl Site {
             }
         }
         let _span = trace_span!("parse_template").entered();
-        let template = std::sync::Arc::new(parser.parse(source)?);
+        let template = std::sync::Arc::new(liquid_parser::parse(parser, source)?);
         if let Some(cache) = self.parser_cache.write().unwrap().as_mut() {
             if cache.templates.len() >= TEMPLATE_CACHE_MAX_ENTRIES {
                 cache.templates.clear();

@@ -1,4 +1,4 @@
 name="Some Content"
 body="""
-Here is some *content*
+Here is some *content* about {{ section.name }}
 """

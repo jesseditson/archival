@@ -1,8 +1,13 @@
+use crate::liquid_rewrite::rewrite_outputs;
+use crate::tags::output::{OutputContext, OutputTag};
 use crate::{page::TemplateType, tags::layout::LayoutTag, FileSystemAPI};
 use anyhow::Result;
-use liquid_core::partials::{EagerCompiler, PartialSource};
+use liquid_core::partials::{EagerCompiler, PartialCompiler, PartialSource};
+use liquid_core::runtime::PartialStore;
+use liquid_core::Language;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::Arc;
 use std::{borrow::Cow, collections::HashMap, path::Path};
 #[cfg(feature = "verbose-logging")]
 use tracing::debug;
@@ -100,8 +105,13 @@ impl PartialSource for ArchivalPartialSource {
         names
     }
 
+    /// Partials and layouts are rewritten on the way to the compiler so that
+    /// field values they output are rendered in place (see
+    /// `crate::liquid_rewrite`). Rewriting happens here rather than in `new()`
+    /// because every build constructs an `ArchivalPartialSource` just to hash
+    /// it, and only compiles on a cache miss.
     fn try_get<'a>(&'a self, name: &str) -> Option<Cow<'a, str>> {
-        self.partials.get(name).map(|p| p.into())
+        self.partials.get(name).map(|p| rewrite_outputs(p))
     }
 }
 
@@ -132,9 +142,56 @@ pub(crate) fn partials_hash(
 }
 
 pub(crate) fn build_with_partials(source: ArchivalPartialSource) -> Result<liquid::Parser> {
-    let partials = EagerCompiler::new(source);
+    Ok(build_with_output_context(source)?.0)
+}
+
+/// Also returns the parser's [`OutputContext`], whose lifetime is tied to the
+/// parser: it holds a `Weak` reference to the parser's `Language`, and its
+/// cache of parsed field values is only valid for that `Language`.
+pub(crate) fn build_with_output_context(
+    source: ArchivalPartialSource,
+) -> Result<(liquid::Parser, Arc<OutputContext>)> {
+    let ctx = Arc::new(OutputContext::default());
+    let partials = LanguageCapturingCompiler {
+        inner: EagerCompiler::new(source),
+        ctx: Arc::clone(&ctx),
+    };
     let parser = liquid::ParserBuilder::with_stdlib()
         .tag(LayoutTag)
+        .tag(OutputTag::new(Arc::clone(&ctx)))
         .partials(partials);
-    Ok(parser.build()?)
+    Ok((parser.build()?, ctx))
+}
+
+/// Parses a template, rewriting its output statements first so that liquid
+/// inside the values it renders is evaluated in place. Every liquid template
+/// archival parses should go through here.
+pub(crate) fn parse(
+    parser: &liquid::Parser,
+    source: &str,
+) -> std::result::Result<liquid::Template, liquid_core::Error> {
+    parser.parse(&rewrite_outputs(source))
+}
+
+/// A pass-through partial compiler whose only job is to capture the
+/// `Arc<Language>` that `ParserBuilder::build` hands to the compiler. That is
+/// the only way to get hold of it, and the output tag needs it in order to
+/// parse liquid found inside values.
+struct LanguageCapturingCompiler<C: PartialCompiler> {
+    inner: C,
+    ctx: Arc<OutputContext>,
+}
+
+impl<C: PartialCompiler> PartialCompiler for LanguageCapturingCompiler<C> {
+    fn compile(
+        self,
+        language: Arc<Language>,
+    ) -> liquid_core::Result<Box<dyn PartialStore + Send + Sync>> {
+        self.ctx.set_language(&language);
+        self.inner.compile(language)
+    }
+
+    fn source(&self) -> &dyn PartialSource {
+        self.inner.source()
+    }
 }

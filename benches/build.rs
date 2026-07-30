@@ -15,10 +15,27 @@ use std::path::Path;
 
 const ARTICLE_COUNT: usize = 30;
 
-fn markdown_body(seed: usize) -> String {
+/// Whether article bodies embed liquid. Field values containing liquid are
+/// rendered in place by the output tag, so the two variants exercise different
+/// halves of the render path: `Plain` is the common case that must not regress,
+/// `Liquid` is the case the in-place renderer exists for.
+#[derive(Clone, Copy, PartialEq)]
+enum BodyContent {
+    Plain,
+    Liquid,
+}
+
+fn markdown_body(seed: usize, content: BodyContent) -> String {
     let mut body = String::new();
     for section in 0..8 {
         writeln!(body, "## Section {section} of article {seed}\n").unwrap();
+        if content == BodyContent::Liquid {
+            writeln!(
+                body,
+                "Published on {{{{ objects.site.name }}}} — {{{{ objects.site.tagline }}}}.\n"
+            )
+            .unwrap();
+        }
         for para in 0..3 {
             writeln!(
                 body,
@@ -34,7 +51,7 @@ fn markdown_body(seed: usize) -> String {
     body
 }
 
-fn site_fs() -> MemoryFileSystem {
+fn site_fs(content: BodyContent) -> MemoryFileSystem {
     let mut fs = MemoryFileSystem::default();
     fs.write_str("manifest.toml", "upload_prefix = \"\"\n".to_string())
         .unwrap();
@@ -67,7 +84,7 @@ body = "markdown"
             format!(
                 "headline = \"Article {i}\"\nslug = \"article-{i}\"\ndate = \"2024-01-{:02}\"\npublished = true\norder = {i}\nbody = '''\n{}'''\n",
                 (i % 28) + 1,
-                markdown_body(i)
+                markdown_body(i, content)
             ),
         )
         .unwrap();
@@ -123,8 +140,21 @@ body = "markdown"
 /// across iterations, so this measures steady-state build cost rather than
 /// first-ever-build cost.
 fn bench_full_build(c: &mut Criterion) {
-    let fs = site_fs();
+    let fs = site_fs(BodyContent::Plain);
     c.bench_function("full_build_30_articles", |b| {
+        b.iter_batched(
+            || Archival::new(fs.clone()).unwrap(),
+            |archival| archival.build(BuildOptions::default()).unwrap(),
+            BatchSize::LargeInput,
+        )
+    });
+}
+
+/// The same build with liquid embedded in every article body, so every output
+/// of a body parses and renders that liquid against the live runtime.
+fn bench_full_build_liquid_content(c: &mut Criterion) {
+    let fs = site_fs(BodyContent::Liquid);
+    c.bench_function("full_build_30_articles_liquid_content", |b| {
         b.iter_batched(
             || Archival::new(fs.clone()).unwrap(),
             |archival| archival.build(BuildOptions::default()).unwrap(),
@@ -137,7 +167,7 @@ fn bench_full_build(c: &mut Criterion) {
 /// the dev server runs on file change, and should stay in the low
 /// milliseconds.
 fn bench_rebuild(c: &mut Criterion) {
-    let fs = site_fs();
+    let fs = site_fs(BodyContent::Plain);
     let archival = Archival::new(fs).unwrap();
     archival.build(BuildOptions::default()).unwrap();
     c.bench_function("rebuild_after_article_change", |b| {
@@ -150,5 +180,10 @@ fn bench_rebuild(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_full_build, bench_rebuild);
+criterion_group!(
+    benches,
+    bench_full_build,
+    bench_full_build_liquid_content,
+    bench_rebuild
+);
 criterion_main!(benches);

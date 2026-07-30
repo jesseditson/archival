@@ -266,34 +266,6 @@ impl liquid::ObjectView for LayeredContext<'_> {
     }
 }
 
-/// Rendered output can only require a second render pass if it still contains
-/// liquid syntax (variables or tags embedded in markdown fields). Parsing is
-/// by far the most expensive part of rendering, so pages that render to plain
-/// output skip the second pass entirely.
-fn may_contain_liquid(rendered: &str) -> bool {
-    rendered.contains("{{") || rendered.contains("{%")
-}
-
-/// Render `template`, then re-parse and re-render the output if (and only if)
-/// it may still contain liquid syntax introduced by rendered field values.
-fn render_passes(
-    template: &liquid::Template,
-    parser: &liquid::Parser,
-    context: &LayeredContext,
-) -> Result<String, liquid_core::Error> {
-    let first_span = tracing::trace_span!("first_render").entered();
-    let rendered = template.render(context)?;
-    drop(first_span);
-    if !may_contain_liquid(&rendered) {
-        return Ok(rendered);
-    }
-    let parse_span = tracing::trace_span!("second_parse").entered();
-    let reparsed = parser.parse(&rendered)?;
-    drop(parse_span);
-    let _second_span = tracing::trace_span!("second_render").entered();
-    reparsed.render(context)
-}
-
 pub(crate) fn debug_context(object: &liquid::Object, lp: usize) -> String {
     let mut debug_str = String::default();
     fn to_str(val: &Value, lp: usize) -> String {
@@ -447,7 +419,7 @@ impl<'a> Page<'a> {
                 Some(t) => t,
                 None => {
                     let _span = tracing::trace_span!("parse_template").entered();
-                    parsed = parser.parse(&template_info.content)?;
+                    parsed = crate::liquid_parser::parse(parser, &template_info.content)?;
                     &parsed
                 }
             };
@@ -471,7 +443,7 @@ impl<'a> Page<'a> {
                 overlay: &overlay,
                 base: base_context,
             };
-            render_passes(template, parser, &context).map_err(|error| {
+            template.render(&context).map_err(|error| {
                 error
                     .trace(format!("{}", template_info.debug_path.to_string_lossy()))
                     .trace(format!(
@@ -486,7 +458,7 @@ impl<'a> Page<'a> {
                 Some(t) => t,
                 None => {
                     let _span = tracing::trace_span!("parse_template").entered();
-                    parsed = parser.parse(self.content.as_ref().unwrap())?;
+                    parsed = crate::liquid_parser::parse(parser, self.content.as_ref().unwrap())?;
                     &parsed
                 }
             };
@@ -494,7 +466,7 @@ impl<'a> Page<'a> {
                 overlay: &overlay,
                 base: base_context,
             };
-            render_passes(template, parser, &context).map_err(|error| {
+            template.render(&context).map_err(|error| {
                 error
                     .trace(format!(
                         "{}",
@@ -804,6 +776,127 @@ here is a liquid variable: {{site_url}}
             !rendered.contains("hunter2"),
             "secrets are not present in template contexts"
         );
+        Ok(())
+    }
+
+    /// Renders `template` against a `c` object list built from `objects`, so
+    /// that tests can put liquid into field values.
+    fn render_with_objects(
+        fields: FieldsMap,
+        objects: Vec<Object>,
+        template: &str,
+    ) -> Result<String> {
+        let liquid_parser = liquid_parser::get(None, None, &MemoryFileSystem::default())?;
+        let globals = RenderGlobals {
+            site_url: "https://foo.bar".into(),
+        };
+        let field_config = FieldConfig::default();
+        let objects_map = ObjectMap::from([("c".to_string(), ObjectEntry::from_vec(objects))]);
+        let definition_map = ObjectDefinitions::from([(
+            "c".to_string(),
+            ObjectDefinition {
+                name: "c".to_string(),
+                fields,
+                template: None,
+                children: ObjectDefinitions::new(),
+            },
+        )]);
+        let base_context = build_context(&objects_map, &definition_map, &field_config, &globals);
+        let page = Page::new(
+            "home".to_string(),
+            template.to_string(),
+            TemplateType::Default,
+            Path::new("objects/home.toml"),
+        );
+        page.render(&liquid_parser, &base_context, &field_config)
+    }
+
+    fn c_object(filename: &str, values: ObjectValues) -> Object {
+        Object {
+            filename: filename.to_string(),
+            object_name: "c".to_string(),
+            order: None,
+            values,
+        }
+    }
+
+    #[test]
+    fn assigned_variables_are_visible_in_field_content() -> Result<()> {
+        let rendered = render_with_objects(
+            FieldsMap::from([
+                ("name".to_string(), FieldType::String),
+                ("content".to_string(), FieldType::Markdown),
+            ]),
+            vec![c_object(
+                "home",
+                ObjectValues::from([
+                    ("name".to_string(), FieldValue::String("home".to_string())),
+                    (
+                        "content".to_string(),
+                        FieldValue::Markdown("welcome to {{ c.name }}".to_string()),
+                    ),
+                ]),
+            )],
+            "{% assign c = objects.c | first %}{{ c.content }}",
+        )?;
+        assert!(
+            rendered.contains("welcome to home"),
+            "assigned variable not visible in field content: {rendered}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn loop_variables_are_visible_in_field_content() -> Result<()> {
+        let entry = |name: &str| {
+            ObjectValues::from([
+                ("name".to_string(), FieldValue::String(name.to_string())),
+                (
+                    "bio".to_string(),
+                    FieldValue::String("{{ item.name }} is #{{ forloop.index }}".to_string()),
+                ),
+            ])
+        };
+        let rendered = render_with_objects(
+            FieldsMap::from([
+                ("name".to_string(), FieldType::String),
+                ("bio".to_string(), FieldType::String),
+            ]),
+            vec![c_object("one", entry("one")), c_object("two", entry("two"))],
+            "{% for item in objects.c %}[{{ item.bio }}]{% endfor %}",
+        )?;
+        assert_eq!(
+            rendered, "[one is #1][two is #2]",
+            "loop variables not visible in field content"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn raw_blocks_protect_their_contents() -> Result<()> {
+        let rendered = render_with_objects(
+            FieldsMap::from([("name".to_string(), FieldType::String)]),
+            vec![c_object(
+                "home",
+                ObjectValues::from([("name".to_string(), FieldValue::String("home".to_string()))]),
+            )],
+            "{% raw %}{{ site_url }}{% endraw %}",
+        )?;
+        assert_eq!(rendered, "{{ site_url }}");
+        Ok(())
+    }
+
+    #[test]
+    fn whitespace_control_is_preserved() -> Result<()> {
+        let rendered = render_with_objects(
+            FieldsMap::from([("name".to_string(), FieldType::String)]),
+            vec![c_object(
+                "home",
+                ObjectValues::from([("name".to_string(), FieldValue::String("home".to_string()))]),
+            )],
+            "{%- assign c = objects.c | first -%}\nx  \n  {{- c.name -}}  \n  y",
+        )?;
+        assert_eq!(rendered, "xhomey");
         Ok(())
     }
 

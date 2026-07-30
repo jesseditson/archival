@@ -9,6 +9,7 @@ mod file_system_tests;
 mod filters;
 mod lib_fs;
 mod liquid_parser;
+mod liquid_rewrite;
 mod object_definition;
 mod page;
 mod read_toml;
