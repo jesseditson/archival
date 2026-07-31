@@ -414,6 +414,9 @@ impl Manifest {
             ManifestField::LayoutDir => {
                 str_value == self.root.join(LAYOUT_DIR_NAME).to_string_lossy()
             }
+            ManifestField::SchemasDir => {
+                str_value == self.root.join(SCHEMAS_DIR_NAME).to_string_lossy()
+            }
             _ => str_value.is_empty(),
         }
     }
@@ -704,6 +707,7 @@ impl Manifest {
         vec![
             ManifestField::ArchivalVersion,
             ManifestField::SiteUrl,
+            ManifestField::SiteName,
             ManifestField::UploadPrefix,
             ManifestField::UploadsUrl,
             ManifestField::Prebuild,
@@ -713,6 +717,7 @@ impl Manifest {
             ManifestField::PagesDir,
             ManifestField::ObjectsDir,
             ManifestField::LayoutDir,
+            ManifestField::SchemasDir,
             ManifestField::EditorTypes,
             ManifestField::Metadata,
         ]
@@ -755,6 +760,7 @@ mod tests {
     fn full_manifest_content() -> &'static str {
         r#"archival_version = "0.8.0"
 site_url = "https://jesse.onarchival.dev"
+site_name = "jesse's site"
 upload_prefix = "site-repo-doid/"
 uploads_url = "https://uploads.archival.dev"
 prebuild = ['echo "HELLO!"']
@@ -764,6 +770,7 @@ build_dir = "m_dist"
 pages = "m_pages"
 objects = "m_objects"
 layout_dir = "m_layout"
+schemas_dir = "m_schemas"
 
 [editor_types.day]
 type = "date"
@@ -803,6 +810,8 @@ baz = "hello!"
         assert_eq!(m.build_dir, Path::new("m_dist").to_path_buf());
         assert_eq!(m.static_dir, Path::new("m_public").to_path_buf());
         assert_eq!(m.layout_dir, Path::new("m_layout").to_path_buf());
+        assert_eq!(m.schemas_dir, Path::new("m_schemas").to_path_buf());
+        assert_eq!(m.site_name, Some("jesse's site".to_string()));
         assert_eq!(
             m.uploads_url,
             Some("https://uploads.archival.dev".to_string())
