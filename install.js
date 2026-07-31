@@ -72,7 +72,7 @@ download(url, tmpTar)
     try {
       const tarTarget = `${releaseDir}/archival${binExt}`;
       execSync(
-        `tar xzf "${tmpTar}" -C "${binDir}" "${tarTarget}" --strip-components=1`,
+        `tar xzf "${tmpTar}" -C "${binDir}" --strip-components=1 "${tarTarget}"`,
         { stdio: 'inherit' }
       );
 
