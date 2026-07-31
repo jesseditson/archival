@@ -15,6 +15,9 @@ mod object_definition;
 mod page;
 mod read_toml;
 mod reserved_fields;
+#[cfg(test)]
+mod schema_files;
+pub mod schemas;
 mod site;
 mod tags;
 #[cfg(test)]

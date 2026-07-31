@@ -1,0 +1,37 @@
+[site]
+name = "string"
+tagline = "markdown"
+logo = "image"
+api_key = "secret"
+launched = "date"
+published = "boolean"
+visitors = "number"
+config = "meta"
+brochure = "upload"
+trailer = "video"
+theme = "hour24"                      # a custom type from archival.toml
+state = ["published", "draft"]        # a string enum
+
+[post]
+template = "post"                     # reserved as a field name, valid as a key
+title = "string"
+content = "markdown"
+
+# A oneof: an array of tables, each naming a type.
+[[post.media]]
+name = "image"
+type = "image"
+[[post.media]]
+name = "video"
+type = "video"
+[[post.media]]
+name = "link"
+type = "string"
+
+# A child object definition, nesting indefinitely.
+[post.links]
+name = "string"
+url = "string"
+
+[post.links.tags]
+label = "string"

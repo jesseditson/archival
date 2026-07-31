@@ -1,0 +1,33 @@
+# Every key Manifest::from_table reads, at once.
+upload_prefix = "4c7ab438e83c7f0b45004b22087149342dcd0dd8aee41a82735ebc4ac72b4c27/"
+uploads_url = "https://uploads.archival.dev"
+archival_version = "0.17.0"
+site_url = "https://archival.dev"
+site_name = "archival"
+prebuild = ["npm ci", "npm run build"]
+object_file = "archival_objects.toml"
+pages = "pages"
+objects = "objects"
+schemas_dir = "schemas"
+build_dir = "dist"
+static_dir = "public"
+layout_dir = "layout"
+
+[metadata]
+source_template_repo = "archival-website"
+source_template_ref = "heads/templates/blog-1"
+
+# A custom type backed by a built-in, with a plain regex validator.
+[editor_types.hour24]
+type = "number"
+validate = ['^([0-9]|1[0-9]|2[0-3])(\.\d+)?$']
+
+# A custom type backed by another custom type, with a path validator into a
+# nested field and a custom editor.
+[editor_types.opening_hour]
+type = "hour24"
+editor_url = "https://example.com/editors/hour"
+
+[editor_types.headshot]
+type = "image"
+validate = [{ path = "mime", validate = "^image/(png|jpeg)$" }]

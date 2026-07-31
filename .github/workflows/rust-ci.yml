@@ -48,6 +48,20 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --all-features --all-targets -- --no-deps -D warnings
 
+  schemas:
+    name: Schemas
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      # Ajv strict mode - what SchemaStore's own CI gates on. The schemas are
+      # also checked against the parsers and the tests/schemas fixtures by
+      # `cargo test schema_files`, which runs in the Tests job.
+      - name: validate schemas
+        run: ./validate-schemas.sh
+
   test:
     name: Tests
     env:

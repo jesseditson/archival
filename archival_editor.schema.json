@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://archival.dev/schemas/archival_editor.schema.json",
+  "title": "Archival editor configuration",
+  "description": "Per-object configuration for the archival editor, read from archival_editor.toml at the site root. Keys are object names from archival_objects.toml.",
+  "type": "object",
+  "additionalProperties": {
+    "$ref": "#/definitions/objectConfig"
+  },
+  "definitions": {
+    "objectConfig": {
+      "description": "configuration for a list of objects: either a top-level object list, or a list of children at any depth below one",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "views": {
+          "description": "the views available for this list in the editor. The first view is used by default.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/viewConfig"
+          }
+        },
+        "children": {
+          "description": "configuration for child lists of this object, keyed by child field name. Nests indefinitely.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/objectConfig"
+          }
+        }
+      }
+    },
+    "viewConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "primary"],
+      "properties": {
+        "name": {
+          "description": "the name of this view, shown to editors when switching views",
+          "type": "string"
+        },
+        "primary": {
+          "description": "the field shown as this view's primary content",
+          "type": "string"
+        },
+        "secondary": {
+          "description": "an optional field shown as this view's secondary content",
+          "type": "string"
+        },
+        "tertiary": {
+          "description": "an optional field shown as this view's tertiary content",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

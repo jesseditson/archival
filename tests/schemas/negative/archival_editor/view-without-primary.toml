@@ -1,0 +1,4 @@
+# ViewConfig::primary is not an Option, so this fails to deserialize.
+[[post.views]]
+name = "default"
+secondary = "description"

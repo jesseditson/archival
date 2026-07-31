@@ -1,0 +1,18 @@
+# Two views on a top-level object, plus views on a child and a grandchild.
+[[post.views]]
+name = "default"
+primary = "file"
+secondary = "description"
+
+[[post.views]]
+name = "another"
+primary = "description"
+
+[[post.children.section.views]]
+name = "default"
+primary = "heading"
+tertiary = "link"
+
+[[post.children.section.children.link.views]]
+name = "default"
+primary = "url"

@@ -1,0 +1,3 @@
+# ObjectDefinition::new returns ReservedObjectNameError for these.
+[order]
+title = "string"

@@ -1,0 +1,6 @@
+# `page` is reserved as a field name. `template` is too, but is exempted because
+# `template = "<page>"` is how an object names its page - see
+# objects_schema_forbids_the_reserved_fields.
+[post]
+title = "string"
+page = "string"

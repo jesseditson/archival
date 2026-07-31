@@ -1,0 +1,6 @@
+# An array of tables is parsed as a oneof, and every table needs both `name` and
+# `type` - otherwise ObjectDefinition::new fails with InvalidOneof.
+[[post.media]]
+name = "image"
+[[post.media]]
+type = "video"

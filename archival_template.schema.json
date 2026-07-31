@@ -1,6 +1,10 @@
 {
-  "$id": "https://archival.dev/archival_template.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://archival.dev/schemas/archival_template.schema.json",
+  "title": "Archival template definition",
+  "description": "Metadata describing an archival site template, read from archival_template.toml on the template's branch.",
   "type": "object",
+  "required": ["name", "description"],
   "properties": {
     "name": {
       "description": "The name of this template, to be shown to users and in the editor UI",
@@ -42,6 +46,12 @@
         "type": "string"
       }
     },
-    "required": ["name", "description"]
+    "keep_objects": {
+      "description": "A list of value paths (e.g. 'posts.first') identifying objects that should be preserved when a site is generated from this template, rather than stripped as example content.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
   }
 }

@@ -12,3 +12,4 @@ cargo clippy --all-features --all-targets -- --no-deps -D warnings
 ./test.sh
 
 ./validate-actions.sh
+./validate-schemas.sh

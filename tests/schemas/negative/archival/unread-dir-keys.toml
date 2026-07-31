@@ -1,0 +1,8 @@
+# These read like the Manifest struct's field names, and manifest.schema.json
+# used to declare them, but from_table has never read any of them - the real keys
+# are `pages`, `objects` and `object_file`. Silently ignoring them meant a site
+# built out of the wrong directories with no error, so the schema must reject
+# them rather than bless them.
+pages_dir = "pages"
+objects_dir = "objects"
+object_definition_file = "archival_objects.toml"

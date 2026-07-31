@@ -1,0 +1,20 @@
+name = "Blog"
+description = "A minimal blog, with posts and an about page."
+assets = ["/build", "node_modules"]
+tags = ["blog", "writing"]
+topics = ["made-with-archival"]
+context = """
+Posts are ordered by date descending. site.file is displayed as the primary
+download for the site, and should be a zip file.
+"""
+tlds = [".blog", ".press"]
+keep_objects = ["posts.first"]
+
+# Sections archival-utility reads but this schema deliberately leaves unmodelled,
+# so they must not be rejected. See the note in archival_template.schema.json.
+[skin]
+files = ["public/styles.css"]
+selector = ":root"
+
+[fields]
+"site.title" = "business_name"

@@ -1,0 +1,6 @@
+# TemplateDefinition::name and ::description are not Options. The schema used to
+# nest `required` inside `properties`, which made it a property named "required"
+# whose schema was an array - invalid under ajv, and it meant nothing was
+# actually required.
+description = "a template with no name"
+tags = ["blog"]

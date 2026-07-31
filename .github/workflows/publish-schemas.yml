@@ -1,35 +1,40 @@
 name: Publish Schemas
 
+# The schema files at the repo root are served from https://archival.dev/schemas/
+# and registered with SchemaStore, which points its catalog at those URLs rather
+# than vendoring copies. That means publishing is not a pull request per release:
+# the SchemaStore entry is submitted once, and after that whatever archival.dev
+# serves is what editors pick up.
+#
+# So all this workflow does is tell archival-docs (which builds archival.dev) to
+# rebuild. Its prebuild fetches the schemas from this repo - see
+# scripts/fetch-schemas.mjs there.
+#
+# Correctness is gated before we get here: `cargo test schema_files` checks the
+# schemas against the parsers and fixtures, and ./validate-schemas.sh runs Ajv
+# strict mode. Both run in CI on every push.
+
 on:
   push:
     tags:
       - "*"
+  # Republish without cutting a release - useful after fixing a schema on main.
+  workflow_dispatch:
 
 jobs:
-  archival_template:
-    name: Publish archival_template.schema.json
-    if: startsWith(github.ref, 'refs/tags/')
+  publish:
+    name: Republish archival.dev/schemas
     runs-on: ubuntu-latest
+    environment: archival.dev
     steps:
-      - run: echo "TODO"
-      # TODO: check if this schema has changed
-      # If it has, publish a new PR to
-      # https://github.com/SchemaStore/schemastore/pulls
-  archival:
-    name: Publish archival.schema.json
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "TODO"
-      # TODO: check if this schema has changed
-      # If it has, publish a new PR to
-      # https://github.com/SchemaStore/schemastore/pulls
-  archival_objects:
-    name: Publish archival_objects.schema.json
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "TODO"
-      # TODO: check if this schema has changed
-      # If it has, publish a new PR to
-      # https://github.com/SchemaStore/schemastore/pulls
+      - name: Trigger archival-docs rebuild
+        env:
+          # Fine-grained PAT with contents:write on jesseditson/archival-docs.
+          # GITHUB_TOKEN cannot dispatch to another repository.
+          GH_TOKEN: ${{ secrets.ARCHIVAL_DOCS_DISPATCH_TOKEN }}
+        run: |
+          gh api \
+            --method POST \
+            /repos/jesseditson/archival-docs/dispatches \
+            -f event_type=publish-schemas \
+            -F "client_payload[ref]=${GITHUB_REF_NAME}"

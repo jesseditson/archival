@@ -1,0 +1,7 @@
+# serde would quietly drop `quaternary`, leaving the editor showing nothing for
+# a field the author thought they had configured. The schema is deliberately
+# stricter than the parser so the typo surfaces where it was made.
+[[post.views]]
+name = "default"
+primary = "title"
+quaternary = "description"

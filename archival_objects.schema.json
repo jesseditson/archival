@@ -1,53 +1,114 @@
 {
-  "$id": "jesseditson/archival/v0.17.0/archival_objects.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://archival.dev/schemas/archival_objects.schema.json",
+  "title": "Archival object definitions",
+  "description": "The object definitions for an archival site, read from archival_objects.toml (or the file named by object_file in archival.toml).",
   "type": "object",
-  "id": "object_def",
-  "patternProperties": {
-    "^([a-zA-Z0-9_-]+)$": {
+  "propertyNames": {
+    "$ref": "#/definitions/objectName"
+  },
+  "additionalProperties": {
+    "$ref": "#/definitions/objectDefinition"
+  },
+  "definitions": {
+    "objectName": {
+      "description": "objects may not be named with one of archival's reserved names",
+      "not": {
+        "enum": [
+          "object_name",
+          "order",
+          "objects",
+          "page",
+          "page_name",
+          "template"
+        ]
+      }
+    },
+    "fieldName": {
+      "description": "fields may not use archival's reserved names. `template` is the exception: it is reserved as a field, but is how an object names the page it renders with.",
+      "not": {
+        "enum": ["object_name", "order", "objects", "page", "page_name"]
+      }
+    },
+    "objectDefinition": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/definitions/fieldName"
+      },
+      "properties": {
+        "template": {
+          "description": "the name of a page in your pages dir that each of this object's instances is rendered with",
+          "type": "string"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/field"
+      }
+    },
+    "field": {
       "anyOf": [
         {
-          "type": "string",
-          "description": "the archival type that this field will use. NOTE: this schema does not yet support custom types.",
-          "enum": [
-            "string",
-            "number",
-            "boolean",
-            "date",
-            "markdown",
-            "image",
-            "video",
-            "audio",
-            "upload",
-            "meta",
-            "secret"
-          ]
+          "$ref": "#/definitions/fieldType"
         },
         {
+          "description": "a string enum - the field may be any one of these values",
           "type": "array",
-          "description": "a string enum",
           "items": {
             "type": "string"
           }
         },
         {
-          "$ref": "#",
-          "description": "a child object definition"
+          "description": "a oneof - the field holds a value of exactly one of these named types",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/oneofOption"
+          }
+        },
+        {
+          "$ref": "#/definitions/objectDefinition"
         }
       ]
-    }
-  },
-  "propertyNames": {
-    "not": {
+    },
+    "oneofOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "description": "the name this option is referred to by in templates and the editor",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/fieldType"
+        }
+      }
+    },
+    "fieldType": {
+      "description": "an archival type, or the name of a custom editor type defined in archival.toml",
       "anyOf": [
-        { "const": "template" },
-        { "const": "order" },
-        { "const": "objects" },
-        { "const": "object_name" },
-        { "const": "page" },
-        { "const": "page_name" },
-        { "const": "site_url" }
+        {
+          "$ref": "#/definitions/archivalFieldType"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "archivalFieldType": {
+      "type": "string",
+      "enum": [
+        "string",
+        "number",
+        "boolean",
+        "date",
+        "markdown",
+        "image",
+        "video",
+        "audio",
+        "upload",
+        "meta",
+        "secret"
       ]
     }
-  },
-  "additionalProperties": false
+  }
 }

@@ -1,0 +1,7 @@
+# editor_types is a dictionary of named types. manifest.schema.json used to
+# describe it one level too shallow - as if `type`/`editor_url`/`validate` were
+# its direct keys - which both accepted this and rejected every real
+# `[editor_types.<name>]` block.
+[editor_types]
+type = "number"
+editor_url = "https://example.com"

@@ -1,0 +1,4 @@
+# parse_editor_types errors with MissingRequired when an editor type has no
+# `type` key.
+[editor_types.hour24]
+validate = ['^\d+$']
