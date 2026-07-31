@@ -817,6 +817,46 @@ mod lib {
     }
 
     #[test]
+    #[traced_test]
+    fn definitions_carry_their_objects_toml_comments() -> Result<()> {
+        let mut fs = MemoryFileSystem::default();
+        let zip = include_bytes!("../tests/fixtures/archival-website.zip");
+        unpack_zip(zip.to_vec(), &mut fs)?;
+        let archival = Archival::new(fs)?;
+
+        let post = archival.get_object_definition("post")?;
+        assert_eq!(post.description, Some("An entry on the blog.".to_string()));
+
+        let described = |field: &str| post.fields.get(field).unwrap().description.clone();
+        assert_eq!(
+            described("title"),
+            Some("The post's headline.\nUsed for the page title as well.".to_string())
+        );
+        // An enum, declared as an array of strings.
+        assert_eq!(
+            described("state"),
+            Some("Whether the post is visible on the site.".to_string())
+        );
+        // A oneof, declared as `[[post.media]]`.
+        assert_eq!(
+            described("media"),
+            Some("A single piece of media to show alongside the post.".to_string())
+        );
+        // A child object, declared as `[post.links]`.
+        assert_eq!(
+            post.children.get("links").unwrap().description,
+            Some("Related links to show at the end of the post.".to_string())
+        );
+
+        // The fixture opens with a file header separated by a blank line, which
+        // must not be read as a description of the first object.
+        let section = archival.get_object_definition("section")?;
+        assert_eq!(section.description, None);
+        assert_eq!(section.fields.get("name").unwrap().description, None);
+        Ok(())
+    }
+
+    #[test]
     fn add_object_to_site() -> Result<()> {
         let mut fs = MemoryFileSystem::default();
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
