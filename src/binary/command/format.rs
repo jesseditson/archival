@@ -4,10 +4,13 @@ use crate::{
         command::{add_args, command_root, CommandConfig},
         ExitStatus,
     },
-    file_system_stdlib, Archival, ArchivalError, FileSystemAPI, MANIFEST_FILE_NAME,
+    file_system_stdlib,
+    manifest::Manifest,
+    Archival, ArchivalError, FileSystemAPI,
 };
 use anyhow::Result;
 use clap::ArgMatches;
+use std::path::Path;
 use std::sync::{atomic::AtomicBool, Arc};
 
 impl Archival<file_system_stdlib::NativeFileSystem> {
@@ -29,8 +32,10 @@ impl Archival<file_system_stdlib::NativeFileSystem> {
         })
     }
     fn format_manifest(&self) -> Result<()> {
-        self.fs_mutex
-            .with_fs(|fs| fs.write_str(MANIFEST_FILE_NAME, self.site.manifest.to_toml()?))
+        self.fs_mutex.with_fs(|fs| {
+            let manifest_path = Manifest::path_in(Path::new(""), fs)?;
+            fs.write_str(manifest_path, self.site.manifest.to_toml()?)
+        })
     }
 }
 

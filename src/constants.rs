@@ -1,6 +1,11 @@
 pub const MIN_COMPAT_VERSION: &str = ">=0.12.0";
-pub const MANIFEST_FILE_NAME: &str = "manifest.toml";
-pub const OBJECT_DEFINITION_FILE_NAME: &str = "objects.toml";
+pub const MANIFEST_FILE_NAME: &str = "archival.toml";
+pub const OBJECT_DEFINITION_FILE_NAME: &str = "archival_objects.toml";
+/// Sites created before these files were given archival-specific names still
+/// use the generic ones. They are read (and written back to) when present, but
+/// the names above are canonical for anything archival creates.
+pub const LEGACY_MANIFEST_FILE_NAME: &str = "manifest.toml";
+pub const LEGACY_OBJECT_DEFINITION_FILE_NAME: &str = "objects.toml";
 pub const PAGES_DIR_NAME: &str = "pages";
 pub const OBJECTS_DIR_NAME: &str = "objects";
 pub const BUILD_DIR_NAME: &str = "dist";

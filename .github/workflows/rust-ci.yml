@@ -396,5 +396,7 @@ jobs:
           # npm >= 11.5.1 is required for trusted publishing; node 24 bundles npm 11
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
+      - name: Verify versions match
+        run: ./check-versions.sh "${GITHUB_REF#refs/tags/v}"
       - name: Publish to npm
         run: npm publish

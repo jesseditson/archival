@@ -95,6 +95,7 @@ mod tests {
     pub fn unzip_to_fs(mut fs: impl FileSystemAPI) -> Result<()> {
         let zip = include_bytes!("../tests/fixtures/archival-website.zip");
         unpack_zip(zip.to_vec(), &mut fs)?;
+        // This fixture is a site using the legacy file names.
         let ob_def = fs.read_to_string(Path::new("objects.toml"))?;
         assert!(ob_def.is_some());
         let files = fs

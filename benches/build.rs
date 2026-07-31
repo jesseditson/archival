@@ -53,10 +53,10 @@ fn markdown_body(seed: usize, content: BodyContent) -> String {
 
 fn site_fs(content: BodyContent) -> MemoryFileSystem {
     let mut fs = MemoryFileSystem::default();
-    fs.write_str("manifest.toml", "upload_prefix = \"\"\n".to_string())
+    fs.write_str("archival.toml", "upload_prefix = \"\"\n".to_string())
         .unwrap();
     fs.write_str(
-        "objects.toml",
+        "archival_objects.toml",
         r#"
 [site]
 name = "string"
