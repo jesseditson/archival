@@ -76,6 +76,9 @@ jobs:
       - name: cargo test build
         run: cargo build --tests --release
       - name: run tests
+        # Without this, windows runs the script through pwsh, which silently
+        # does nothing and reports success.
+        shell: bash
         run: ./test.sh
 
   msrv-check:

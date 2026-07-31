@@ -5,13 +5,13 @@ use std::{
     fmt::Debug,
     hash::Hash,
     ops::Deref,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf, MAIN_SEPARATOR},
 };
 #[cfg(feature = "verbose-logging")]
 use tracing::debug;
 use tracing::error;
 
-use crate::ArchivalError;
+use crate::{util::path_to_native, ArchivalError};
 
 use super::FileSystemAPI;
 
@@ -132,9 +132,14 @@ impl Debug for MemoryFileSystem {
 
 impl MemoryFileSystem {
     fn normalize(&self, rel: impl AsRef<Path>) -> PathBuf {
-        let rel_path = rel.as_ref();
+        // Paths reach this filesystem both as joined `PathBuf`s (native
+        // separators) and as literal strings (`/`). Keys are compared and
+        // counted as strings, so they have to agree on one separator: use the
+        // platform's, which keeps this filesystem's paths interchangeable with
+        // the native one's.
+        let rel_path = path_to_native(rel.as_ref());
         let raw = rel_path.to_string_lossy();
-        let trimmed = raw.trim_start_matches('/');
+        let trimmed = raw.trim_start_matches(MAIN_SEPARATOR);
 
         // In wasm targets, absolute-path detection can differ from host behavior.
         // Normalize by string shape so both "/" and "" map to the root key.
@@ -307,7 +312,7 @@ impl MemoryFileSystem {
         // All children of this directory will use keys prefixed with this
         // directory's key, but exclude nested descendants.
         let node_key = FileGraphNode::key(&path);
-        let parent_separator_count = node_key.matches('/').count();
+        let parent_separator_count = node_key.matches(MAIN_SEPARATOR).count();
         let direct_child_depth = if node_key.is_empty() {
             0
         } else {
@@ -319,7 +324,7 @@ impl MemoryFileSystem {
             .filter(|k| {
                 (include_self || Path::new(k) != path.as_ref())
                     && k.starts_with(&node_key)
-                    && (recursive || k.matches('/').count() == direct_child_depth)
+                    && (recursive || k.matches(MAIN_SEPARATOR).count() == direct_child_depth)
             })
             .map(PathBuf::from)
             .collect()

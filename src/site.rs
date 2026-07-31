@@ -10,6 +10,7 @@ use crate::{
     page::{build_context, Page, RenderGlobals, TemplateType},
     read_toml::read_toml,
     tags::layout,
+    util::path_to_slash,
     ArchivalError, BuildOptions, FieldConfig, FileSystemAPI, ObjectMap,
 };
 use anyhow::Result;
@@ -753,8 +754,9 @@ impl Site {
             if let Some(name) = rel_path.file_name() {
                 let file_name = name.to_string_lossy();
                 if let Some((page_name, page_type)) = TemplateType::parse_path(&file_name) {
-                    let template_path_str =
-                        rel_path.with_extension("").to_string_lossy().to_string();
+                    // Template names come from object definitions, which always
+                    // use `/`, so compare against a slash-separated path.
+                    let template_path_str = path_to_slash(rel_path.with_extension(""));
                     if template_pages.contains(&template_path_str[..])
                         || PARTIAL_FILE_NAME_RE.is_match(&file_name)
                     {
@@ -917,4 +919,89 @@ fn hash_file(file: &[u8]) -> u64 {
     let mut hasher = SeaHasher::new();
     hasher.write(file);
     hasher.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fields::ObjectValues;
+    use crate::file_system_memory::MemoryFileSystem;
+    use crate::util::path_to_slash;
+
+    /// Sites whose templates and partials live in subdirectories name them with
+    /// `/`, but the pages that back them are found by walking the filesystem,
+    /// which uses the platform separator. This builds such a site end to end so
+    /// the two representations stay reconciled (see
+    /// https://github.com/jesseditson/archival/issues/16).
+    fn nested_template_site() -> Result<MemoryFileSystem> {
+        let mut fs = MemoryFileSystem::default();
+        fs.write_str(
+            Path::new("objects.toml"),
+            "[post]\ntemplate = \"posts/single\"\nname = \"string\"\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("objects/post/a-post.toml"),
+            "name = \"A Post\"\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("pages/posts/single.liquid"),
+            "{% include 'posts/byline' %}\npath: {{post.path}}\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("pages/posts/_byline.liquid"),
+            "byline: {{post.name}}\n".to_string(),
+        )?;
+        fs.write_str(Path::new("pages/index.liquid"), "index\n".to_string())?;
+        Ok(fs)
+    }
+
+    #[test]
+    fn builds_templates_and_partials_from_subdirectories() -> Result<()> {
+        let mut fs = nested_template_site()?;
+        let site = Site::load(&fs, Some("test"))?;
+        site.build(&mut fs, BuildOptions::default())?;
+
+        let build_dir = &site.manifest.build_dir;
+        let rendered = fs
+            .read_to_string(build_dir.join("post").join("a-post.html"))?
+            .expect("template object page was not built");
+        // The partial is registered under its `/`-joined name, so the include
+        // in the template has to find it.
+        assert!(
+            rendered.contains("byline: A Post"),
+            "partial in a subdirectory was not included: {rendered}"
+        );
+        // `path` is used to build urls, so it never contains a backslash.
+        assert!(
+            rendered.contains("path: post/a-post"),
+            "object path was not rendered as a url path: {rendered}"
+        );
+        assert!(
+            fs.exists(build_dir.join("index.html"))?,
+            "page was not built"
+        );
+        // Templates and partials back other pages; they are not pages
+        // themselves.
+        assert!(
+            !fs.exists(build_dir.join("posts").join("single.html"))?,
+            "template in a subdirectory was also rendered as a page"
+        );
+        assert!(
+            !fs.exists(build_dir.join("posts").join("_byline.html"))?,
+            "partial in a subdirectory was also rendered as a page"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn object_paths_are_url_paths() {
+        let object = Object {
+            filename: "a-post".to_string(),
+            object_name: "post".to_string(),
+            order: None,
+            values: ObjectValues::new(),
+        };
+        assert_eq!(object.url_path(), "post/a-post");
+        assert_eq!(path_to_slash(object.path()), "post/a-post");
+    }
 }

@@ -5,7 +5,7 @@ use crate::{
     manifest::EditorTypes,
     object_definition::ObjectDefinition,
     reserved_fields::{self, is_reserved_field},
-    util::integer_decode,
+    util::{integer_decode, path_to_slash},
     FieldConfig,
 };
 use anyhow::Result;
@@ -97,6 +97,11 @@ impl Object {
     pub fn path(&self) -> PathBuf {
         Path::new(&self.object_name).join(self.filename.clone())
     }
+    /// The object's path as it is exposed to templates. This is used to build
+    /// urls, so it always uses `/` separators, even on windows.
+    pub fn url_path(&self) -> String {
+        path_to_slash(self.path())
+    }
 }
 
 impl Hash for Object {
@@ -110,7 +115,9 @@ impl Hash for Object {
 impl Renderable for Object {
     type Output = RenderedObject;
     fn rendered(self, field_config: &FieldConfig) -> Self::Output {
-        let path = self.path();
+        // Rendered objects are consumed by editors, which use this path to
+        // build urls, so it is stored with `/` separators on every platform.
+        let path = PathBuf::from(self.url_path());
         Self::Output {
             filename: self.filename,
             object_name: self.object_name,
@@ -286,10 +293,7 @@ impl Object {
         if values.contains_key("order") {
             panic!("Objects may not define order key.");
         }
-        values.insert(
-            KString::from_ref("path"),
-            self.path().as_os_str().display().to_string().to_value(),
-        );
+        values.insert(KString::from_ref("path"), self.url_path().to_value());
         values.insert(KString::from_ref("order"), self.order.to_value());
         Value::Object(values)
     }
