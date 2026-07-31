@@ -1,6 +1,8 @@
 # This file is used to define the objects available on your site.
 
+# A block of content on the home page.
 [section]
+# The section's heading.
 name = "string"
 body = "markdown"
 

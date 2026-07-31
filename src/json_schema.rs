@@ -176,7 +176,6 @@ pub mod tests {
     use ordermap::OrderMap;
     use serde_json::json;
     use std::collections::HashSet;
-    use toml::Table;
 
     use crate::{
         json_schema::{generate_json_schema, generate_root_json_schema, ObjectSchemaOptions},
@@ -185,11 +184,14 @@ pub mod tests {
     };
 
     pub fn artist_and_example_definition_str() -> &'static str {
-        r#"[artists]
+        r#"# A musical act on the roster.
+        [artists]
+        # The artist's display name.
         name = "string"
         meta = "meta"
         genre = ["emo","metal"]
         template = "artist"
+        # Upcoming shows.
         [artists.tour_dates]
         date = "date"
         ticket_link = "string"
@@ -215,8 +217,8 @@ pub mod tests {
 
     #[test]
     fn json_schema_generation() -> Result<()> {
-        let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
+        let defs =
+            ObjectDefinition::from_source(artist_and_example_definition_str(), &OrderMap::new())?;
 
         let schema = generate_json_schema(
             "artists",
@@ -249,8 +251,8 @@ pub mod tests {
 
     #[test]
     fn omitted_fields() -> Result<()> {
-        let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
+        let defs =
+            ObjectDefinition::from_source(artist_and_example_definition_str(), &OrderMap::new())?;
 
         let schema = generate_json_schema(
             "example",
@@ -286,8 +288,8 @@ pub mod tests {
 
     #[test]
     fn root_omitted_fields() -> Result<()> {
-        let table: Table = toml::from_str(artist_and_example_definition_str())?;
-        let defs = ObjectDefinition::from_table(&table, &OrderMap::new())?;
+        let defs =
+            ObjectDefinition::from_source(artist_and_example_definition_str(), &OrderMap::new())?;
 
         let options = ObjectSchemaOptions::default()
             .with_omit_paths(Some(vec![ValuePath::from_string("omitted")]));
@@ -312,6 +314,32 @@ pub mod tests {
         )
         .is_err());
         assert!(jsonschema::is_valid(schema_value, &instance));
+        Ok(())
+    }
+
+    #[test]
+    fn descriptions_come_from_objects_toml_comments() -> Result<()> {
+        let defs =
+            ObjectDefinition::from_source(artist_and_example_definition_str(), &OrderMap::new())?;
+        let schema = generate_json_schema(
+            "artists",
+            defs.get("artists").unwrap(),
+            ObjectSchemaOptions::default(),
+        );
+        let properties = schema.get("properties").unwrap();
+
+        assert_eq!(
+            properties["name"]["description"],
+            json!("The artist's display name.")
+        );
+        assert_eq!(
+            properties["tour_dates"]["description"],
+            json!("Upcoming shows.")
+        );
+        // Undescribed fields still fall back to their name, which is all this
+        // had to work with before comments were read.
+        assert_eq!(properties["meta"]["description"], json!("meta"));
+        assert_eq!(properties["videos"]["description"], json!("videos"));
         Ok(())
     }
 }

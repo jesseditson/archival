@@ -407,7 +407,7 @@ impl ValuePath {
         for cmp in self.0.iter() {
             match cmp {
                 ValuePathComponent::Key(k) => {
-                    if let Some(field) = current_def.fields.get(k) {
+                    if let Some(field) = current_def.field_type(k) {
                         return Ok(field);
                     } else if let Some(child) = current_def.children.get(k) {
                         current_def = child;

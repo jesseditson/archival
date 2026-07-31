@@ -1,6 +1,7 @@
 mod archival_error;
 #[cfg(test)]
 mod build_id_tests;
+mod definition_comments;
 mod file_system;
 mod file_system_memory;
 mod file_system_mutex;
@@ -61,6 +62,7 @@ pub mod object;
 pub mod proto;
 pub use archival_error::ArchivalError;
 pub use constants::{MANIFEST_FILE_NAME, MIN_COMPAT_VERSION};
+pub use definition_comments::DefinitionComments;
 pub use fields::{
     file::RenderedFile, FieldConfig, FieldType, FieldValue, RenderedFieldValue,
     RenderedObjectValues,
@@ -70,7 +72,7 @@ pub use file_system_memory::MemoryFileSystem;
 #[cfg(feature = "json-schema")]
 pub use json_schema::{ObjectSchema, ObjectSchemaOptions};
 pub use object::{ObjectMap, RenderedObject, RenderedObjectMap, ValuePath};
-pub use object_definition::{FieldsMap, ObjectDefinition, ObjectDefinitions};
+pub use object_definition::{FieldDefinition, FieldsMap, ObjectDefinition, ObjectDefinitions};
 #[cfg(feature = "proto")]
 pub use proto::archival_proto;
 pub use typescript_defs::generate_typescript_defs;

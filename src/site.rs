@@ -172,8 +172,15 @@ impl Site {
         // Load our object definitions
         #[cfg(feature = "verbose-logging")]
         debug!("loading definition {}", odf.display());
-        let objects_table = read_toml(odf, fs)?;
-        let objects = ObjectDefinition::from_table(&objects_table, &manifest.editor_types)?;
+        // Read as a string rather than via read_toml: definitions carry the
+        // comments written around them, which the toml value model drops.
+        let objects_source = fs.read_to_string(odf)?.ok_or_else(|| {
+            ArchivalError::new(&format!(
+                "Object definition file {} does not exist",
+                fs.root_dir().join(odf).to_string_lossy()
+            ))
+        })?;
+        let objects = ObjectDefinition::from_source(&objects_source, &manifest.editor_types)?;
 
         Ok(Site {
             field_config: FieldConfig::from_manifest(Some(&manifest), upload_prefix)?,
