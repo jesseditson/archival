@@ -193,8 +193,8 @@ impl MetaValue {
                     time: Some(toml_datetime::Time {
                         hour: time.hour(),
                         minute: time.minute(),
-                        second: time.second(),
-                        nanosecond: time.nanosecond(),
+                        second: Some(time.second()),
+                        nanosecond: Some(time.nanosecond()),
                     }),
                     offset: Some(toml_datetime::Offset::Custom {
                         minutes: offset.whole_minutes(),

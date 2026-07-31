@@ -610,8 +610,8 @@ impl From<&FieldValue> for Option<toml::Value> {
                     time: Some(toml_datetime::Time {
                         hour: d.hour(),
                         minute: d.minute(),
-                        second: d.second(),
-                        nanosecond: d.nanosecond(),
+                        second: Some(d.second()),
+                        nanosecond: Some(d.nanosecond()),
                     }),
                     offset: None,
                 }))
