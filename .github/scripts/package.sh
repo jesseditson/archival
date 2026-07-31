@@ -5,9 +5,11 @@ set -eu
 # checkout dir as safe regardless of our env
 git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-# Normally we'll only do this on tags, but add --always to fallback to the revision
-# if we're iterating or the like
-tag=$(git describe --tags --abbrev=0 --always)
+# In CI, TAG is passed in from github.ref_name and is authoritative. Only fall back to
+# git for local/manual runs - `git describe --always` silently degrades to a short SHA
+# when the tag ref isn't in the (shallow) clone, which would name the assets after a
+# revision and 404 for everyone downloading them.
+tag="${TAG:-$(git describe --tags --abbrev=0 --always)}"
 release_name="$NAME-$tag-$TARGET"
 release_tar="${release_name}.tar.gz"
 mkdir "$release_name"
