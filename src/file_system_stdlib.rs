@@ -1,5 +1,6 @@
 use crate::{
     file_system::{FileSystemAPI, WatchableFileSystemAPI},
+    util::path_to_native,
     ArchivalError,
 };
 use anyhow::Result;
@@ -25,8 +26,17 @@ impl NativeFileSystem {
     }
 
     fn get_path(&self, rel: impl AsRef<Path>) -> PathBuf {
-        let rel_path = rel.as_ref();
-        if rel_path.is_absolute() {
+        // Callers mix `/`-separated literals (object templates, manifest
+        // values) with joined paths, and `root` may be a verbatim windows path
+        // that the OS will not translate `/` in, so settle on native
+        // separators before joining.
+        let rel_path = path_to_native(rel.as_ref());
+        let rel_path = rel_path.as_ref();
+        // `has_root` rather than `is_absolute` because on windows a path like
+        // "/pages/foo.liquid" is not absolute (it has no drive prefix), but
+        // joining it onto root would still discard everything but root's
+        // prefix.
+        if rel_path.has_root() {
             // If the path is already inside root, use it as-is (e.g. an
             // absolute build-dir passed via CLI). Otherwise treat it as a
             // root-relative absolute path (e.g. "/pages/foo.liquid").

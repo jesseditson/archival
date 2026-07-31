@@ -433,7 +433,7 @@ impl<'a> Page<'a> {
             object_vals.extend(liquid::object!({
                 "object_name": template_info.object.object_name,
                 "order": template_info.object.order,
-                "path": template_info.object.path(),
+                "path": template_info.object.url_path(),
             }));
             overlay.insert(
                 template_info.definition.name.to_owned().into(),

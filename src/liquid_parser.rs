@@ -1,6 +1,6 @@
 use crate::liquid_rewrite::rewrite_outputs;
 use crate::tags::output::{OutputContext, OutputTag};
-use crate::{page::TemplateType, tags::layout::LayoutTag, FileSystemAPI};
+use crate::{page::TemplateType, tags::layout::LayoutTag, util::path_to_slash, FileSystemAPI};
 use anyhow::Result;
 use liquid_core::partials::{EagerCompiler, PartialCompiler, PartialSource};
 use liquid_core::runtime::PartialStore;
@@ -52,9 +52,11 @@ impl ArchivalPartialSource {
                         let (partial_name, _t) = TemplateType::parse_path(name).unwrap();
                         // Remove underscore from beginning of name
                         let partial_name = &partial_name[1..];
-                        // Prepend path to this file if needed
+                        // Prepend path to this file if needed. Partials are
+                        // referenced by name in templates (`{% include
+                        // "dir/partial" %}`), so the name always uses `/`.
                         let partial_name = if let Some(parent_dir) = file.parent() {
-                            parent_dir.join(partial_name).to_string_lossy().to_string()
+                            path_to_slash(parent_dir.join(partial_name))
                         } else {
                             partial_name.to_string()
                         };
