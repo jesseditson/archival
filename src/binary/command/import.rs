@@ -426,7 +426,8 @@ impl Command {
                 }
             };
             let mut unused_cols = row.clone();
-            for (name, field_type) in &mapped_type.fields {
+            for (name, field) in &mapped_type.fields {
+                let field_type = &field.r#type;
                 let from_name = if let Some(mapped) = field_map.get(name) {
                     mapped
                 } else {
@@ -476,7 +477,7 @@ impl Command {
                 }
                 if let Ok(found_type) = col_path.get_definition(mapped_type) {
                     let col_field = col_field.unwrap().to_string().trim().to_string();
-                    if let Some(field_type) = found_type.fields.get(&col_field) {
+                    if let Some(field_type) = found_type.field_type(&col_field) {
                         // Validate type
                         let value = FieldValue::from_string(&name, field_type, value.to_string())
                             .map_err(|e| ImportError::ParseError(e.to_string()))?;

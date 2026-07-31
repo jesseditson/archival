@@ -7,7 +7,7 @@ use crate::fields::field_type::OneofOption;
 use crate::fields::meta::Meta;
 use crate::fields::{DateTime, DisplayType, FieldType, FieldValue, File, MetaValue, RenderedFile};
 use crate::object::{Object, ObjectEntry, ObjectMap};
-use crate::object_definition::ObjectDefinition;
+use crate::object_definition::{FieldDefinition, FieldsMap, ObjectDefinition};
 use crate::value_path::{ValuePath, ValuePathComponent};
 use ordermap::OrderMap;
 use std::collections::BTreeMap;
@@ -483,28 +483,42 @@ impl From<archival_proto::FieldType> for FieldType {
 }
 
 // FieldsMap from proto
-impl From<archival_proto::FieldsMap> for OrderMap<String, FieldType> {
+impl From<archival_proto::FieldsMap> for FieldsMap {
     fn from(proto: archival_proto::FieldsMap) -> Self {
-        let mut map = OrderMap::new();
+        let mut map = FieldsMap::new();
         for field in proto.fields {
             let field_type = field.r#type.map(|t| t.into()).unwrap_or(FieldType::String);
-            map.insert(field.name, field_type);
+            map.insert(
+                field.name,
+                FieldDefinition::new(field_type, non_empty(field.description)),
+            );
         }
         map
     }
 }
 
-// OrderMap<String, FieldType> -> proto FieldsMap
-impl From<OrderMap<String, FieldType>> for archival_proto::FieldsMap {
-    fn from(map: OrderMap<String, FieldType>) -> Self {
+// FieldsMap -> proto FieldsMap
+impl From<FieldsMap> for archival_proto::FieldsMap {
+    fn from(map: FieldsMap) -> Self {
         let fields = map
             .into_iter()
-            .map(|(name, ft)| archival_proto::fields_map::Field {
+            .map(|(name, field)| archival_proto::fields_map::Field {
                 name,
-                r#type: Some(ft.into()),
+                r#type: Some(field.r#type.into()),
+                description: field.description.unwrap_or_default(),
             })
             .collect();
         archival_proto::FieldsMap { fields }
+    }
+}
+
+/// proto3 has no null, so this file uses the empty string for absent optional
+/// strings (as `ObjectDefinition::template` already did).
+fn non_empty(value: String) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
     }
 }
 
@@ -551,8 +565,7 @@ impl From<FieldType> for archival_proto::FieldType {
 // ObjectDefinition
 impl From<archival_proto::ObjectDefinition> for ObjectDefinition {
     fn from(proto: archival_proto::ObjectDefinition) -> Self {
-        let fields: OrderMap<String, FieldType> =
-            proto.fields.map(|f| f.into()).unwrap_or_default();
+        let fields: FieldsMap = proto.fields.map(|f| f.into()).unwrap_or_default();
 
         let mut children = OrderMap::new();
         if let Some(cd) = proto.children {
@@ -564,6 +577,7 @@ impl From<archival_proto::ObjectDefinition> for ObjectDefinition {
                         fields: None,
                         template: String::new(),
                         children: None,
+                        description: String::new(),
                     })
                     .into();
                 children.insert(child.name, child_def);
@@ -573,12 +587,9 @@ impl From<archival_proto::ObjectDefinition> for ObjectDefinition {
         ObjectDefinition {
             name: proto.name,
             fields,
-            template: if proto.template.is_empty() {
-                None
-            } else {
-                Some(proto.template)
-            },
+            template: non_empty(proto.template),
             children,
+            description: non_empty(proto.description),
         }
     }
 }
@@ -614,6 +625,7 @@ impl From<ObjectDefinition> for archival_proto::ObjectDefinition {
             fields,
             template: def.template.unwrap_or_default(),
             children,
+            description: def.description.unwrap_or_default(),
         }
     }
 }
@@ -939,8 +951,8 @@ impl From<events::RemoveChildEvent> for archival_proto::RemoveChildEvent {
 #[cfg(test)]
 mod proto_tests {
     use crate::{
-        archival_proto, events, fields, object, FieldValue, FieldsMap, ObjectDefinition,
-        ObjectDefinitions, ObjectMap,
+        archival_proto, events, fields, object, FieldDefinition, FieldValue, FieldsMap,
+        ObjectDefinition, ObjectDefinitions, ObjectMap,
     };
     use prost::Message;
     macro_rules! proto_test {
@@ -1055,18 +1067,23 @@ mod proto_tests {
     proto_test!(archival_proto::ObjectDefinition => ObjectDefinition, object_definition_test {
         ObjectDefinition {
             name: "object".to_string(),
-            fields: FieldsMap::from([("something".to_string(), fields::FieldType::Number)]),
+            fields: FieldsMap::from([(
+                "something".to_string(),
+                FieldDefinition::new(fields::FieldType::Number, Some("How many.".to_string())),
+            )]),
             template: None,
             children: ObjectDefinitions::from([
                 ("child".to_string(), ObjectDefinition {
                     name: "object".to_string(),
                     fields: FieldsMap::from([
-                        ("something".to_string(), fields::FieldType::Number)]
+                        ("something".to_string(), fields::FieldType::Number.into())]
                     ),
                     template: None,
-                    children: ObjectDefinitions::new()
+                    children: ObjectDefinitions::new(),
+                    description: Some("A child object.".to_string()),
                 })
-            ])
+            ]),
+            description: None,
         };
     });
 }

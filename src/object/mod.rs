@@ -150,7 +150,7 @@ impl Object {
                 .get(type_name)
                 .map(|i| &i.alias_of)
                 .unwrap_or(type_name);
-            if let Some(field_type) = definition.fields.get(def_key) {
+            if let Some(field_type) = definition.field_type(def_key) {
                 // Values
                 let field_value = FieldValue::from_toml(def_key, field_type, value)?;
                 if !skip_validation {
@@ -328,11 +328,9 @@ mod tests {
 
     #[test]
     fn object_parsing() {
-        let defs = ObjectDefinition::from_table(
-            &toml::from_str(artist_and_example_definition_str()).unwrap(),
-            &OrderMap::new(),
-        )
-        .unwrap();
+        let defs =
+            ObjectDefinition::from_source(artist_and_example_definition_str(), &OrderMap::new())
+                .unwrap();
         let table: Table = toml::from_str(artist_object_str()).unwrap();
         let obj = Object::from_table(
             defs.get("artists").unwrap(),

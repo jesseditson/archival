@@ -197,10 +197,13 @@ fn emit_object(
         if injected && INJECTED.contains(&field.as_str()) {
             continue;
         }
+        if let Some(description) = &field_definition.description {
+            members.push(doc_comment(description, "  "));
+        }
         members.push(format!(
             "  {}: {};",
             property_name(field),
-            field_type(field_definition)
+            field_type(&field_definition.r#type)
         ));
     }
     for (child, child_definition) in &definition.children {
@@ -211,16 +214,25 @@ fn emit_object(
             names,
             out,
         );
+        // Repeated from the child's own interface: this is the member a
+        // consumer hovers, so it is where the description is worth having.
+        if let Some(description) = &child_definition.description {
+            members.push(doc_comment(description, "  "));
+        }
         // Children default to an empty list rather than null.
         members.push(format!("  {}: {}[];", property_name(child), child_type));
     }
 
-    let doc = if injected {
+    let mut doc = if injected {
         String::new()
     } else {
         "// Child objects are read from their parent's file, so they have no path/order.\n"
             .to_string()
     };
+    if let Some(description) = &definition.description {
+        doc.push_str(&doc_comment(description, ""));
+        doc.push('\n');
+    }
     out[slot] = format!(
         "{}export interface {} {{\n{}\n}}",
         doc,
@@ -228,6 +240,27 @@ fn emit_object(
         members.join("\n")
     );
     type_name
+}
+
+/// Renders a schema description as a JSDoc comment indented to `indent`.
+fn doc_comment(description: &str, indent: &str) -> String {
+    // A description is arbitrary prose from objects.toml, so it can contain the
+    // sequence that would end the comment early.
+    let description = description.replace("*/", "*\\/");
+    let mut lines = description.lines();
+    let first = lines.next().unwrap_or_default();
+    match lines.next() {
+        None => format!("{indent}/** {first} */"),
+        Some(second) => {
+            let rest = std::iter::once(first)
+                .chain(std::iter::once(second))
+                .chain(lines)
+                .map(|line| format!("{indent} * {line}").trim_end().to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("{indent}/**\n{rest}\n{indent} */")
+        }
+    }
 }
 
 /// Generates the full declaration file for a site.
@@ -254,9 +287,12 @@ pub fn generate_typescript_defs(
         );
         types.insert(name, type_name);
     }
-    for (name, _) in objects {
+    for (name, definition) in objects {
         let type_name = &types[name];
         let is_root = root_objects.contains(name);
+        if let Some(description) = &definition.description {
+            members.push(doc_comment(description, "  "));
+        }
         members.push(format!(
             "  {}: {}{};",
             property_name(name),
@@ -283,11 +319,9 @@ mod tests {
     use crate::object_definition::ObjectDefinition;
     use anyhow::Result;
     use ordermap::OrderMap;
-    use toml::Table;
 
     fn defs(toml: &str) -> Result<ObjectDefinitions> {
-        let table: Table = toml::from_str(toml)?;
-        ObjectDefinition::from_table(&table, &OrderMap::new())
+        ObjectDefinition::from_source(toml, &OrderMap::new())
     }
 
     fn generate(toml: &str, roots: &[&str]) -> Result<String> {
@@ -428,12 +462,10 @@ mod tests {
 
     #[test]
     fn resolves_editor_type_aliases() -> Result<()> {
-        let table: Table = toml::from_str(
-            r#"
+        let source = r#"
             [posts]
             hero = "hero_image"
-            "#,
-        )?;
+            "#;
         let mut editor_types = OrderMap::new();
         editor_types.insert(
             "hero_image".to_string(),
@@ -443,7 +475,7 @@ mod tests {
                 editor_url: String::new(),
             },
         );
-        let definitions = ObjectDefinition::from_table(&table, &editor_types)?;
+        let definitions = ObjectDefinition::from_source(source, &editor_types)?;
         let out = generate_typescript_defs(&definitions, &HashSet::new());
         assert!(out.contains("hero: ArchivalFile | null;"), "{}", out);
         Ok(())
@@ -521,6 +553,91 @@ mod tests {
             generate(toml, &["settings"])?,
             generate(toml, &["settings"])?
         );
+        Ok(())
+    }
+
+    #[test]
+    fn descriptions_become_jsdoc() -> Result<()> {
+        let out = generate(
+            r#"
+            # A blog post.
+            [posts]
+            # The headline.
+            title = "string"
+            body = "markdown"
+            # When it was written.
+            # Rendered with the `date` filter.
+            published = "date"
+            "#,
+            &[],
+        )?;
+        assert!(
+            out.contains("/** A blog post. */\nexport interface"),
+            "{out}"
+        );
+        assert!(
+            out.contains("  /** The headline. */\n  title: string | null;"),
+            "{out}"
+        );
+        // Multi-line descriptions become a block comment.
+        assert!(
+            out.contains(
+                "  /**\n   * When it was written.\n   * Rendered with the `date` filter.\n   */\n  published: string | null;"
+            ),
+            "{out}"
+        );
+        // Undescribed fields get no comment.
+        assert!(out.contains("\n  body: string | null;"), "{out}");
+        Ok(())
+    }
+
+    #[test]
+    fn object_descriptions_reach_every_place_they_are_referenced() -> Result<()> {
+        let out = generate(
+            r#"
+            # A blog post.
+            [posts]
+            title = "string"
+            # Related links.
+            [posts.links]
+            url = "string"
+            "#,
+            &[],
+        )?;
+        // On the child's interface, on the member that holds it...
+        assert!(
+            out.contains("/** Related links. */\nexport interface PostsLinksObject {"),
+            "{out}"
+        );
+        assert!(
+            out.contains("  /** Related links. */\n  links: PostsLinksObject[];"),
+            "{out}"
+        );
+        // ...and for a top-level object, on the root interface's member too.
+        assert!(
+            out.contains("  /** A blog post. */\n  posts: PostsObject[];"),
+            "{out}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_description_cannot_end_its_own_comment() -> Result<()> {
+        let out = generate(
+            r#"
+            [posts]
+            # Not a terminator: */ still inside.
+            title = "string"
+            "#,
+            &[],
+        )?;
+        assert!(out.contains(r"*\/ still inside."), "{out}");
+        // Exactly one comment opened and one closed on that line.
+        let line = out
+            .lines()
+            .find(|l| l.contains("still inside"))
+            .expect("description not emitted");
+        assert_eq!(line.matches("*/").count(), 1, "{line}");
         Ok(())
     }
 }

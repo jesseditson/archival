@@ -1306,8 +1306,8 @@ pub mod json_parsing_tests {
     #[traced_test]
     #[test]
     fn parsing_basics() {
-        let table: Table = toml::from_str(object_definition_toml()).unwrap();
-        let object_definitions = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
+        let object_definitions =
+            ObjectDefinition::from_source(object_definition_toml(), &OrderMap::new()).unwrap();
         let mut example = serde_json::json!({
           "post": [
             {
@@ -1523,9 +1523,8 @@ pub mod json_parsing_tests {
     #[traced_test]
     #[test]
     fn parsing_basics_from_toml() {
-        let def_table: Table = toml::from_str(object_definition_toml()).unwrap();
         let object_definitions =
-            ObjectDefinition::from_table(&def_table, &OrderMap::new()).unwrap();
+            ObjectDefinition::from_source(object_definition_toml(), &OrderMap::new()).unwrap();
 
         let example_toml = r#"
         [[post]]
@@ -1606,7 +1605,7 @@ pub mod json_parsing_tests {
                 if key == "order" || key == "__filename" {
                     continue;
                 };
-                if let Some(field_type) = object_def.fields.get(key) {
+                if let Some(field_type) = object_def.field_type(key) {
                     let fv = FieldValue::from_toml(&key.to_string(), field_type, value).unwrap();
                     fields.insert(key.to_string(), fv);
                 } else {
@@ -1707,12 +1706,14 @@ pub mod json_parsing_tests {
 mod validate_tests {
     use super::*;
     use ordermap::OrderMap;
-    use toml::Table;
 
     #[test]
     fn type_mismatch_returns_type_mismatch() {
-        let table: Table = toml::from_str(json_parsing_tests::object_definition_toml()).unwrap();
-        let object_definitions = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
+        let object_definitions = ObjectDefinition::from_source(
+            json_parsing_tests::object_definition_toml(),
+            &OrderMap::new(),
+        )
+        .unwrap();
         let post_def = object_definitions.get("post").unwrap();
         let path = ValuePath::from_string("date");
         let v = FieldValue::String("not a date".to_string());
@@ -1724,8 +1725,11 @@ mod validate_tests {
 
     #[test]
     fn field_definition_not_found_returns_error() {
-        let table: Table = toml::from_str(json_parsing_tests::object_definition_toml()).unwrap();
-        let object_definitions = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
+        let object_definitions = ObjectDefinition::from_source(
+            json_parsing_tests::object_definition_toml(),
+            &OrderMap::new(),
+        )
+        .unwrap();
         let post_def = object_definitions.get("post").unwrap();
         let path = ValuePath::from_string("does_not_exist");
         let v = FieldValue::String("x".to_string());
@@ -1739,8 +1743,11 @@ mod validate_tests {
 
     #[test]
     fn invalid_oneof_name_returns_error() {
-        let table: Table = toml::from_str(json_parsing_tests::object_definition_toml()).unwrap();
-        let object_definitions = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
+        let object_definitions = ObjectDefinition::from_source(
+            json_parsing_tests::object_definition_toml(),
+            &OrderMap::new(),
+        )
+        .unwrap();
         let post_def = object_definitions.get("post").unwrap();
         let path = ValuePath::from_string("media");
         let v = FieldValue::Oneof(("notatype".to_string(), Box::new(None)));
@@ -1752,8 +1759,11 @@ mod validate_tests {
 
     #[test]
     fn invalid_oneof_type_returns_error() {
-        let table: Table = toml::from_str(json_parsing_tests::object_definition_toml()).unwrap();
-        let object_definitions = ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap();
+        let object_definitions = ObjectDefinition::from_source(
+            json_parsing_tests::object_definition_toml(),
+            &OrderMap::new(),
+        )
+        .unwrap();
         let post_def = object_definitions.get("post").unwrap();
         let path = ValuePath::from_string("media");
         // Provide an invalid inner value so validation fails (None values validate)

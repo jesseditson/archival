@@ -593,14 +593,14 @@ here is a liquid variable: {{site_url}}
 
     fn artist_definition() -> ObjectDefinition {
         let artist_def_fields = FieldsMap::from([
-            ("name".to_string(), FieldType::String),
-            ("api_key".to_string(), FieldType::Secret),
+            ("name".to_string(), FieldType::String.into()),
+            ("api_key".to_string(), FieldType::Secret.into()),
         ]);
         let tour_dates_fields = FieldsMap::from([
-            ("date".to_string(), FieldType::Date),
-            ("ticket_link".to_string(), FieldType::String),
+            ("date".to_string(), FieldType::Date.into()),
+            ("ticket_link".to_string(), FieldType::String.into()),
         ]);
-        let numbers_fields = FieldsMap::from([("number".to_string(), FieldType::Number)]);
+        let numbers_fields = FieldsMap::from([("number".to_string(), FieldType::Number.into())]);
         let artist_children = ObjectDefinitions::from([
             (
                 "tour_dates".to_string(),
@@ -609,6 +609,7 @@ here is a liquid variable: {{site_url}}
                     fields: tour_dates_fields,
                     template: None,
                     children: ObjectDefinitions::new(),
+                    description: None,
                 },
             ),
             (
@@ -618,6 +619,7 @@ here is a liquid variable: {{site_url}}
                     fields: numbers_fields,
                     template: None,
                     children: ObjectDefinitions::new(),
+                    description: None,
                 },
             ),
         ]);
@@ -626,6 +628,7 @@ here is a liquid variable: {{site_url}}
             fields: artist_def_fields,
             template: Some("artist".to_string()),
             children: artist_children,
+            description: None,
         }
     }
 
@@ -637,19 +640,24 @@ here is a liquid variable: {{site_url}}
                 ObjectDefinition {
                     name: "c".to_string(),
                     fields: FieldsMap::from([
-                        ("name".to_string(), FieldType::String),
-                        ("content".to_string(), FieldType::Markdown),
+                        ("name".to_string(), FieldType::String.into()),
+                        ("content".to_string(), FieldType::Markdown.into()),
                     ]),
                     template: None,
                     children: ObjectDefinitions::from([(
                         "links".to_string(),
                         ObjectDefinition {
                             name: "links".to_string(),
-                            fields: FieldsMap::from([("url".to_string(), FieldType::String)]),
+                            fields: FieldsMap::from([(
+                                "url".to_string(),
+                                FieldType::String.into(),
+                            )]),
                             template: None,
                             children: ObjectDefinitions::new(),
+                            description: None,
                         },
                     )]),
+                    description: None,
                 },
             ),
         ])
@@ -799,6 +807,7 @@ here is a liquid variable: {{site_url}}
                 fields,
                 template: None,
                 children: ObjectDefinitions::new(),
+                description: None,
             },
         )]);
         let base_context = build_context(&objects_map, &definition_map, &field_config, &globals);
@@ -824,8 +833,8 @@ here is a liquid variable: {{site_url}}
     fn assigned_variables_are_visible_in_field_content() -> Result<()> {
         let rendered = render_with_objects(
             FieldsMap::from([
-                ("name".to_string(), FieldType::String),
-                ("content".to_string(), FieldType::Markdown),
+                ("name".to_string(), FieldType::String.into()),
+                ("content".to_string(), FieldType::Markdown.into()),
             ]),
             vec![c_object(
                 "home",
@@ -859,8 +868,8 @@ here is a liquid variable: {{site_url}}
         };
         let rendered = render_with_objects(
             FieldsMap::from([
-                ("name".to_string(), FieldType::String),
-                ("bio".to_string(), FieldType::String),
+                ("name".to_string(), FieldType::String.into()),
+                ("bio".to_string(), FieldType::String.into()),
             ]),
             vec![c_object("one", entry("one")), c_object("two", entry("two"))],
             "{% for item in objects.c %}[{{ item.bio }}]{% endfor %}",
@@ -875,7 +884,7 @@ here is a liquid variable: {{site_url}}
     #[test]
     fn raw_blocks_protect_their_contents() -> Result<()> {
         let rendered = render_with_objects(
-            FieldsMap::from([("name".to_string(), FieldType::String)]),
+            FieldsMap::from([("name".to_string(), FieldType::String.into())]),
             vec![c_object(
                 "home",
                 ObjectValues::from([("name".to_string(), FieldValue::String("home".to_string()))]),
@@ -889,7 +898,7 @@ here is a liquid variable: {{site_url}}
     #[test]
     fn whitespace_control_is_preserved() -> Result<()> {
         let rendered = render_with_objects(
-            FieldsMap::from([("name".to_string(), FieldType::String)]),
+            FieldsMap::from([("name".to_string(), FieldType::String.into())]),
             vec![c_object(
                 "home",
                 ObjectValues::from([("name".to_string(), FieldValue::String("home".to_string()))]),

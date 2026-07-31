@@ -14,7 +14,7 @@ pub fn object_to_liquid(
         .fields
         .iter()
         // Secret fields are never added to template contexts.
-        .filter(|(_, field_type)| !field_type.is_secret())
+        .filter(|(_, field)| !field.r#type.is_secret())
         .map(|(k, _)| {
             (
                 KString::from_ref(k.as_index()),
@@ -92,7 +92,7 @@ mod secret_tests {
     use toml::Table;
 
     fn definitions() -> crate::ObjectDefinitions {
-        let table: Table = toml::from_str(
+        ObjectDefinition::from_source(
             r#"
             [artists]
             name = "string"
@@ -100,9 +100,9 @@ mod secret_tests {
             [artists.keys]
             child_key = "secret"
             "#,
+            &OrderMap::new(),
         )
-        .unwrap();
-        ObjectDefinition::from_table(&table, &OrderMap::new()).unwrap()
+        .unwrap()
     }
 
     fn artist() -> (ObjectDefinition, Object) {
@@ -132,7 +132,7 @@ mod secret_tests {
     fn secret_definitions_are_parsed() {
         let defs = definitions();
         let artists = defs.get("artists").unwrap();
-        assert_eq!(artists.fields.get("api_key"), Some(&FieldType::Secret));
+        assert_eq!(artists.field_type("api_key"), Some(&FieldType::Secret));
         assert!(FieldType::Secret.is_secret());
         assert!(!FieldType::String.is_secret());
     }
