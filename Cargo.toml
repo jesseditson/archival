@@ -6,6 +6,15 @@ license = "Unlicense"
 description = "The simplest CMS in existence"
 repository = "https://github.com/jesseditson/archival"
 
+# Release assets are named archival-v{version}-{target}.tar.gz (the `v` is part of
+# both the tag and the file name), and the binary sits one directory deep inside the
+# tarball - see .github/scripts/package.sh. Linux builds are musl-only, which is fine:
+# binstall probes for glibc and falls back from -gnu to -musl automatically.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.{ archive-format }"
+pkg-fmt = "tgz"
+bin-dir = "{ name }-v{ version }-{ target }/{ bin }{ binary-ext }"
+
 [lib]
 name = "archival"
 path = "src/lib.rs"

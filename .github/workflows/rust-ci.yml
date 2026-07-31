@@ -178,21 +178,24 @@ jobs:
       - name: cargo publish
         run: cargo publish --dry-run --all-features --target ${{ matrix.target }}
 
-  create_release:
-    name: Create Release
-    runs-on: ubuntu-22.04
-    if: ${{ startsWith(github.ref, 'refs/tags/') && needs.publish-check.result == 'success' }}
-    needs: publish-check
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
+  # Gate the whole release pipeline on the versions agreeing. Publishing to
+  # crates.io cannot be undone, so this has to fail before anything ships, not
+  # after the GitHub release is already public.
+  version-check:
+    name: Version Check
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
     steps:
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          draft: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
+      - name: Verify versions match
+        run: |
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          NPM_VERSION=$(node -e "console.log(require('./package.json').version)")
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "$CARGO_VERSION" != "$NPM_VERSION" ] || [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "Version mismatch: Cargo.toml=$CARGO_VERSION package.json=$NPM_VERSION tag=v$TAG_VERSION"
+            exit 1
+          fi
 
   release:
     name: Release
@@ -202,8 +205,10 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     if: ${{ startsWith(github.ref, 'refs/tags/') && needs.publish-check.result == 'success' }}
-    needs: [publish-check, create_release]
+    needs: [publish-check, version-check]
     strategy:
+      # Never ship a partial release: if one target fails, no release is created.
+      fail-fast: true
       matrix:
         include:
           - os: ubuntu-22.04
@@ -248,28 +253,134 @@ jobs:
         env:
           NAME: archival
           TARGET: ${{ matrix.target }}
+          TAG: ${{ github.ref_name }}
         run: .github/scripts/package.sh
-      - name: Upload Assets
-        uses: softprops/action-gh-release@v1
+      # Hand the assets off as artifacts rather than letting all five legs race to
+      # mutate the release. publish_release below makes the single release call.
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          files: "archival*"
-          draft: true
-          upload_url: ${{ needs.create_release.outputs.upload_url }}
+          name: release-${{ matrix.target }}
+          path: |
+            archival-*.tar.gz
+            archival-*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 1
+          # Allow re-running a single failed matrix leg within the same run.
+          overwrite: true
+
+  publish_release:
+    name: Publish Release
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Only needed for archival_template.schema.json, which is checked in.
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets
+      - name: Verify all targets are present
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish Release
-        if: matrix.os == 'ubuntu-22.04' && matrix.target == 'x86_64-unknown-linux-musl'
-        uses: softprops/action-gh-release@v1
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ls -la release-assets
+          missing=0
+          for target in \
+            x86_64-unknown-linux-musl \
+            aarch64-unknown-linux-musl \
+            x86_64-pc-windows-msvc \
+            x86_64-apple-darwin \
+            aarch64-apple-darwin
+          do
+            tarball="release-assets/archival-${TAG}-${target}.tar.gz"
+            for f in "$tarball" "$tarball.sha256"; do
+              if [ ! -f "$f" ]; then
+                echo "::error::missing release asset $f"
+                missing=1
+              fi
+            done
+            if [ -f "$tarball" ] && [ -f "$tarball.sha256" ]; then
+              # The windows leg writes uppercase hex via PowerShell Get-FileHash.
+              want=$(tr -d '\r\n' < "$tarball.sha256" | tr '[:upper:]' '[:lower:]')
+              got=$(sha256sum "$tarball" | cut -d' ' -f1)
+              if [ "$want" != "$got" ]; then
+                echo "::error::checksum mismatch for $tarball ($want != $got)"
+                missing=1
+              fi
+            fi
+          done
+          exit "$missing"
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           draft: false
-          upload_url: ${{ needs.create_release.outputs.upload_url }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/archival-*.tar.gz
+            release-assets/archival-*.tar.gz.sha256
+            archival_template.schema.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Runs after publish_release so the release assets are already downloadable by
+  # the time the crate exists - otherwise `cargo binstall archival@<new>` would
+  # briefly fall back to building from source.
+  publish-crate:
+    name: Publish to crates.io
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [publish_release]
+    env:
+      SCCACHE_BUCKET: ${{ vars.SCCACHE_BUCKET }}
+      SCCACHE_ENDPOINT: ${{ secrets.SCCACHE_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    runs-on: ubuntu-22.04
+    # Same container/target/flags as publish-check, so the real publish runs the
+    # exact command its --dry-run already verified.
+    container: ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge
+    permissions:
+      contents: read
+      # Required for crates.io trusted publishing (OIDC)
+      id-token: write
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install unzip in container
+        run: apt-get update && apt-get install -y unzip
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: 33.1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-unknown-linux-musl
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+      - run: apt-get update && apt-get --assume-yes install libssl-dev
+      - run: cargo fetch
+      - name: Authenticate with crates.io
+        id: crates-auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: cargo publish
+        run: cargo publish --all-features --target aarch64-unknown-linux-musl
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
 
   publish-npm:
     name: Publish npm package
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [release]
+    needs: [publish_release]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -282,14 +393,5 @@ jobs:
           # npm >= 11.5.1 is required for trusted publishing; node 24 bundles npm 11
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
-      - name: Verify versions match
-        run: |
-          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-          NPM_VERSION=$(node -e "console.log(require('./package.json').version)")
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
-          if [ "$CARGO_VERSION" != "$NPM_VERSION" ] || [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
-            echo "Version mismatch: Cargo.toml=$CARGO_VERSION package.json=$NPM_VERSION tag=v$TAG_VERSION"
-            exit 1
-          fi
       - name: Publish to npm
         run: npm publish
