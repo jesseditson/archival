@@ -72,7 +72,7 @@ pub fn add_args(mut cmd: Command, config: CommandConfig) -> Command {
     if config.upload_prefix {
         cmd = cmd.arg(
                 // NOTE: weird long form quoting due to https://github.com/clap-rs/clap/issues/3586
-                arg!(-u --"upload-prefix" <upload_prefix> "override the upload prefix. If no manifest.toml is present, this is required.")
+                arg!(-u --"upload-prefix" <upload_prefix> "override the upload prefix. If no archival.toml is present, this is required.")
                     .value_parser(value_parser!(String)),
             );
     }

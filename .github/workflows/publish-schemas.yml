@@ -15,8 +15,8 @@ jobs:
       # TODO: check if this schema has changed
       # If it has, publish a new PR to
       # https://github.com/SchemaStore/schemastore/pulls
-  manifest:
-    name: Publish manifest.schema.json
+  archival:
+    name: Publish archival.schema.json
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -24,8 +24,8 @@ jobs:
       # TODO: check if this schema has changed
       # If it has, publish a new PR to
       # https://github.com/SchemaStore/schemastore/pulls
-  objects:
-    name: Publish objects.schema.json
+  archival_objects:
+    name: Publish archival_objects.schema.json
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:

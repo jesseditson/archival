@@ -140,9 +140,9 @@ impl Site {
     #[instrument(skip(fs))]
     pub fn load(fs: &impl FileSystemAPI, upload_prefix: Option<&str>) -> Result<Site> {
         // Load our manifest (should it exist)
-        let manifest_path = Path::new(MANIFEST_FILE_NAME);
-        let manifest = if fs.exists(manifest_path)? {
-            let manifest = Manifest::from_file(manifest_path, fs, upload_prefix)?;
+        let manifest_path = Manifest::path_in(Path::new(""), fs)?;
+        let mut manifest = if fs.exists(&manifest_path)? {
+            let manifest = Manifest::from_file(&manifest_path, fs, upload_prefix)?;
             // When loading a manifest, check its compatibility.
             if let Some(manifest_version) = &manifest.archival_version {
                 let (compat, message) = check_compatibility(manifest_version);
@@ -155,12 +155,14 @@ impl Site {
             Manifest::default(
                 Path::new(""),
                 upload_prefix.ok_or_else(|| {
-                    ArchivalError::new(
-                        "upload_prefix must be manually defined if manifest.toml is not present.",
-                    )
+                    ArchivalError::new(&format!(
+                        "upload_prefix must be manually defined if {} is not present.",
+                        MANIFEST_FILE_NAME
+                    ))
                 })?,
             )
         };
+        manifest.resolve_object_definition_file(fs)?;
         let odf = Path::new(&manifest.object_definition_file);
         if !fs.exists(odf)? {
             return Err(ArchivalError::new(&format!(
@@ -400,11 +402,12 @@ impl Site {
         modify: impl FnOnce(&mut Manifest),
     ) -> Result<()> {
         modify(&mut self.manifest);
-        fs.write_str(MANIFEST_FILE_NAME, self.manifest.to_toml()?)
+        let manifest_path = Manifest::path_in(Path::new(""), fs)?;
+        fs.write_str(manifest_path, self.manifest.to_toml()?)
     }
 
     pub fn manifest_content<T: FileSystemAPI>(&self, fs: &T) -> Result<String> {
-        fs.read_to_string(MANIFEST_FILE_NAME)
+        fs.read_to_string(Manifest::path_in(Path::new(""), fs)?)
             .map(|m| m.unwrap_or_default())
     }
 

@@ -43,6 +43,18 @@ Fork [the repository](https://github.com/jesseditson/archival) and create your b
 
 archival uses a vanilla cargo setup for tests, and all tests can be run with `./test.sh` in the root of the repo.
 
+### Releasing
+
+archival's version is written down in several places: `Cargo.toml`, `Cargo.lock`, `package.json`, the `archival-version` default in `action.yml`, and the `$id` of each versioned schema published to SchemaStore. Set them all at once with:
+
+```bash
+./bump-version.sh 0.18.0
+```
+
+Then commit the result and tag it `v0.18.0` - CI publishes the crate, the binaries, and the npm package from the tag.
+
+`./check-versions.sh` verifies that every one of those places agrees with `Cargo.toml` (and, given a version argument, that they match it). It runs in the pre-commit hook and again in CI against the release tag, so a version that only got half-bumped fails before it ships.
+
 ### Style guide
 
 archival uses `clippy` with default settings as the linter. See docs:

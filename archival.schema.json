@@ -1,5 +1,5 @@
 {
-  "$id": "jesseditson/archival/v0.10.4/manifest.schema.json",
+  "$id": "jesseditson/archival/v0.17.0/archival.schema.json",
   "additionalProperties": false,
   "type": "object",
   "properties": {
@@ -30,20 +30,20 @@
       "description": "a name for this site, used by the archival editor and other machine readers of this manifest",
       "type": "string"
     },
-    "object_definition_file": {
+    "object_file": {
       "description": "the file that archival uses to read the objects schema for this site",
       "type": "string",
-      "default": "objects.toml"
+      "default": "archival_objects.toml"
     },
-    "pages_dir": {
+    "pages": {
       "description": "the folder that archival looks for page liquid files in",
       "type": "string",
       "default": "pages"
     },
-    "objects_dir": {
+    "objects": {
       "description": "the folder that archival looks for object toml files in",
       "type": "string",
-      "default": "objects.toml"
+      "default": "objects"
     },
     "schemas_dir": {
       "description": "the folder that the archival schemas command generates schemas into",
@@ -67,56 +67,67 @@
     },
     "editor_types": {
       "type": "object",
-      "description": "a dictionary of custom-defined editor types",
-      "additionalProperties": false,
-      "properties": {
-        "type": {
-          "description": "the type that this custom type is backed with",
-          "enum": [
-            "string",
-            "number",
-            "boolean",
-            "date",
-            "markdown",
-            "image",
-            "video",
-            "audio",
-            "upload",
-            "meta",
-            "secret"
-          ],
-          "type": "string"
-        },
-        "editor_url": {
-          "description": "a URL to load a custom editor from. If unspecified, will use the underlying type's editor",
-          "type": "string"
-        },
-        "validate": {
-          "type": "array",
-          "description": "a list of validations to run on fields of this type",
-          "items": {
-            "anyOf": [
-              {
-                "type": "string",
-                "description": "a regular expression to run on this field's string representation"
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "path": {
-                    "type": "string",
-                    "description": "a path inside a meta field to validate"
-                  },
-                  "validate": {
-                    "type": "string",
-                    "description": "a regular expression to run on this field at the specified path"
+      "description": "a dictionary of custom-defined editor types, keyed by type name",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "description": "the type that this custom type is backed with",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "date",
+              "markdown",
+              "image",
+              "video",
+              "audio",
+              "upload",
+              "meta",
+              "secret"
+            ],
+            "type": "string"
+          },
+          "editor_url": {
+            "description": "a URL to load a custom editor from. If unspecified, will use the underlying type's editor",
+            "type": "string"
+          },
+          "validate": {
+            "type": "array",
+            "description": "a list of validations to run on fields of this type",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "a regular expression to run on this field's string representation"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "a path inside a meta field to validate"
+                    },
+                    "validate": {
+                      "type": "string",
+                      "description": "a regular expression to run on this field at the specified path"
+                    }
                   }
                 }
-              }
-            ]
+              ]
+            }
           }
         }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "arbitrary string metadata for this site, made available to machine readers of this manifest",
+      "additionalProperties": {
+        "type": "string"
       }
     }
   }

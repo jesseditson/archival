@@ -17,7 +17,9 @@ use crate::{
 };
 
 use super::constants::{
-    BUILD_DIR_NAME, OBJECTS_DIR_NAME, OBJECT_DEFINITION_FILE_NAME, PAGES_DIR_NAME, STATIC_DIR_NAME,
+    BUILD_DIR_NAME, LEGACY_MANIFEST_FILE_NAME, LEGACY_OBJECT_DEFINITION_FILE_NAME,
+    MANIFEST_FILE_NAME, OBJECTS_DIR_NAME, OBJECT_DEFINITION_FILE_NAME, PAGES_DIR_NAME,
+    STATIC_DIR_NAME,
 };
 
 use thiserror::Error;
@@ -368,6 +370,37 @@ impl fmt::Display for Manifest {
 }
 
 impl Manifest {
+    /// The manifest file archival reads and writes for the site at `root`. The
+    /// canonical name wins when it exists; the legacy name is only used when
+    /// it's the site's only manifest, so writes land in the file the site
+    /// already has rather than silently creating a second one.
+    pub fn path_in(root: &Path, fs: &impl FileSystemAPI) -> Result<PathBuf> {
+        let canonical = root.join(MANIFEST_FILE_NAME);
+        if !fs.exists(&canonical)? {
+            let legacy = root.join(LEGACY_MANIFEST_FILE_NAME);
+            if fs.exists(&legacy)? {
+                return Ok(legacy);
+            }
+        }
+        Ok(canonical)
+    }
+
+    /// Points an unconfigured `object_definition_file` at the legacy
+    /// `objects.toml` when that is the only object definition file present.
+    /// A manifest that names the file explicitly is left alone.
+    pub(crate) fn resolve_object_definition_file(&mut self, fs: &impl FileSystemAPI) -> Result<()> {
+        if self.object_definition_file != self.root.join(OBJECT_DEFINITION_FILE_NAME)
+            || fs.exists(&self.object_definition_file)?
+        {
+            return Ok(());
+        }
+        let legacy = self.root.join(LEGACY_OBJECT_DEFINITION_FILE_NAME);
+        if fs.exists(&legacy)? {
+            self.object_definition_file = legacy;
+        }
+        Ok(())
+    }
+
     pub fn default(root: &Path, upload_prefix: &str) -> Manifest {
         Manifest {
             root: root.to_owned(),
@@ -393,11 +426,19 @@ impl Manifest {
         match field {
             ManifestField::Prebuild => str_value == "[]",
             ManifestField::ObjectDefinitionFile => {
+                // The legacy name counts as a default too, so formatting a
+                // site that still uses objects.toml doesn't write out an
+                // object_file line it never had.
                 str_value
                     == self
                         .root
                         .join(OBJECT_DEFINITION_FILE_NAME)
                         .to_string_lossy()
+                    || str_value
+                        == self
+                            .root
+                            .join(LEGACY_OBJECT_DEFINITION_FILE_NAME)
+                            .to_string_lossy()
             }
             ManifestField::ObjectsDir => {
                 str_value == self.root.join(OBJECTS_DIR_NAME).to_string_lossy()

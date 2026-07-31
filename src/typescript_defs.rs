@@ -126,7 +126,8 @@ impl Names {
 
 fn field_type(field: &FieldType) -> String {
     match field {
-        // The alias name is a naming convenience in objects.toml; the value is
+        // The alias name is a naming convenience in the object definition
+        // file; the value is
         // the aliased type.
         FieldType::Alias(alias) => field_type(&alias.0),
         FieldType::String | FieldType::Markdown => "string | null".to_string(),

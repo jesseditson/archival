@@ -61,7 +61,10 @@ pub mod object;
 #[cfg(feature = "proto")]
 pub mod proto;
 pub use archival_error::ArchivalError;
-pub use constants::{MANIFEST_FILE_NAME, MIN_COMPAT_VERSION};
+pub use constants::{
+    LEGACY_MANIFEST_FILE_NAME, LEGACY_OBJECT_DEFINITION_FILE_NAME, MANIFEST_FILE_NAME,
+    MIN_COMPAT_VERSION, OBJECT_DEFINITION_FILE_NAME,
+};
 pub use definition_comments::DefinitionComments;
 pub use fields::{
     file::RenderedFile, FieldConfig, FieldType, FieldValue, RenderedFieldValue,
@@ -293,7 +296,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             ..
         } = &self.site.manifest;
         let root_files = [
-            Path::new(MANIFEST_FILE_NAME).to_path_buf(),
+            Manifest::path_in(Path::new(""), fs)?,
             object_definition_file.to_owned(),
         ];
         Ok(root_files
@@ -1382,6 +1385,124 @@ mod lib {
                 Some(BuildOptions::default()),
             )
             .is_err());
+        Ok(())
+    }
+
+    fn named_site_fs(manifest: &str, objects: &str, site_url: &str) -> Result<MemoryFileSystem> {
+        let mut fs = MemoryFileSystem::default();
+        fs.write_str(
+            manifest,
+            format!("upload_prefix = \"\"\nsite_url = \"{}\"\n", site_url),
+        )?;
+        fs.write_str(objects, "[site]\nname = \"string\"\n".to_string())?;
+        Ok(fs)
+    }
+
+    #[test]
+    fn legacy_file_names_are_still_supported() -> Result<()> {
+        let fs = named_site_fs(
+            LEGACY_MANIFEST_FILE_NAME,
+            LEGACY_OBJECT_DEFINITION_FILE_NAME,
+            "legacy.example",
+        )?;
+        let mut archival = Archival::new(fs)?;
+        assert_eq!(
+            archival.site.manifest.site_url.as_deref(),
+            Some("legacy.example")
+        );
+        assert_eq!(
+            archival.site.manifest.object_definition_file,
+            Path::new(LEGACY_OBJECT_DEFINITION_FILE_NAME).to_path_buf()
+        );
+        // Writes go back to the file the site already has rather than creating
+        // a second manifest under the canonical name.
+        archival.modify_manifest(|m| m.site_url = Some("legacy-edited.example".to_string()))?;
+        archival.fs_mutex.with_fs(|fs| {
+            assert!(!fs.exists(Path::new(MANIFEST_FILE_NAME))?);
+            let written = fs
+                .read_to_string(Path::new(LEGACY_MANIFEST_FILE_NAME))?
+                .unwrap_or_default();
+            assert!(
+                written.contains("site_url = \"legacy-edited.example\""),
+                "{}",
+                written
+            );
+            // A legacy object definition file is still a default, so it isn't
+            // written out as an explicit object_file.
+            assert!(!written.contains("object_file"), "{}", written);
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn canonical_file_names_take_precedence() -> Result<()> {
+        let mut fs = named_site_fs(
+            MANIFEST_FILE_NAME,
+            OBJECT_DEFINITION_FILE_NAME,
+            "canonical.example",
+        )?;
+        fs.write_str(
+            LEGACY_MANIFEST_FILE_NAME,
+            "upload_prefix = \"\"\nsite_url = \"legacy.example\"\n".to_string(),
+        )?;
+        fs.write_str(
+            LEGACY_OBJECT_DEFINITION_FILE_NAME,
+            "[legacy_only]\nname = \"string\"\n".to_string(),
+        )?;
+        let mut archival = Archival::new(fs)?;
+        assert_eq!(
+            archival.site.manifest.site_url.as_deref(),
+            Some("canonical.example")
+        );
+        assert!(archival.site.object_definitions.contains_key("site"));
+        assert!(!archival.site.object_definitions.contains_key("legacy_only"));
+        archival.modify_manifest(|m| m.site_url = Some("canonical-edited.example".to_string()))?;
+        archival.fs_mutex.with_fs(|fs| {
+            let legacy = fs
+                .read_to_string(Path::new(LEGACY_MANIFEST_FILE_NAME))?
+                .unwrap_or_default();
+            assert!(!legacy.contains("canonical-edited"), "{}", legacy);
+            let canonical = fs
+                .read_to_string(Path::new(MANIFEST_FILE_NAME))?
+                .unwrap_or_default();
+            assert!(
+                canonical.contains("site_url = \"canonical-edited.example\""),
+                "{}",
+                canonical
+            );
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn an_explicit_object_file_is_used_as_written() -> Result<()> {
+        let mut fs = named_site_fs(
+            MANIFEST_FILE_NAME,
+            LEGACY_OBJECT_DEFINITION_FILE_NAME,
+            "explicit.example",
+        )?;
+        fs.write_str(
+            MANIFEST_FILE_NAME,
+            "upload_prefix = \"\"\nobject_file = \"custom_objects.toml\"\n".to_string(),
+        )?;
+        fs.write_str(
+            "custom_objects.toml",
+            "[custom]\nname = \"string\"\n".to_string(),
+        )?;
+        let archival = Archival::new(fs)?;
+        assert_eq!(
+            archival.site.manifest.object_definition_file,
+            Path::new("custom_objects.toml").to_path_buf()
+        );
+        assert!(archival.site.object_definitions.contains_key("custom"));
+        let written = archival.site.manifest.to_toml()?;
+        assert!(
+            written.contains("object_file = \"custom_objects.toml\""),
+            "{}",
+            written
+        );
         Ok(())
     }
 }
