@@ -113,7 +113,7 @@ mod binary_tests {
         );
         assert!(defs.contains("section: SectionObject[];"), "{}", defs);
         assert!(defs.contains("body: string | null;"), "{}", defs);
-        // Comments in objects.toml reach the generated types as JSDoc.
+        // Comments in archival_objects.toml reach the generated types as JSDoc.
         assert!(
             defs.contains("/** A block of content on the home page. */"),
             "{}",

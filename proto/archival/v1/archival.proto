@@ -161,7 +161,7 @@ message FieldsMap {
   message Field {
     string name = 1;
     FieldType type = 2;
-    // The comment above this field in objects.toml. Empty when undescribed.
+    // The comment above this field in archival_objects.toml. Empty when undescribed.
     string description = 3;
   }
 
@@ -182,7 +182,7 @@ message ObjectDefinition {
   FieldsMap fields = 2;
   string template = 3;
   ChildDefinitions children = 4;
-  // The comment above this object in objects.toml. Empty when undescribed.
+  // The comment above this object in archival_objects.toml. Empty when undescribed.
   string description = 5;
 }
 

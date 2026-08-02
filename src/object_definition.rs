@@ -64,9 +64,9 @@ pub type FieldsMap = OrderMap<String, FieldDefinition>;
 
 /// A field's type, plus whatever the schema author wrote about it.
 ///
-/// `description` comes from the comment above the field in `objects.toml` (see
-/// [`crate::definition_comments`]) and exists so editors and generated types
-/// can explain a field rather than just naming it.
+/// `description` comes from the comment above the field in
+/// `archival_objects.toml` (see [`crate::definition_comments`]) and exists so
+/// editors and generated types can explain a field rather than just naming it.
 #[derive(Debug, Serialize, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "typescript", derive(typescript_type_def::TypeDef))]
 pub struct FieldDefinition {
@@ -132,13 +132,13 @@ pub struct ObjectDefinition {
     #[cfg_attr(feature = "typescript", type_def(type_of = "typedefs::ChildrenDef"))]
     pub children: ObjectDefinitions,
 
-    /// The comment above this object's `[header]` in `objects.toml`.
+    /// The comment above this object's `[header]` in `archival_objects.toml`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
 impl ObjectDefinition {
-    /// Parses the contents of an `objects.toml` file.
+    /// Parses the contents of an `archival_objects.toml` file.
     ///
     /// The source is parsed twice: once by `toml` for the definitions, and once
     /// by `toml_edit` for the comments that describe them.

@@ -273,7 +273,7 @@ pub enum ManifestField {
 }
 
 impl ManifestField {
-    /// The key this field is read from and written to in manifest.toml.
+    /// The key this field is read from and written to in archival.toml.
     pub(crate) fn field_name(&self) -> &str {
         match self {
             ManifestField::UploadPrefix => "upload_prefix",

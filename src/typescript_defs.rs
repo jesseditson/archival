@@ -245,8 +245,8 @@ fn emit_object(
 
 /// Renders a schema description as a JSDoc comment indented to `indent`.
 fn doc_comment(description: &str, indent: &str) -> String {
-    // A description is arbitrary prose from objects.toml, so it can contain the
-    // sequence that would end the comment early.
+    // A description is arbitrary prose from archival_objects.toml, so it can
+    // contain the sequence that would end the comment early.
     let description = description.replace("*/", "*\\/");
     let mut lines = description.lines();
     let first = lines.next().unwrap_or_default();

@@ -1,4 +1,5 @@
-//! Recovers the comments written above fields and objects in `objects.toml`.
+//! Recovers the comments written above fields and objects in
+//! `archival_objects.toml`.
 //!
 //! `toml`'s value model discards comments, so definitions are parsed a second
 //! time with `toml_edit` — which keeps them as key and table "decor" — and the
@@ -23,7 +24,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 use toml_edit::{Decor, Document, InlineTable, Item, Table, TomlError, Value};
 
-/// Comments harvested from an `objects.toml` source, shaped to mirror
+/// Comments harvested from an `archival_objects.toml` source, shaped to mirror
 /// [`ObjectDefinition`](crate::ObjectDefinition)'s split between `fields` and
 /// `children` so it can be walked alongside one.
 ///

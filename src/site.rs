@@ -934,6 +934,7 @@ fn hash_file(file: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::OBJECT_DEFINITION_FILE_NAME;
     use crate::fields::ObjectValues;
     use crate::file_system_memory::MemoryFileSystem;
     use crate::util::path_to_slash;
@@ -946,7 +947,7 @@ mod tests {
     fn nested_template_site() -> Result<MemoryFileSystem> {
         let mut fs = MemoryFileSystem::default();
         fs.write_str(
-            Path::new("objects.toml"),
+            Path::new(OBJECT_DEFINITION_FILE_NAME),
             "[post]\ntemplate = \"posts/single\"\nname = \"string\"\n".to_string(),
         )?;
         fs.write_str(
