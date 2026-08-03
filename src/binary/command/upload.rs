@@ -16,10 +16,7 @@ use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches};
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
-use reqwest::{
-    header::{HeaderMap, AUTHORIZATION},
-    StatusCode,
-};
+use reqwest::header::{HeaderMap, AUTHORIZATION};
 use serde_json::json;
 use std::{
     fs, io,
@@ -51,8 +48,8 @@ pub enum UploadError {
     InvalidField(String, String, String),
     #[error("field '{0}' is a {1}, which cannot hold an upload.\n{2}")]
     NonUploadableType(String, String, String),
-    #[error("upload failed {0}")]
-    UploadFailed(String),
+    #[error("upload failed: {0} responded {1}")]
+    UploadFailed(String, String),
     #[error("could not infer repo from remotes: git command failed: {0}")]
     NoGit(String),
     #[error("could not infer repo from remotes: {0} - only github URLs supported.")]
@@ -66,6 +63,23 @@ impl FieldType {
             FieldType::Audio | FieldType::Video | FieldType::Upload | FieldType::Image
         )
     }
+}
+
+fn response_error(r: reqwest::blocking::Response) -> String {
+    let status = r.status();
+    match r.text() {
+        Ok(body) if !body.trim().is_empty() => format!("{} ({})", status, body.trim()),
+        _ => status.to_string(),
+    }
+}
+
+/// Endpoints from the api contain a raw filename, which needs escaping before
+/// it can go back over the wire.
+fn encode_path(path: &str) -> String {
+    path.split('/')
+        .map(|part| urlencoding::encode(part).to_string())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 fn uploadable_fields_hint(def: &ObjectDefinition) -> String {
@@ -250,14 +264,6 @@ impl BinaryCommand for Command {
         file.filename = file_path
             .file_name()
             .map_or("".to_string(), |f| f.to_string_lossy().to_string());
-        let upload_url = format!(
-            "{}/upload/{}{}/{}",
-            API_URL,
-            archival.site.manifest.upload_prefix,
-            file.sha,
-            urlencoding::encode(&file.filename)
-        );
-        let field_data = FieldValue::File(file);
         let bar = ProgressBar::new_spinner();
         bar.set_style(ProgressStyle::with_template("{msg} {spinner}").unwrap());
         bar.set_message(format!("uploading {}", file_path.to_string_lossy()));
@@ -269,46 +275,45 @@ impl BinaryCommand for Command {
         let client = reqwest::blocking::Client::builder()
             .default_headers(headers)
             .build()?;
-        let r = client
-            .post(&upload_url)
-            .query(&[
-                ("action", "mpu-create"),
-                ("content-type", mime.first_or_octet_stream().as_ref()),
-                ("repo", &repo_id),
-            ])
-            .send()?;
-        if !r.status().is_success() {
-            return Err(UploadError::UploadFailed(r.text()?).into());
+        // The upload endpoint is keyed by the repo's durable object id, which
+        // only the api can resolve, so ask it where to send this file.
+        let create_url = format!("{}/create-upload/{}", API_URL, repo_id);
+        let r = client.post(&create_url).json(&file).send()?;
+        let create_status = r.status();
+        if !create_status.is_success() {
+            return Err(UploadError::UploadFailed(create_url, response_error(r)).into());
         }
-        if !matches!(r.status(), StatusCode::CREATED) {
-            let upload_r = r.json::<api_response::CreateUpload>()?;
-            // TODO: set a max chunk size and parallelize chunked uploads
-            let put_r = client
-                .put(&upload_url)
-                .query(&[
-                    ("uploadId", &upload_r.upload_id),
-                    ("partNumber", &"1".to_string()),
-                ])
-                .body(file_data)
-                .send()?;
-            if !put_r.status().is_success() {
-                return Err(UploadError::UploadFailed(put_r.text()?).into());
+        match r.json::<api_response::CreateUploadResponse>()? {
+            api_response::CreateUploadResponse::Existed => {
+                bar.finish_with_message(format!("{} was already uploaded", file.filename));
             }
-            let part = put_r.json::<api_response::UploadedPart>()?;
-            let r = client
-                .post(&upload_url)
-                .query(&[
-                    ("action", "mpu-complete"),
-                    ("uploadId", &upload_r.upload_id),
-                ])
-                .body(json!({ "parts": vec![part] }).to_string())
-                .send()?;
-            println!("status: {}", r.status());
-            if !r.status().is_success() {
-                return Err(UploadError::UploadFailed(r.text()?).into());
+            api_response::CreateUploadResponse::Created(upload) => {
+                let upload_url = format!("{}/{}", API_URL, encode_path(&upload.endpoint));
+                // TODO: set a max chunk size and parallelize chunked uploads
+                let put_r = client
+                    .put(&upload_url)
+                    .query(&[
+                        ("uploadId", &upload.upload_id),
+                        ("partNumber", &"1".to_string()),
+                    ])
+                    .body(file_data)
+                    .send()?;
+                if !put_r.status().is_success() {
+                    return Err(UploadError::UploadFailed(upload_url, response_error(put_r)).into());
+                }
+                let part = put_r.json::<api_response::UploadedPart>()?;
+                let r = client
+                    .post(&upload_url)
+                    .query(&[("action", "mpu-complete"), ("uploadId", &upload.upload_id)])
+                    .body(json!({ "parts": vec![part] }).to_string())
+                    .send()?;
+                if !r.status().is_success() {
+                    return Err(UploadError::UploadFailed(upload_url, response_error(r)).into());
+                }
+                bar.finish();
             }
-            bar.finish();
         }
+        let field_data = FieldValue::File(file);
         // Now write our file
         archival.send_event(
             ArchivalEvent::EditField(EditFieldEvent {
@@ -337,11 +342,16 @@ mod api_response {
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Deserialize)]
+    pub enum CreateUploadResponse {
+        Existed,
+        Created(NewUpload),
+    }
+
+    #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
-    pub struct CreateUpload {
-        #[allow(dead_code)]
-        pub key: String,
+    pub struct NewUpload {
         pub upload_id: String,
+        pub endpoint: String,
     }
 
     #[derive(Debug, Deserialize, Serialize)]
