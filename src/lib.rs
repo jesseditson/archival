@@ -147,6 +147,12 @@ pub(crate) fn check_compatibility(version_string: &str) -> (bool, String) {
     }
 }
 
+pub fn sha_for_data(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    data_encoding::HEXLOWER.encode(&hasher.finalize())
+}
+
 #[derive(Debug)]
 pub struct Archival<F: FileSystemAPI + Clone + Debug> {
     fs_mutex: FileSystemMutex<F>,
@@ -351,10 +357,7 @@ impl<F: FileSystemAPI + Clone + Debug> Archival<F> {
             .fs_mutex
             .with_fs(|fs| fs.read(file))?
             .ok_or_else(|| ArchivalError::new("failed generating sha"))?;
-        let mut hasher = Sha256::new();
-        // write input message
-        hasher.update(&file_data[..]);
-        Ok(data_encoding::HEXLOWER.encode(&hasher.finalize()))
+        Ok(sha_for_data(&file_data))
     }
 
     pub fn write_file(&self, obj_type: &str, filename: &str, contents: String) -> Result<()> {

@@ -9,7 +9,8 @@ use crate::{
     fields::{FieldType, File},
     file_system_stdlib,
     object::ValuePath,
-    Archival, FieldValue,
+    object_definition::ObjectDefinition,
+    sha_for_data, Archival, FieldValue,
 };
 use anyhow::Result;
 use clap::{arg, value_parser, ArgMatches};
@@ -21,11 +22,14 @@ use reqwest::{
 };
 use serde_json::json;
 use std::{
-    fs,
+    fs, io,
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
 };
 use thiserror::Error;
+
+const USAGE_HINT: &str =
+    "usage: archival upload <object_type>/<object_name> <field> <file> (root objects take just <object_name>)";
 
 #[derive(Error, Debug, Clone)]
 pub enum UploadError {
@@ -33,14 +37,20 @@ pub enum UploadError {
     NotLoggedIn,
     #[error("file '{0}' doesn't exist")]
     FileNotExists(PathBuf),
-    #[error("invalid object path '{0}'")]
+    #[error("'{0}' is a directory - upload takes a single file")]
+    FileIsDirectory(PathBuf),
+    #[error("could not read file '{0}': {1}")]
+    FileNotReadable(PathBuf, String),
+    #[error("invalid object path '{0}'\n{USAGE_HINT}")]
     InvalidObjectPath(PathBuf),
+    #[error("no object {0} found in this site.\n{1}\n{USAGE_HINT}")]
+    ObjectNotFound(String, String),
     #[error("invalid object type '{0}'")]
     InvalidObjectType(String),
-    #[error("invalid field {0}")]
-    InvalidField(String),
-    #[error("cannot upload to type '{0}'")]
-    NonUploadableType(String),
+    #[error("'{0}' is not a field of object type '{1}'.\n{2}")]
+    InvalidField(String, String, String),
+    #[error("field '{0}' is a {1}, which cannot hold an upload.\n{2}")]
+    NonUploadableType(String, String, String),
     #[error("upload failed {0}")]
     UploadFailed(String),
     #[error("could not infer repo from remotes: git command failed: {0}")]
@@ -55,6 +65,20 @@ impl FieldType {
             self,
             FieldType::Audio | FieldType::Video | FieldType::Upload | FieldType::Image
         )
+    }
+}
+
+fn uploadable_fields_hint(def: &ObjectDefinition) -> String {
+    let uploadable: Vec<_> = def
+        .fields
+        .iter()
+        .filter(|(_, f)| f.r#type.is_uploadable())
+        .map(|(name, f)| format!("{} ({})", name, f.r#type))
+        .collect();
+    if uploadable.is_empty() {
+        format!("'{}' has no uploadable fields", def.name)
+    } else {
+        format!("uploadable fields: {}", uploadable.join(", "))
     }
 }
 
@@ -96,8 +120,19 @@ impl BinaryCommand for Command {
         let access_token = config.access_token.ok_or(UploadError::NotLoggedIn)?;
         // Fail fast if file doesn't exist
         let file_path = args.get_one::<PathBuf>("file").unwrap();
-        if fs::metadata(file_path).is_err() {
-            return Err(UploadError::FileNotExists(file_path.to_owned()).into());
+        match fs::metadata(file_path) {
+            Ok(meta) if meta.is_dir() => {
+                return Err(UploadError::FileIsDirectory(file_path.to_owned()).into())
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                return Err(UploadError::FileNotExists(file_path.to_owned()).into())
+            }
+            Err(e) => {
+                return Err(
+                    UploadError::FileNotReadable(file_path.to_owned(), e.to_string()).into(),
+                )
+            }
         }
         let object = args.get_one::<PathBuf>("object").unwrap();
         let object_name = object
@@ -114,7 +149,8 @@ impl BinaryCommand for Command {
         // If we don't find the object type, it's likely that we mean to use a
         // root object, in which case they're the same. A check below will make
         // sure that this is truly the case (object_exists)
-        if object_type.is_empty() {
+        let is_root_object = object_type.is_empty();
+        if is_root_object {
             object_name.clone_into(&mut object_type);
         }
         let field = args.get_one::<String>("field").unwrap();
@@ -128,9 +164,26 @@ impl BinaryCommand for Command {
         } else {
             Archival::new(fs)?
         };
-        // Make sure that the specified object exists
-        if !archival.object_exists(&object_type, &object_name)? {
-            return Err(UploadError::InvalidObjectPath(object.to_owned()).into());
+        // Make sure that the specified object exists. An unknown object type
+        // surfaces here as an Err rather than Ok(false).
+        if !matches!(archival.object_exists(&object_type, &object_name), Ok(true)) {
+            let known_types = archival
+                .site
+                .object_definitions
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
+            let descriptor = if is_root_object {
+                format!("'{}'", object_name)
+            } else {
+                format!("'{}' of type '{}'", object_name, object_type)
+            };
+            return Err(UploadError::ObjectNotFound(
+                descriptor,
+                format!("known object types: {}", known_types),
+            )
+            .into());
         }
         // Find the specified object definition
         let obj_def = archival
@@ -139,12 +192,21 @@ impl BinaryCommand for Command {
             .get(&object_type)
             .ok_or_else(|| UploadError::InvalidObjectType(object_type.to_owned()))?;
         // Find the specified field in the object definition
-        let field_def = field_path
-            .get_field_definition(obj_def)
-            .map_err(|_| UploadError::InvalidField(field.to_owned()))?;
+        let field_def = field_path.get_field_definition(obj_def).map_err(|_| {
+            UploadError::InvalidField(
+                field.to_owned(),
+                object_type.to_owned(),
+                uploadable_fields_hint(obj_def),
+            )
+        })?;
         // Validate that this is an ok field type to upload
         if !field_def.is_uploadable() {
-            return Err(UploadError::NonUploadableType(field_def.to_string()).into());
+            return Err(UploadError::NonUploadableType(
+                field.to_owned(),
+                field_def.to_string(),
+                uploadable_fields_hint(obj_def),
+            )
+            .into());
         }
         // Validate repo
         let repo_id = if let Some(repo) = args.get_one::<String>("repo") {
@@ -177,8 +239,11 @@ impl BinaryCommand for Command {
                 first_match.get(2).unwrap().as_str()
             )
         };
-        // Ok, this looks legit. Upload the file
-        let sha = archival.sha_for_file(file_path)?;
+        // Ok, this looks legit. Upload the file. Uploads usually live outside
+        // of the site root, so read them from the OS, not the site's fs.
+        let file_data = fs::read(file_path)
+            .map_err(|e| UploadError::FileNotReadable(file_path.to_owned(), e.to_string()))?;
+        let sha = sha_for_data(&file_data);
         let mime = mime_guess::from_path(file_path);
         let mut file = File::from_mime_guess(mime);
         file.sha = sha;
@@ -218,14 +283,13 @@ impl BinaryCommand for Command {
         if !matches!(r.status(), StatusCode::CREATED) {
             let upload_r = r.json::<api_response::CreateUpload>()?;
             // TODO: set a max chunk size and parallelize chunked uploads
-            let data = fs::read(file_path)?;
             let put_r = client
                 .put(&upload_url)
                 .query(&[
                     ("uploadId", &upload_r.upload_id),
                     ("partNumber", &"1".to_string()),
                 ])
-                .body(data)
+                .body(file_data)
                 .send()?;
             if !put_r.status().is_success() {
                 return Err(UploadError::UploadFailed(put_r.text()?).into());
