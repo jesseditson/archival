@@ -103,7 +103,10 @@ serde = { version = "1.0.152", features = ["rc"] }
 toml = { version = "1.1", features = ["display", "preserve_order"] }
 # Comments are dropped by `toml`'s value model, so object definitions are
 # parsed a second time with toml_edit to recover the field descriptions.
-toml_edit = { version = "0.25", default-features = false, features = ["parse"] }
+toml_edit = { version = "0.25", default-features = false, features = [
+    "parse",
+    "display",
+] }
 comrak = "0.41"
 liquid-core = "0.26.4"
 liquid-lib = { version = "0.26.4", features = ["shopify", "extra"] }
