@@ -28,42 +28,30 @@ runs:
       uses: actions/checkout@v4
     - name: Setup Node
       uses: actions/setup-node@v4
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: stable
-    - name: Cache Archival Binary
-      id: cache-archival
-      uses: actions/cache@v4
-      with:
-        path: ~/.cargo/bin/archival
-        key: archival-bin-${{ runner.os }}-${{ runner.arch }}-${{ inputs.archival-version }}
     - name: Install Archival
-      id: maybe-archival-install
-      uses: haya14busa/action-cond@v1
-      with:
-        cond: ${{ inputs.archival-bin == '' && steps.cache-archival.outputs.cache-hit != 'true' }}
-        if_true: "cargo install archival --version ${{ inputs.archival-version }}"
-        if_false: "echo 'skipping install, manual archival path provided or cached archival binary found'"
-    - name: Run Install
-      run: ${{ steps.maybe-archival-install.outputs.value }}
+      if: ${{ inputs.archival-bin == '' }}
       shell: bash
-    - name: Determine Archival Binary Name
-      id: archival-bin
-      uses: haya14busa/action-cond@v1
-      with:
-        cond: ${{ inputs.archival-bin == '' }}
-        if_true: "archival"
-        if_false: ${{ inputs.archival-bin }}
+      env:
+        VERSION: ${{ inputs.archival-version }}
+      run: |
+        set -euo pipefail
+        dir="archival-v${VERSION}-x86_64-unknown-linux-musl"
+        base="https://github.com/jesseditson/archival/releases/download/v${VERSION}"
+        cd "$(mktemp -d)"
+        curl -fsSL --retry 3 -O "$base/$dir.tar.gz"
+        echo "$(curl -fsSL "$base/$dir.tar.gz.sha256")  $dir.tar.gz" | sha256sum -c -
+        mkdir -p "$HOME/.local/bin"
+        tar xzf "$dir.tar.gz" -C "$HOME/.local/bin" --strip-components=1 "$dir/archival"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
     - name: Set Build Dir
       id: dist
-      run: echo "dist=$(${{ steps.archival-bin.outputs.value }} manifest build_dir)" >> $GITHUB_OUTPUT
+      run: echo "dist=$(${{ inputs.archival-bin || 'archival' }} manifest build_dir)" >> $GITHUB_OUTPUT
       shell: bash
     - name: Archival Prebuild
-      run: ${{ steps.archival-bin.outputs.value }} prebuild
+      run: ${{ inputs.archival-bin || 'archival' }} prebuild
       shell: bash
     - name: Build with Archival
-      run: ${{ steps.archival-bin.outputs.value }} build
+      run: ${{ inputs.archival-bin || 'archival' }} build
       shell: bash
     - name: Get Build Size
       id: size
