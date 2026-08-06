@@ -1004,6 +1004,49 @@ mod tests {
         Ok(())
     }
 
+    /// Shopify's include syntax (comma-separated arguments, `with` and `for`
+    /// clauses) built end to end; see `crate::tags::include`.
+    #[test]
+    fn builds_includes_with_shopify_syntax() -> Result<()> {
+        let mut fs = MemoryFileSystem::default();
+        fs.write_str(
+            Path::new(OBJECT_DEFINITION_FILE_NAME),
+            "[post]\nname = \"string\"\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("objects/post/a-post.toml"),
+            "name = \"A Post\"\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("pages/index.liquid"),
+            "{% for post in posts %}{% include 'byline', post: post, tag: 'h1' %}{% endfor %}\n\
+             {% include 'byline' for posts as post, tag: 'h2' %}\n\
+             {% include 'byline' with posts[0] as post, tag: 'h3' %}\n"
+                .to_string(),
+        )?;
+        fs.write_str(
+            Path::new("pages/_byline.liquid"),
+            "<{{tag}}>{{post.name}}</{{tag}}>\n".to_string(),
+        )?;
+        let site = Site::load(&fs, Some("test"))?;
+        site.build(&mut fs, BuildOptions::default())?;
+
+        let rendered = fs
+            .read_to_string(site.manifest.build_dir.join("index.html"))?
+            .expect("page was not built");
+        for (tag, syntax) in [
+            ("h1", "comma-separated arguments"),
+            ("h2", "`for` clause"),
+            ("h3", "`with` clause"),
+        ] {
+            assert!(
+                rendered.contains(&format!("<{tag}>A Post</{tag}>")),
+                "include with {syntax} did not render: {rendered}"
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn object_paths_are_url_paths() {
         let object = Object {

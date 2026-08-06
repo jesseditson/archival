@@ -1,3 +1,4 @@
+use crate::tags::args::parse_vars;
 use liquid_core::error::ResultLiquidExt;
 use liquid_core::model::KString;
 use liquid_core::Expression;
@@ -47,38 +48,11 @@ impl ParseTag for LayoutTag {
         mut arguments: TagTokenIter<'_>,
         _options: &Language,
     ) -> Result<Box<dyn Renderable>> {
-        let partial = arguments.expect_next("Identifier or literal expected.")?;
-
-        let partial = partial.expect_value().into_result()?;
-
-        let mut vars: Vec<(KString, Expression)> = Vec::new();
-        while let Ok(next) = arguments.expect_next("") {
-            let id = next.expect_identifier().into_result()?.to_string();
-
-            arguments
-                .expect_next("\":\" expected.")?
-                .expect_str(":")
-                .into_result_custom_msg("expected \":\" to be used for the assignment")?;
-
-            vars.push((
-                id.into(),
-                arguments
-                    .expect_next("expected value")?
-                    .expect_value()
-                    .into_result()?,
-            ));
-
-            if let Ok(comma) = arguments.expect_next("") {
-                // stop looking for variables if there is no comma
-                // currently allows for one trailing comma
-                if comma.expect_str(",").into_result().is_err() {
-                    break;
-                }
-            }
-        }
-
-        arguments.expect_nothing()?;
-
+        let partial = arguments
+            .expect_next("Identifier or literal expected.")?
+            .expect_value()
+            .into_result()?;
+        let vars = parse_vars(&mut arguments)?;
         Ok(Box::new(Layout { partial, vars }))
     }
 

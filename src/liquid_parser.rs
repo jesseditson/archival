@@ -1,4 +1,5 @@
 use crate::liquid_rewrite::rewrite_outputs;
+use crate::tags::include::IncludeTag;
 use crate::tags::output::{OutputContext, OutputTag};
 use crate::{page::TemplateType, tags::layout::LayoutTag, util::path_to_slash, FileSystemAPI};
 use anyhow::Result;
@@ -160,6 +161,7 @@ pub(crate) fn build_with_output_context(
     };
     let parser = liquid::ParserBuilder::with_stdlib()
         .tag(LayoutTag)
+        .tag(IncludeTag)
         .tag(OutputTag::new(Arc::clone(&ctx)))
         .partials(partials);
     Ok((parser.build()?, ctx))
