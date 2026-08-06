@@ -13,13 +13,38 @@ use std::sync::Arc;
 use std::{borrow::Cow, collections::HashMap, path::Path};
 #[cfg(feature = "verbose-logging")]
 use tracing::debug;
-use tracing::error;
+use tracing::{error, warn};
 
 pub static PARTIAL_FILE_NAME_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^_(.+)\.liquid").unwrap());
 
 #[derive(Default, Debug, Clone)]
 pub(crate) struct ArchivalPartialSource {
     partials: HashMap<String, String>,
+}
+
+/// The name a template file is included by: its path relative to the directory
+/// it was found in, without the extension, always `/`-separated because
+/// templates refer to it by name (`{% include "dir/partial" %}`). Returns
+/// `None` for files that are not includable partials.
+///
+/// Everything in the layout dir is includable, so there the underscore prefix
+/// is optional and only stripped; in the pages dir it is what distinguishes a
+/// partial from a page.
+fn partial_name(file: &Path, underscore_required: bool) -> Option<String> {
+    let file_name = file.file_name()?.to_str()?;
+    let (name, _t) = TemplateType::parse_path(file_name)?;
+    let name = match name.strip_prefix('_') {
+        Some(stripped) => stripped,
+        None if underscore_required => return None,
+        None => name,
+    };
+    if name.is_empty() {
+        return None;
+    }
+    Some(match file.parent() {
+        Some(parent_dir) => path_to_slash(parent_dir.join(name)),
+        None => name.to_string(),
+    })
 }
 
 impl ArchivalPartialSource {
@@ -29,49 +54,29 @@ impl ArchivalPartialSource {
         fs: &impl FileSystemAPI,
     ) -> Result<Self> {
         let mut partials = HashMap::new();
-        // Add layouts
-        if let Some(path) = layout_path {
-            for file in fs.walk_dir(path, false)? {
-                if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
-                    if let Some((template_name, _t)) = TemplateType::parse_path(name) {
-                        #[cfg(feature = "verbose-logging")]
-                        debug!("adding layout {} ({})", template_name, _t.extension());
-                        if let Some(contents) = fs.read_to_string(path.join(&file))? {
-                            partials.insert(template_name.to_string(), contents);
-                        } else {
-                            error!("Failed reading layout {}", file.display());
+        let mut add = |dir: &Path, underscore_required: bool| -> Result<()> {
+            for file in fs.walk_dir(dir, false)? {
+                let Some(name) = partial_name(&file, underscore_required) else {
+                    continue;
+                };
+                #[cfg(feature = "verbose-logging")]
+                debug!("adding partial {} ({})", name, file.display());
+                match fs.read_to_string(dir.join(&file))? {
+                    Some(contents) => {
+                        if partials.insert(name.clone(), contents).is_some() {
+                            warn!("partial {} was defined more than once", name);
                         }
                     }
+                    None => error!("Failed reading partial {}", file.display()),
                 }
             }
+            Ok(())
+        };
+        if let Some(path) = layout_path {
+            add(path, false)?;
         }
         if let Some(path) = pages_path {
-            for file in fs.walk_dir(path, false)? {
-                if let Some(name) = file.file_name().map(|f| f.to_str().unwrap()) {
-                    if PARTIAL_FILE_NAME_RE.is_match(name) {
-                        #[cfg(feature = "verbose-logging")]
-                        debug!("partial at path {:?}", file);
-                        let (partial_name, _t) = TemplateType::parse_path(name).unwrap();
-                        // Remove underscore from beginning of name
-                        let partial_name = &partial_name[1..];
-                        // Prepend path to this file if needed. Partials are
-                        // referenced by name in templates (`{% include
-                        // "dir/partial" %}`), so the name always uses `/`.
-                        let partial_name = if let Some(parent_dir) = file.parent() {
-                            path_to_slash(parent_dir.join(partial_name))
-                        } else {
-                            partial_name.to_string()
-                        };
-                        #[cfg(feature = "verbose-logging")]
-                        debug!("adding partial {} ({})", partial_name, _t.extension());
-                        if let Some(contents) = fs.read_to_string(path.join(&file))? {
-                            partials.insert(partial_name.to_string(), contents);
-                        } else {
-                            error!("Failed reading partial {}", file.display());
-                        }
-                    }
-                }
-            }
+            add(path, true)?;
         }
         Ok(Self { partials })
     }

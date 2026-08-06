@@ -1143,6 +1143,73 @@ mod tests {
         Ok(())
     }
 
+    /// Nothing in the layout dir is built as a page, so every file in it is
+    /// includable, in subdirectories and with or without the underscore that
+    /// marks a partial in the pages dir (see
+    /// https://github.com/jesseditson/archival/issues/29).
+    #[test]
+    fn builds_partials_from_the_layout_dir() -> Result<()> {
+        let mut fs = MemoryFileSystem::default();
+        fs.write_str(
+            Path::new(OBJECT_DEFINITION_FILE_NAME),
+            "[post]\nname = \"string\"\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("objects/post/a-post.toml"),
+            "name = \"A Post\"\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("pages/index.liquid"),
+            "{% layout 'wrappers/theme' %}\n\
+             {% include 'header' %}\n\
+             {% include 'sidebar' %}\n\
+             {% include 'partials/nav' %}\n\
+             {% include 'partials/footer', name: posts[0].name %}\n"
+                .to_string(),
+        )?;
+        fs.write_str(
+            Path::new("layout/wrappers/theme.liquid"),
+            "<theme>{{page_content}}</theme>\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("layout/_header.liquid"),
+            "<header/>\n".to_string(),
+        )?;
+        fs.write_str(Path::new("layout/sidebar.liquid"), "<aside/>\n".to_string())?;
+        fs.write_str(
+            Path::new("layout/partials/_nav.liquid"),
+            "<nav/>\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("layout/partials/footer.liquid"),
+            "<footer>{{name}}</footer>\n".to_string(),
+        )?;
+        let site = Site::load(&fs, Some("test"))?;
+        site.build(&mut fs, BuildOptions::default())?;
+
+        let rendered = fs
+            .read_to_string(site.manifest.build_dir.join("index.html"))?
+            .expect("page was not built");
+        for (expected, description) in [
+            ("<theme>", "layout in a subdirectory"),
+            ("<header/>", "underscore-prefixed layout partial"),
+            ("<aside/>", "layout partial without an underscore"),
+            ("<nav/>", "layout partial in a subdirectory"),
+            ("<footer>A Post</footer>", "layout partial with arguments"),
+        ] {
+            assert!(
+                rendered.contains(expected),
+                "{description} did not render: {rendered}"
+            );
+        }
+        // Layouts back other pages; they are never pages themselves.
+        assert!(
+            !fs.exists(site.manifest.build_dir.join("sidebar.html"))?,
+            "a layout was also rendered as a page"
+        );
+        Ok(())
+    }
+
     #[test]
     fn object_paths_are_url_paths() {
         let object = Object {
