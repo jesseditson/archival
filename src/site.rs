@@ -1047,6 +1047,102 @@ mod tests {
         Ok(())
     }
 
+    /// `render` accepts the same syntax as `include`, but renders the partial
+    /// in an isolated scope; see `crate::tags::render`.
+    #[test]
+    fn builds_renders_with_shopify_syntax() -> Result<()> {
+        let mut fs = MemoryFileSystem::default();
+        fs.write_str(
+            Path::new(OBJECT_DEFINITION_FILE_NAME),
+            "[post]\nname = \"string\"\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("objects/post/a-post.toml"),
+            "name = \"A Post\"\n".to_string(),
+        )?;
+        fs.write_str(
+            Path::new("pages/index.liquid"),
+            "{% for post in posts %}{% render 'bylines/byline', post: post, tag: 'h1' %}{% endfor %}\n\
+             {% render 'bylines/byline' for posts as post, tag: 'h2' %}\n\
+             {% render 'bylines/byline' with posts[0] as post, tag: 'h3' %}\n\
+             {% render 'bylines/global' %}\n"
+                .to_string(),
+        )?;
+        fs.write_str(
+            Path::new("pages/bylines/_byline.liquid"),
+            "<{{tag}}>{{post.name}}</{{tag}}>\n".to_string(),
+        )?;
+        // Site objects and archival's own variables are global, so a partial
+        // reaches them without being passed anything.
+        fs.write_str(
+            Path::new("pages/bylines/_global.liquid"),
+            "<global>{{posts[0].name}}/{{page}}</global>\n".to_string(),
+        )?;
+        let site = Site::load(&fs, Some("test"))?;
+        site.build(&mut fs, BuildOptions::default())?;
+
+        let rendered = fs
+            .read_to_string(site.manifest.build_dir.join("index.html"))?
+            .expect("page was not built");
+        for (tag, syntax) in [
+            ("h1", "comma-separated arguments"),
+            ("h2", "`for` clause"),
+            ("h3", "`with` clause"),
+        ] {
+            assert!(
+                rendered.contains(&format!("<{tag}>A Post</{tag}>")),
+                "render with {syntax} did not render: {rendered}"
+            );
+        }
+        assert!(
+            rendered.contains("<global>A Post/index</global>"),
+            "globals did not reach the rendered partial: {rendered}"
+        );
+        Ok(())
+    }
+
+    /// The difference between the two tags: `include` shares the caller's
+    /// scope, `render` does not.
+    #[test]
+    fn render_does_not_see_the_callers_locals() -> Result<()> {
+        let site_with = |tag: &str| -> Result<MemoryFileSystem> {
+            let mut fs = MemoryFileSystem::default();
+            fs.write_str(
+                Path::new(OBJECT_DEFINITION_FILE_NAME),
+                "[post]\nname = \"string\"\n".to_string(),
+            )?;
+            fs.write_str(
+                Path::new("objects/post/a-post.toml"),
+                "name = \"A Post\"\n".to_string(),
+            )?;
+            fs.write_str(
+                Path::new("pages/index.liquid"),
+                format!("{{% assign local = 'visible' %}}{{% {tag} 'local' %}}\n"),
+            )?;
+            fs.write_str(Path::new("pages/_local.liquid"), "{{local}}\n".to_string())?;
+            Ok(fs)
+        };
+
+        let mut fs = site_with("include")?;
+        let site = Site::load(&fs, Some("test"))?;
+        site.build(&mut fs, BuildOptions::default())?;
+        let rendered = fs
+            .read_to_string(site.manifest.build_dir.join("index.html"))?
+            .expect("page was not built");
+        assert!(
+            rendered.contains("visible"),
+            "include should share the caller's scope: {rendered}"
+        );
+
+        let mut fs = site_with("render")?;
+        let site = Site::load(&fs, Some("test"))?;
+        assert!(
+            site.build(&mut fs, BuildOptions::default()).is_err(),
+            "render should not see a variable the calling page assigned"
+        );
+        Ok(())
+    }
+
     #[test]
     fn object_paths_are_url_paths() {
         let object = Object {

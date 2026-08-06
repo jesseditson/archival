@@ -1,6 +1,7 @@
 use crate::{
     object::{Object, ObjectEntry},
     object_definition::ObjectDefinition,
+    tags::render::RenderContext,
     FieldConfig, ObjectDefinitions, ObjectMap,
 };
 use anyhow::Result;
@@ -443,15 +444,17 @@ impl<'a> Page<'a> {
                 overlay: &overlay,
                 base: base_context,
             };
-            template.render(&context).map_err(|error| {
-                error
-                    .trace(format!("{}", template_info.debug_path.to_string_lossy()))
-                    .trace(format!(
-                        "context (template):{}",
-                        debug_context(&context.merged(), 0)
-                    ))
-                    .into()
-            })
+            template
+                .render(&RenderContext::new(&context))
+                .map_err(|error| {
+                    error
+                        .trace(format!("{}", template_info.debug_path.to_string_lossy()))
+                        .trace(format!(
+                            "context (template):{}",
+                            debug_context(&context.merged(), 0)
+                        ))
+                        .into()
+                })
         } else if self.content_parsed.is_some() || self.content.is_some() {
             let parsed;
             let template = match self.content_parsed {
@@ -466,18 +469,20 @@ impl<'a> Page<'a> {
                 overlay: &overlay,
                 base: base_context,
             };
-            template.render(&context).map_err(|error| {
-                error
-                    .trace(format!(
-                        "{}",
-                        self.debug_path.as_ref().unwrap().to_string_lossy()
-                    ))
-                    .trace(format!(
-                        "context (page):{}",
-                        debug_context(&context.merged(), 0)
-                    ))
-                    .into()
-            })
+            template
+                .render(&RenderContext::new(&context))
+                .map_err(|error| {
+                    error
+                        .trace(format!(
+                            "{}",
+                            self.debug_path.as_ref().unwrap().to_string_lossy()
+                        ))
+                        .trace(format!(
+                            "context (page):{}",
+                            debug_context(&context.merged(), 0)
+                        ))
+                        .into()
+                })
         } else {
             panic!("Pages must have either a template or a path");
         }

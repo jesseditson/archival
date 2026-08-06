@@ -1,7 +1,6 @@
-use crate::tags::args::parse_vars_from;
+use crate::tags::args::{binding_name, parse_binding, parse_vars_from, Binding};
 use liquid_core::error::ResultLiquidExt;
 use liquid_core::model::KString;
-use liquid_core::parser::TryMatchToken;
 use liquid_core::runtime::{Interrupt, InterruptRegister, StackFrame};
 use liquid_core::Expression;
 use liquid_core::Language;
@@ -10,7 +9,7 @@ use liquid_core::Runtime;
 use liquid_core::ValueView;
 use liquid_core::{Error, Result};
 use liquid_core::{ParseTag, TagReflection, TagTokenIter};
-use liquid_lib::stdlib::{ForloopObject, RangeExpression};
+use liquid_lib::stdlib::ForloopObject;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -41,53 +40,8 @@ impl ParseTag for IncludeTag {
             .expect_value()
             .into_result()?;
 
-        let mut token = arguments.next();
-        let binding = match token.as_ref().map(|t| t.as_str()) {
-            Some("with") => {
-                let value = arguments
-                    .expect_next("expected value")?
-                    .expect_value()
-                    .into_result()?;
-                token = arguments.next();
-                Some(Binding::With(value))
-            }
-            Some("for") => {
-                let range = arguments.expect_next("Array or range expected.")?;
-                let range = match range.expect_value() {
-                    TryMatchToken::Matches(array) => RangeExpression::Array(array),
-                    TryMatchToken::Fails(range) => match range.expect_range() {
-                        TryMatchToken::Matches((start, stop)) => {
-                            RangeExpression::Counted(start, stop)
-                        }
-                        TryMatchToken::Fails(range) => return range.raise_error().into_err(),
-                    },
-                };
-                token = arguments.next();
-                Some(Binding::For(range))
-            }
-            _ => None,
-        };
-
-        let mut binding_name = None;
-        if binding.is_some() {
-            if let Some(t) = token {
-                match t.expect_str("as") {
-                    TryMatchToken::Matches(()) => {
-                        binding_name = Some(
-                            arguments
-                                .expect_next("Identifier expected.")?
-                                .expect_identifier()
-                                .into_result()?
-                                .to_owned()
-                                .into(),
-                        );
-                        token = arguments.next();
-                    }
-                    TryMatchToken::Fails(t) => token = Some(t),
-                }
-            }
-        }
-
+        let first = arguments.next();
+        let (binding, binding_name, token) = parse_binding(first, &mut arguments)?;
         let vars = parse_vars_from(token, &mut arguments)?;
 
         Ok(Box::new(Include {
@@ -101,12 +55,6 @@ impl ParseTag for IncludeTag {
     fn reflection(&self) -> &dyn TagReflection {
         self
     }
-}
-
-#[derive(Debug)]
-enum Binding {
-    With(Expression),
-    For(RangeExpression),
 }
 
 #[derive(Debug)]
@@ -158,13 +106,7 @@ impl Renderable for Include {
         }
         let name = value.to_kstr().into_owned();
 
-        // Shopify binds a `with`/`for` value to a variable named after the
-        // partial when `as` is omitted. Archival partials are named by path, so
-        // only the final segment is a usable identifier.
-        let binding_name = match &self.binding_name {
-            Some(bound) => bound.as_str(),
-            None => name.rsplit('/').next().unwrap_or(name.as_str()),
-        };
+        let binding_name = binding_name(self.binding_name.as_ref(), &name);
 
         match &self.binding {
             Some(Binding::For(range)) => {
