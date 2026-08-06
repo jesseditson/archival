@@ -1,4 +1,4 @@
-use crate::liquid_rewrite::rewrite_outputs;
+use crate::liquid_rewrite::rewrite_template;
 use crate::tags::include::IncludeTag;
 use crate::tags::output::{OutputContext, OutputTag};
 use crate::tags::render::RenderTag;
@@ -115,7 +115,7 @@ impl PartialSource for ArchivalPartialSource {
     /// because every build constructs an `ArchivalPartialSource` just to hash
     /// it, and only compiles on a cache miss.
     fn try_get<'a>(&'a self, name: &str) -> Option<Cow<'a, str>> {
-        self.partials.get(name).map(|p| rewrite_outputs(p))
+        self.partials.get(name).map(|p| rewrite_template(p))
     }
 }
 
@@ -176,7 +176,7 @@ pub(crate) fn parse(
     parser: &liquid::Parser,
     source: &str,
 ) -> std::result::Result<liquid::Template, liquid_core::Error> {
-    parser.parse(&rewrite_outputs(source))
+    parser.parse(&rewrite_template(source))
 }
 
 /// A pass-through partial compiler whose only job is to capture the

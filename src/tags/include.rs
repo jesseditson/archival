@@ -199,7 +199,7 @@ mod test {
             .unwrap();
         parser
             .parse(template)?
-            .render(&liquid::object!({ "outer": "o" }))
+            .render(&liquid::object!({ "outer": "o", "obj": { "name": "n" } }))
     }
 
     #[test]
@@ -299,6 +299,15 @@ mod test {
         assert_eq!(
             render("{% include 'vars' for (1..1) as a, b: outer %}").unwrap(),
             "[1|o]"
+        );
+    }
+
+    #[test]
+    fn with_binds_a_variable() {
+        assert_eq!(render("{% include 'color' with outer %}").unwrap(), "<o>");
+        assert_eq!(
+            render("{% include 'color' with obj.name %}").unwrap(),
+            "<n>"
         );
     }
 }

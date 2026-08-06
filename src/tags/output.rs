@@ -11,7 +11,7 @@
 //! against the runtime that is already rendering the page. Locals are visible
 //! because it is literally the same runtime.
 
-use crate::liquid_rewrite::{rewrite_outputs, OUTPUT_TAG};
+use crate::liquid_rewrite::{rewrite_template, OUTPUT_TAG};
 use liquid_core::error::{ResultLiquidExt, ResultLiquidReplaceExt};
 use liquid_core::parser::FilterChain;
 use liquid_core::runtime;
@@ -92,7 +92,7 @@ impl OutputContext {
         let language = self.language()?;
         let _span = tracing::trace_span!("nested_parse").entered();
         let template = Arc::new(runtime::Template::new(liquid_core::parser::parse(
-            &rewrite_outputs(value),
+            &rewrite_template(value),
             &language,
         )?));
         let mut nested = self.nested.write().unwrap();
@@ -295,6 +295,17 @@ mod tests {
     fn liquid_in_a_value_is_rendered() {
         let globals = liquid::object!({ "body": "hello {{ name }}", "name": "world" });
         assert_eq!(render("{{ body }}", &globals).unwrap(), "hello world");
+    }
+
+    /// Values are rewritten on the way in too, so they accept the same syntax a
+    /// template does.
+    #[test]
+    fn a_value_may_use_the_liquid_tag() {
+        let globals = liquid::object!({
+            "body": "{% liquid\n  assign who = name | upcase\n  echo who\n%}",
+            "name": "world",
+        });
+        assert_eq!(render("{{ body }}", &globals).unwrap(), "WORLD");
     }
 
     #[test]
