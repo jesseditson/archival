@@ -20,7 +20,7 @@ name = "archival"
 path = "src/lib.rs"
 
 [features]
-default = ["binary", "import-csv", "json-schema"]
+default = ["binary", "import-csv", "json-schema", "lsp"]
 dhat-heap = ["dep:dhat"]
 gen-traces = ["binary", "dep:tracing-chrome"]
 typescript = ["dep:typescript-type-def"]
@@ -43,6 +43,7 @@ binary = [
 ]
 import-csv = ["dep:csv"]
 json-schema = []
+lsp = ["binary", "dep:lsp-server", "dep:lsp-types"]
 stdlib-fs = ["dep:notify", "dep:walkdir"]
 verbose-logging = []
 backtrace = ["anyhow/backtrace"]
@@ -67,6 +68,11 @@ opt-level = 3
 # profiling
 dhat = { version = "0.3.3", optional = true }
 tracing-chrome = { version = "0.7.2", optional = true }
+# lsp
+lsp-server = { version = "0.7", optional = true }
+# 0.96 swapped `url::Url` for fluent-uri's `Uri`, which cannot convert to or
+# from a file path.
+lsp-types = { version = "0.95", optional = true }
 # binary
 ctrlc = { version = "3.4.2", optional = true }
 tracing-subscriber = { version = "0.3.18", features = [

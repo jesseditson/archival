@@ -31,8 +31,9 @@ mod binary {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
     pub fn main() -> Result<ExitStatus> {
+        // stdout carries command output and the language server's JSON-RPC.
         let ts = tracing_subscriber::registry()
-            .with(fmt::layer())
+            .with(fmt::layer().with_writer(std::io::stderr))
             .with(EnvFilter::from_default_env());
         #[cfg(feature = "gen-traces")]
         let (chrome_layer, guard) = ChromeLayerBuilder::new().build();

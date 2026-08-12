@@ -11,6 +11,8 @@ mod filters;
 mod lib_fs;
 mod liquid_parser;
 mod liquid_rewrite;
+#[cfg(feature = "lsp")]
+mod lsp;
 mod object_definition;
 mod page;
 mod read_toml;

@@ -10,6 +10,8 @@ mod compat;
 mod format;
 mod import;
 mod login;
+#[cfg(feature = "lsp")]
+mod lsp;
 mod manifest;
 mod objects;
 mod prebuild;
@@ -114,6 +116,8 @@ pub const COMMANDS: &[&'static dyn BinaryCommand] = &[
     &types::Command {},
     #[cfg(feature = "json-schema")]
     &schemas::Command {},
+    #[cfg(feature = "lsp")]
+    &lsp::Command {},
     #[cfg(feature = "proto")]
     &proto::Command {},
 ];

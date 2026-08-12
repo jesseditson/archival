@@ -55,15 +55,103 @@ use std::borrow::Cow;
 /// The internal tag every `{{ … }}` output statement is rewritten to.
 pub(crate) const OUTPUT_TAG: &str = "__archival_out";
 
+/// A rewritten template, and where it lines up with the source it came from.
+pub(crate) struct Rewrite<'a> {
+    pub text: Cow<'a, str>,
+    #[cfg(feature = "lsp")]
+    pub anchors: Anchors,
+}
+
+impl<'a> Rewrite<'a> {
+    fn new(text: Cow<'a, str>, _anchors: Anchors) -> Self {
+        Self {
+            text,
+            #[cfg(feature = "lsp")]
+            anchors: _anchors,
+        }
+    }
+}
+
+/// Points at which the rewritten text and its source agree, recorded only for
+/// the language server — nothing else maps a position back.
+#[derive(Default)]
+pub(crate) struct Anchors {
+    /// `(rewritten_offset, source_offset)`, ascending. Between one anchor and
+    /// the next the two texts advance in lockstep, so an offset resolves by
+    /// linear interpolation from the anchor governing it.
+    #[cfg(feature = "lsp")]
+    map: Vec<(u32, u32)>,
+    #[cfg(feature = "lsp")]
+    source_len: u32,
+}
+
+impl Anchors {
+    fn new(_source_len: usize) -> Self {
+        Self {
+            #[cfg(feature = "lsp")]
+            map: Vec::new(),
+            #[cfg(feature = "lsp")]
+            source_len: _source_len as u32,
+        }
+    }
+
+    #[inline]
+    fn record(&mut self, _rewritten: usize, _source: usize) {
+        #[cfg(feature = "lsp")]
+        self.map.push((_rewritten as u32, _source as u32));
+    }
+}
+
+#[cfg(feature = "lsp")]
+impl Anchors {
+    /// The offset in the original source that `offset` in the rewritten text
+    /// came from. The liquid parser only ever sees rewritten text, so its
+    /// positions come back through here before they can be shown against a
+    /// file.
+    pub fn to_source(&self, offset: usize) -> usize {
+        let source_len = self.source_len as usize;
+        let Some(governing) = self
+            .map
+            .partition_point(|(at, _)| *at as usize <= offset)
+            .checked_sub(1)
+        else {
+            return self
+                .map
+                .first()
+                .map_or(offset, |(_, at)| *at as usize)
+                .min(source_len);
+        };
+        let (from, to) = self.map[governing];
+        // A replacement need not be the length of what it replaced, so an
+        // offset inside one resolves no further than the region it belongs to.
+        let limit = self
+            .map
+            .get(governing + 1)
+            .map_or(source_len, |(_, at)| *at as usize);
+        (to as usize + (offset - from as usize)).min(limit)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+}
+
 /// Rewrites every output statement in `source` to [`OUTPUT_TAG`], expands
 /// `{% liquid %}` and `{% echo %}`, and removes every inline comment,
 /// preserving whitespace control and leaving `{% raw %}` bodies untouched.
 /// Returns `Cow::Borrowed` when there was nothing to rewrite, which is the
 /// common case.
 pub(crate) fn rewrite_template(source: &str) -> Cow<'_, str> {
+    rewrite_template_mapped(source).text
+}
+
+/// [`rewrite_template`], keeping the mapping back to `source`.
+pub(crate) fn rewrite_template_mapped(source: &str) -> Rewrite<'_> {
+    let borrowed = |anchors| Rewrite::new(Cow::Borrowed(source), anchors);
     if !source.contains("{{") && !source.contains("{%") {
-        return Cow::Borrowed(source);
+        return borrowed(Anchors::new(source.len()));
     }
+    let mut anchors = Anchors::new(source.len());
     let bytes = source.as_bytes();
     let len = bytes.len();
     let mut out = String::with_capacity(len + 16);
@@ -100,6 +188,7 @@ pub(crate) fn rewrite_template(source: &str) -> Cow<'_, str> {
                     let dash_open = bytes.get(i + 2) == Some(&b'-');
                     let dash_close = bytes[close_at - 1] == b'-';
                     let before = &source[copied..i];
+                    anchors.record(out.len(), copied);
                     out.push_str(if dash_open {
                         before.trim_end_matches(is_liquid_whitespace)
                     } else {
@@ -109,9 +198,10 @@ pub(crate) fn rewrite_template(source: &str) -> Cow<'_, str> {
                         let body_end = if dash_close { close_at - 1 } else { close_at };
                         let body = &source[body_start..body_end];
                         if name == b"liquid" {
-                            expand_statements(body, &mut out);
+                            expand_statements(body, body_start, &mut out, &mut anchors);
                         } else {
-                            expand_echo(body.trim(), &mut out);
+                            let at = body_start + leading_whitespace(body);
+                            expand_echo(body.trim(), at, &mut out, &mut anchors);
                         }
                     }
                     let mut next = close_at + 2;
@@ -138,17 +228,22 @@ pub(crate) fn rewrite_template(source: &str) -> Cow<'_, str> {
                 // Trimming only what the grammar counts as whitespace keeps
                 // input that fails to parse today (a tab inside `{{ }}`, say)
                 // failing to parse after the rewrite.
-                let inner = source[inner_start..inner_end].trim_matches(is_liquid_whitespace);
+                let raw_inner = &source[inner_start..inner_end];
+                let inner = raw_inner.trim_matches(is_liquid_whitespace);
                 if inner.is_empty() {
                     // `{{}}` is a parse error; don't turn it into a tag whose
                     // error would be less recognizable.
                     i = close_end;
                     continue;
                 }
+                anchors.record(out.len(), copied);
                 out.push_str(&source[copied..i]);
                 out.push_str(if dash_open { "{%- " } else { "{% " });
                 out.push_str(OUTPUT_TAG);
                 out.push(' ');
+                let inner_at = inner_start
+                    + (raw_inner.len() - raw_inner.trim_start_matches(is_liquid_whitespace).len());
+                anchors.record(out.len(), inner_at);
                 out.push_str(inner);
                 out.push_str(if dash_close { " -%}" } else { " %}" });
                 copied = close_end;
@@ -158,17 +253,28 @@ pub(crate) fn rewrite_template(source: &str) -> Cow<'_, str> {
         }
     }
     if copied == 0 {
-        return Cow::Borrowed(source);
+        #[cfg(feature = "lsp")]
+        debug_assert!(
+            anchors.is_empty(),
+            "nothing was rewritten, so nothing to map"
+        );
+        return borrowed(anchors);
     }
+    anchors.record(out.len(), copied);
     out.push_str(&source[copied..]);
-    Cow::Owned(out)
+    Rewrite::new(Cow::Owned(out), anchors)
+}
+
+/// The offset [`str::trim`] starts at.
+fn leading_whitespace(s: &str) -> usize {
+    s.len() - s.trim_start().len()
 }
 
 /// Scans forward from `from` for the two-byte delimiter `close`, skipping over
 /// quoted string literals. Returns the index the delimiter starts at and the
 /// index just past it, or `None` if the delimiter (or a closing quote) is
 /// missing.
-fn scan_to(bytes: &[u8], from: usize, close: [u8; 2]) -> Option<(usize, usize)> {
+pub(crate) fn scan_to(bytes: &[u8], from: usize, close: [u8; 2]) -> Option<(usize, usize)> {
     let mut i = from;
     while i < bytes.len() {
         match bytes[i] {
@@ -193,29 +299,39 @@ fn scan_to(bytes: &[u8], from: usize, close: [u8; 2]) -> Option<(usize, usize)> 
 }
 
 /// `WHITESPACE = _{" " | NEWLINE }` in liquid's grammar — notably not a tab.
-fn is_liquid_whitespace(c: char) -> bool {
+pub(crate) fn is_liquid_whitespace(c: char) -> bool {
     c == ' ' || c == '\n' || c == '\r'
 }
 
 /// Expands a `{% liquid %}` body, where each line is one statement written
-/// without its `{% %}`.
-fn expand_statements(body: &str, out: &mut String) {
-    for line in body.lines() {
-        expand_statement(line, out);
+/// without its `{% %}`. `body_start` is where `body` begins in the source, so
+/// that each statement can be anchored back to the line it was written on.
+fn expand_statements(body: &str, body_start: usize, out: &mut String, anchors: &mut Anchors) {
+    let mut at = body_start;
+    for line in body.split_inclusive('\n') {
+        expand_statement(line, at, out, anchors);
+        at += line.len();
     }
 }
 
 /// Writes the tag one `{% liquid %}` statement stands for. Blank lines and `#`
 /// comment lines produce nothing, and `echo` is an output statement.
-fn expand_statement(statement: &str, out: &mut String) {
-    let statement = statement.trim();
+fn expand_statement(line: &str, line_start: usize, out: &mut String, anchors: &mut Anchors) {
+    let statement = line.trim();
     if statement.is_empty() || statement.starts_with('#') {
         return;
     }
+    let at = line_start + leading_whitespace(line);
     match echo_argument(statement) {
-        Some(expression) => expand_echo(expression, out),
+        Some(expression) => expand_echo(
+            expression,
+            at + (statement.len() - expression.len()),
+            out,
+            anchors,
+        ),
         None => {
             out.push_str("{% ");
+            anchors.record(out.len(), at);
             out.push_str(statement);
             out.push_str(" %}");
         }
@@ -230,13 +346,14 @@ fn echo_argument(statement: &str) -> Option<&str> {
 
 /// `echo` is an output statement written as a tag. Without an expression it
 /// outputs nothing.
-fn expand_echo(expression: &str, out: &mut String) {
+fn expand_echo(expression: &str, at: usize, out: &mut String, anchors: &mut Anchors) {
     if expression.is_empty() {
         return;
     }
     out.push_str("{% ");
     out.push_str(OUTPUT_TAG);
     out.push(' ');
+    anchors.record(out.len(), at);
     out.push_str(expression);
     out.push_str(" %}");
 }
@@ -244,7 +361,7 @@ fn expand_echo(expression: &str, out: &mut String) {
 /// Finds the `%}` closing a `{% liquid %}` tag that starts at `from`, returning
 /// the index it starts at. A `#` line is a comment, so quotes in it open
 /// nothing — an apostrophe in one must not swallow the rest of the tag.
-fn find_liquid_tag_end(bytes: &[u8], from: usize) -> Option<usize> {
+pub(crate) fn find_liquid_tag_end(bytes: &[u8], from: usize) -> Option<usize> {
     let mut i = from;
     while i < bytes.len() {
         while matches!(bytes.get(i), Some(b' ' | b'\t' | b'\r')) {
@@ -277,13 +394,13 @@ fn find_liquid_tag_end(bytes: &[u8], from: usize) -> Option<usize> {
 
 /// Finds the `%}` closing the tag that starts at `from`, ignoring quoting.
 /// Returns the index the delimiter starts at.
-fn find_tag_end(bytes: &[u8], from: usize) -> Option<usize> {
+pub(crate) fn find_tag_end(bytes: &[u8], from: usize) -> Option<usize> {
     (from..bytes.len().saturating_sub(1)).find(|&i| bytes[i] == b'%' && bytes[i + 1] == b'}')
 }
 
 /// Skips the whitespace-control hyphen and any whitespace the grammar allows
 /// before a tag's first token, given `from` (the index just past `{%`).
-fn tag_body_start(bytes: &[u8], from: usize) -> usize {
+pub(crate) fn tag_body_start(bytes: &[u8], from: usize) -> usize {
     let mut i = from;
     if bytes.get(i) == Some(&b'-') {
         i += 1;
@@ -295,13 +412,13 @@ fn tag_body_start(bytes: &[u8], from: usize) -> usize {
 }
 
 /// Whether the tag starting at `from` is an inline comment (`{% # … %}`).
-fn is_inline_comment(bytes: &[u8], from: usize) -> bool {
+pub(crate) fn is_inline_comment(bytes: &[u8], from: usize) -> bool {
     bytes.get(tag_body_start(bytes, from)) == Some(&b'#')
 }
 
 /// Reads the identifier naming the tag that starts at `from` (the index just
 /// past `{%`).
-fn tag_name(bytes: &[u8], from: usize) -> &[u8] {
+pub(crate) fn tag_name(bytes: &[u8], from: usize) -> &[u8] {
     let mut i = tag_body_start(bytes, from);
     let start = i;
     while matches!(bytes.get(i), Some(b) if b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-') {
@@ -313,7 +430,7 @@ fn tag_name(bytes: &[u8], from: usize) -> &[u8] {
 /// Given `from` (the index just past the `{%` of a `raw` tag), returns the
 /// index just past the matching `{% endraw %}`, or the end of the source if
 /// there isn't one. Everything in between is copied verbatim.
-fn skip_raw_block(bytes: &[u8], from: usize) -> usize {
+pub(crate) fn skip_raw_block(bytes: &[u8], from: usize) -> usize {
     let mut i = scan_to(bytes, from, *b"%}").map_or(from, |(_, end)| end);
     while i + 1 < bytes.len() {
         if bytes[i] != b'{' || bytes[i + 1] != b'%' {
@@ -542,6 +659,87 @@ mod tests {
         for source in sources {
             let once = rewrite(source);
             assert_eq!(rewrite(&once), once, "not idempotent: {source:?}");
+        }
+    }
+
+    /// The source `needle` maps back to, as a suffix of `source`.
+    #[cfg(feature = "lsp")]
+    fn map_back<'a>(source: &'a str, needle: &str) -> &'a str {
+        let rewritten = rewrite_template_mapped(source);
+        let at = rewritten
+            .text
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle:?} is not in {:?}", rewritten.text));
+        &source[rewritten.anchors.to_source(at)..]
+    }
+
+    #[cfg(feature = "lsp")]
+    fn line_of(source: &str, needle: &str) -> usize {
+        let rewritten = rewrite_template_mapped(source);
+        let at = rewritten
+            .anchors
+            .to_source(rewritten.text.find(needle).unwrap());
+        source[..at].matches('\n').count() + 1
+    }
+
+    #[cfg(feature = "lsp")]
+    #[test]
+    fn maps_rewritten_offsets_back_to_source() {
+        assert!(map_back("a {{ x }} b", "x %}").starts_with("x }} b"));
+        assert!(map_back("{{- x -}}", "x -%}").starts_with("x -}}"));
+        assert!(map_back("{{a}}{{b}}{{c}}", "c %}").starts_with("c}}"));
+        assert!(map_back("{{ x }}tail", "tail").starts_with("tail"));
+        // Nothing rewritten: the mapping is the identity.
+        assert!(map_back("plain text", "text").starts_with("text"));
+    }
+
+    /// Expansion collapses a body onto one line, so every statement in it and
+    /// everything below it resolves by its own offset.
+    #[cfg(feature = "lsp")]
+    #[test]
+    fn maps_liquid_statements_back_to_their_own_line() {
+        let source = "{% liquid\n  assign one = 1\n  echo two\n%}\n{{ three }}\n{{ four }}";
+        assert_eq!(line_of(source, "assign one = 1"), 2);
+        assert_eq!(line_of(source, "two %}"), 3);
+        assert_eq!(line_of(source, "three %}"), 5);
+        assert_eq!(line_of(source, "four %}"), 6);
+    }
+
+    #[cfg(feature = "lsp")]
+    #[test]
+    fn maps_around_removed_and_expanded_regions() {
+        // An inline comment leaves no output; what follows still maps.
+        assert_eq!(line_of("{% # note %}\n{{ x }}", "x %}"), 2);
+        assert_eq!(line_of("{% echo a %}\n{{ b }}", "b %}"), 2);
+        assert!(map_back("{% echo a | upcase %}", "a | upcase").starts_with("a | upcase %}"));
+    }
+
+    /// Every offset lands on a char boundary inside the source, and the mapping
+    /// is monotonic, so a mapped offset is always safe to slice at.
+    #[cfg(feature = "lsp")]
+    #[test]
+    fn maps_every_offset_into_the_source() {
+        let sources = CORPUS
+            .iter()
+            .copied()
+            .chain(COMMENT_CORPUS.iter().map(|(source, _)| *source))
+            .chain(LIQUID_TAG_CORPUS.iter().map(|(source, _)| *source))
+            .chain(["héllo {{ wörld }} 🎉", "{% liquid\n echo é\n%}ü"]);
+        for source in sources {
+            let rewritten = rewrite_template_mapped(source);
+            let mut last = 0;
+            for offset in 0..=rewritten.text.len() {
+                if !rewritten.text.is_char_boundary(offset) {
+                    continue;
+                }
+                let at = rewritten.anchors.to_source(offset);
+                assert!(
+                    at <= source.len() && source.is_char_boundary(at),
+                    "{source:?}: offset {offset} mapped to {at}, not a boundary"
+                );
+                assert!(at >= last, "{source:?}: mapping went backwards at {offset}");
+                last = at;
+            }
         }
     }
 

@@ -472,7 +472,6 @@ impl Site {
                             objects.push(obj);
                         }
                         Err(err) => {
-                            println!("Invalid file {:?}: {}", path, err);
                             error!("Invalid file {:?}: {}", path, err);
                         }
                     }
