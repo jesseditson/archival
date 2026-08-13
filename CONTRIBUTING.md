@@ -62,4 +62,4 @@ https://doc.rust-lang.org/stable/clippy/installation.html
 
 ## License
 
-By contributing to archival, you agree that your contributions will be licensed under its [Unlicense](https://github.com/jesseditson/archival/blob/main/LICENSE.md).
+By contributing to archival, you agree that your contributions will be licensed under its [GNU Affero General Public License v3.0 or later](https://github.com/jesseditson/archival/blob/main/LICENSE).

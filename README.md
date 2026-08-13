@@ -4,7 +4,7 @@
 </p>
 </a>
 
-[![license](https://img.shields.io/crates/l/archival)](LICENSE.md) [![Chat](https://img.shields.io/discord/1257848212744568853?label=chat&logo=discord)](https://archival.dev/chat.html)
+[![license](https://img.shields.io/crates/l/archival)](LICENSE) [![Chat](https://img.shields.io/discord/1257848212744568853?label=chat&logo=discord)](https://archival.dev/chat.html)
 
 ## What is archival?
 
@@ -34,4 +34,8 @@ Please see the [Contributing Guide](CONTRIBUTING.md) for help and guidelines!
 
 ## License
 
-[MIT](LICENSE.md)
+Copyright (C) 2023-2026 Jesse Ditson
+
+archival is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE) for the full text.
+
+Releases up to and including v0.19.1 were published under the [Unlicense](https://unlicense.org); that dedication remains in effect for those versions.
