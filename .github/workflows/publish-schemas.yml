@@ -15,10 +15,6 @@ name: Publish Schemas
 # strict mode. Both run in CI on every push.
 
 on:
-  push:
-    tags:
-      - "*"
-  # Republish without cutting a release - useful after fixing a schema on main.
   workflow_dispatch:
 
 jobs:

@@ -352,6 +352,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Same ordering requirement as publish-crate: archival-docs installs the binary
+  # for this tag, so it cannot build until the assets above are downloadable.
+  # Dispatched from here rather than `on: release` in publish-schemas.yml, because
+  # the release above is created with GITHUB_TOKEN and so starts no workflow runs.
+  publish-schemas:
+    name: Republish archival.dev/schemas
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [publish_release]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Trigger Publish Schemas
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run publish-schemas.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"
+
   # Runs after publish_release so the release assets are already downloadable by
   # the time the crate exists - otherwise `cargo binstall archival@<new>` would
   # briefly fall back to building from source.
