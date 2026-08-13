@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Sets the archival version everywhere it is written down. Run this instead of
-# editing versions by hand, then commit the result and tag it v<version>.
+# Sets the archival version everywhere it is written down, then commits the
+# result and tags it v<version>. Run this instead of editing versions by hand.
 
 set -e
 
@@ -16,6 +16,17 @@ fi
 
 if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
     echo "Error: '$VERSION' is not a semver version (major.minor.patch)"
+    exit 1
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+    echo "Error: working tree is dirty; commit or stash your changes first"
+    git status --short
+    exit 1
+fi
+
+if git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null; then
+    echo "Error: tag v$VERSION already exists"
     exit 1
 fi
 
@@ -61,3 +72,8 @@ for schema in *.schema.json; do
 done
 
 ./check-versions.sh
+
+git commit --quiet --all --message "v$VERSION"
+git tag "v$VERSION"
+
+echo "committed and tagged v$VERSION"
