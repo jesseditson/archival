@@ -1,18 +1,20 @@
 //! The stdio language server: handshake, main loop, and message dispatch.
 
-use super::diagnostics;
 use super::documents::Documents;
+use super::workspace::Workspace;
+use super::{builtin, diagnostics, objects};
 use crate::binary::command::ExitStatus;
 use anyhow::Result;
 use lsp_server::{Connection, Message, Notification};
 use lsp_types::notification::{
-    DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Notification as _,
-    PublishDiagnostics,
+    DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument,
+    Notification as _, PublishDiagnostics,
 };
 use lsp_types::{
     InitializeParams, OneOf, PublishDiagnosticsParams, ServerCapabilities,
     TextDocumentSyncCapability, TextDocumentSyncKind, Url,
 };
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -55,6 +57,7 @@ fn capabilities() -> ServerCapabilities {
 #[derive(Default)]
 pub(crate) struct Server {
     documents: Documents,
+    workspace: Workspace,
 }
 
 impl Server {
@@ -117,16 +120,78 @@ impl Server {
                 // only once it is told they are gone.
                 self.send(connection, &uri, vec![]);
             }
+            DidChangeWatchedFiles::METHOD => {
+                let Some(params) = extract::<DidChangeWatchedFiles>(notification) else {
+                    return;
+                };
+                let touched_definitions = params.changes.iter().any(|change| {
+                    change
+                        .uri
+                        .to_file_path()
+                        .is_ok_and(|path| self.workspace.is_definition_file(&path))
+                });
+                if touched_definitions {
+                    // Definitions are read once when a site loads, so a change
+                    // to them is a reload rather than an invalidation.
+                    self.workspace.reload();
+                    self.republish(connection);
+                }
+            }
             method => debug!("unhandled notification {method}"),
         }
     }
 
-    fn publish(&self, connection: &Connection, uri: &Url) {
+    fn republish(&mut self, connection: &Connection) {
+        for uri in self.documents.uris() {
+            self.publish(connection, &uri);
+        }
+    }
+
+    fn publish(&mut self, connection: &Connection, uri: &Url) {
         let Some(document) = self.documents.get(uri) else {
             return;
         };
-        let found = diagnostics::parse_errors(document);
+        let found = match uri.to_file_path() {
+            Ok(path) if path.extension().is_some_and(|ext| ext == "toml") => {
+                self.toml_errors(&path)
+            }
+            _ => diagnostics::parse_errors(document),
+        };
         self.send(connection, uri, found);
+    }
+
+    /// Diagnostics for a toml file in a site: its manifest, its object
+    /// definitions, or one object. A toml that is none of those — or that lives
+    /// outside a site — has nothing to report.
+    ///
+    /// Every check runs against the parsers compiled into this binary, so what
+    /// it reports is what the archival building the site will accept.
+    fn toml_errors(&mut self, path: &Path) -> Vec<lsp_types::Diagnostic> {
+        let Some(document) = Url::from_file_path(path)
+            .ok()
+            .and_then(|uri| self.documents.get(&uri))
+        else {
+            return vec![];
+        };
+        let Some(site) = self.workspace.site_for(path) else {
+            return vec![];
+        };
+        if site.is_manifest(path) {
+            return builtin::validate_manifest(document, &site.root);
+        }
+        if site.is_definitions(path) {
+            return builtin::validate_definitions(document, site.manifest());
+        }
+        let Some(definition) = site.definition_for(path) else {
+            return vec![];
+        };
+        let custom_types = &site
+            .site
+            .as_ref()
+            .expect("a definition implies a loaded site")
+            .manifest
+            .editor_types;
+        objects::validate(document, path, definition, custom_types)
     }
 
     fn send(&self, connection: &Connection, uri: &Url, diagnostics: Vec<lsp_types::Diagnostic>) {
@@ -250,6 +315,52 @@ mod tests {
         let sent = exchange(vec![did_open("file:///a.liquid", "{% if x %}"), close]);
         assert_eq!(sent.len(), 2);
         assert!(diagnostics_in(&sent[1]).diagnostics.is_empty());
+    }
+
+    /// A `.toml` under the objects dir is checked against its definition, which
+    /// means resolving its site from the path alone.
+    #[test]
+    fn validates_object_files_against_their_definition() {
+        let object = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/website/objects/section/one.toml");
+        let uri = Url::from_file_path(&object).unwrap();
+        let sent = exchange(vec![Message::Notification(Notification::new(
+            DidOpenTextDocument::METHOD.to_string(),
+            DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri,
+                    language_id: "toml".into(),
+                    version: 1,
+                    text: "name = \"a\"\nbody = \"b\"\nnope = 1\n".into(),
+                },
+            },
+        ))]);
+        let published = diagnostics_in(&sent[0]);
+        assert_eq!(published.diagnostics.len(), 1, "{published:#?}");
+        assert!(published.diagnostics[0]
+            .message
+            .starts_with("`nope` is not defined on `section`"));
+        assert_eq!(published.diagnostics[0].range.start.line, 2);
+    }
+
+    /// A toml outside any objects dir is not an object, so it has nothing to be
+    /// checked against.
+    #[test]
+    fn leaves_other_toml_files_alone() {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/website/archival_objects.toml");
+        let sent = exchange(vec![Message::Notification(Notification::new(
+            DidOpenTextDocument::METHOD.to_string(),
+            DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: Url::from_file_path(&manifest).unwrap(),
+                    language_id: "toml".into(),
+                    version: 1,
+                    text: "[whatever]\nname = \"string\"\n".into(),
+                },
+            },
+        ))]);
+        assert!(diagnostics_in(&sent[0]).diagnostics.is_empty());
     }
 
     #[test]

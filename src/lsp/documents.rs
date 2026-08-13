@@ -132,6 +132,10 @@ impl Documents {
     pub fn get(&self, uri: &Url) -> Option<&Document> {
         self.open.get(uri)
     }
+
+    pub fn uris(&self) -> Vec<Url> {
+        self.open.keys().cloned().collect()
+    }
 }
 
 #[cfg(test)]
