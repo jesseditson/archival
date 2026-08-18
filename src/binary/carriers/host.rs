@@ -99,6 +99,10 @@ impl Sidecar {
             client: reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(5))
                 .no_proxy()
+                // Health polling leaves idle connections the sidecar may close
+                // before the next push reuses one, which windows reports as a
+                // reset rather than a retryable close.
+                .pool_max_idle_per_host(0)
                 .build()?,
         })
     }

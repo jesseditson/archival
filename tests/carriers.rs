@@ -128,6 +128,9 @@ mod carrier_tests {
             reqwest::blocking::Client::builder()
                 // A carrier's "redirect:" return is a 302 the caller must see.
                 .redirect(reqwest::redirect::Policy::none())
+                // Reusing a keep-alive connection the server has since closed
+                // surfaces as a reset on windows rather than a clean retry.
+                .pool_max_idle_per_host(0)
                 .timeout(Duration::from_secs(30))
                 .build()
                 .unwrap()
@@ -135,6 +138,15 @@ mod carrier_tests {
 
         fn get(&self, path: &str) -> reqwest::blocking::Response {
             Self::client().get(self.url(path)).send().unwrap()
+        }
+
+        /// A carrier that failed answers with the reason in plain text, so a
+        /// bare `.json()` on it reports a decode error rather than the problem.
+        fn json(response: reqwest::blocking::Response) -> serde_json::Value {
+            let status = response.status();
+            let body = response.text().unwrap_or_default();
+            serde_json::from_str(&body)
+                .unwrap_or_else(|_| panic!("expected json, got [{}] {}", status, body))
         }
 
         fn wait_until_ready(&self) {
@@ -192,28 +204,28 @@ mod carrier_tests {
             "application/json",
             "an object return is sent as json"
         );
-        let body: serde_json::Value = response.json().unwrap();
+        let body = DevServer::json(response);
         assert_eq!(body["name"], "tormenta");
         assert_eq!(body["body"], serde_json::Value::Null, "a GET has no body");
         assert_eq!(body["artist"], "Tormenta Rey", "objects reach the carrier");
         assert_eq!(body["site"], server.url(""), "SITE_URL is the dev server");
 
-        let body: serde_json::Value = client
-            .post(server.url("/carriers/echo"))
-            .json(&serde_json::json!({ "hello": "world" }))
-            .send()
-            .unwrap()
-            .json()
-            .unwrap();
+        let body = DevServer::json(
+            client
+                .post(server.url("/carriers/echo"))
+                .json(&serde_json::json!({ "hello": "world" }))
+                .send()
+                .unwrap(),
+        );
         assert_eq!(body["body"]["hello"], "world", "json bodies are parsed");
 
-        let body: serde_json::Value = client
-            .post(server.url("/carriers/echo"))
-            .form(&[("a", "1"), ("b", "2")])
-            .send()
-            .unwrap()
-            .json()
-            .unwrap();
+        let body = DevServer::json(
+            client
+                .post(server.url("/carriers/echo"))
+                .form(&[("a", "1"), ("b", "2")])
+                .send()
+                .unwrap(),
+        );
         assert_eq!(body["body"]["a"], "1", "form fields arrive as strings");
 
         let response = server.get("/carriers/redir");
@@ -255,10 +267,11 @@ mod carrier_tests {
         let server = DevServer::start(site_copy());
         // A TypeScript carrier, so this also covers node's type stripping.
         let response = server.get("/carriers/typed");
-        assert_eq!(response.status(), 200);
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
         assert_eq!(
-            response.text().unwrap(),
-            "hunter2",
+            (status.as_u16(), body.as_str()),
+            (200, "hunter2"),
             "carriers run on the server and read the real secret"
         );
 
@@ -324,7 +337,7 @@ mod carrier_tests {
         .unwrap();
 
         let server = DevServer::start(root);
-        let body: serde_json::Value = server.get("/carriers/upload").json().unwrap();
+        let body = DevServer::json(server.get("/carriers/upload"));
         assert_eq!(
             body["list"][0]["filename"], "menu.pdf",
             "list() is derived from the files objects point at"

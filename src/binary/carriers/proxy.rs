@@ -104,6 +104,10 @@ impl CarrierProxy {
                 .redirect(reqwest::redirect::Policy::none())
                 // Loopback traffic must not be handed to a configured proxy.
                 .no_proxy()
+                // A pooled connection the sidecar has already closed fails the
+                // request that reuses it. Over loopback a fresh connection per
+                // request costs nothing next to running the carrier.
+                .pool_max_idle_per_host(0)
                 .timeout(Duration::from_secs(120))
                 .build()
                 .expect("a blocking client with no TLS config always builds"),
@@ -195,11 +199,14 @@ impl CarrierProxy {
         {
             Ok(response) => response,
             Err(e) => {
+                // Also logged: the body reaches whoever made the request, but
+                // the reason belongs in the dev server's own output too.
+                warn!("carrier request to {} failed: {}", url, e);
                 return respond(
                     request,
                     Response::from_string(format!("The carrier sidecar didn't answer: {}", e))
                         .with_status_code(502),
-                )
+                );
             }
         };
 
