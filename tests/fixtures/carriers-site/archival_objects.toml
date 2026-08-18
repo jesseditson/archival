@@ -1,0 +1,7 @@
+[settings]
+api_key = "secret"
+menu = "upload"
+
+[artist]
+name = "string"
+template = "artist"

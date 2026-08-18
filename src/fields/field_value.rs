@@ -5,7 +5,7 @@ use super::{FieldType, InvalidFieldError};
 use crate::fields::file::RenderedFile;
 use crate::fields::DisplayType;
 use crate::manifest::{EditorTypes, ManifestEditorTypeValidator};
-use crate::object::to_liquid::object_to_liquid;
+use crate::object::to_liquid::{object_to_liquid_with, ToLiquidOptions};
 use crate::object::Renderable;
 use crate::util::integer_decode;
 use crate::value_path::ValuePathError;
@@ -276,12 +276,26 @@ impl FieldValue {
         definition: &ObjectDefinition,
         field_config: &FieldConfig,
     ) -> model::Value {
+        self.typed_objects_with(definition, field_config, ToLiquidOptions::default())
+    }
+
+    pub fn typed_objects_with(
+        &self,
+        definition: &ObjectDefinition,
+        field_config: &FieldConfig,
+        options: ToLiquidOptions,
+    ) -> model::Value {
         if let FieldValue::Objects(children) = self {
             model::Value::Array(
                 children
                     .iter()
                     .map(|child| {
-                        model::Value::Object(object_to_liquid(child, definition, field_config))
+                        model::Value::Object(object_to_liquid_with(
+                            child,
+                            definition,
+                            field_config,
+                            options,
+                        ))
                     })
                     .collect(),
             )

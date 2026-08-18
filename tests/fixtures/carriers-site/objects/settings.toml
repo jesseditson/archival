@@ -1,0 +1,6 @@
+api_key = "hunter2"
+
+[menu]
+sha = "0000000000000000000000000000000000000000000000000000000000000001"
+filename = "menu.pdf"
+mime = "application/pdf"

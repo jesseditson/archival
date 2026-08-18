@@ -1,3 +1,5 @@
+#[cfg(feature = "carriers")]
+use crate::binary::carriers::{objects::build_payload, CarrierOptions, CarrierSupervisor};
 use crate::BuildOptions;
 use crate::{file_system::WatchableFileSystemAPI, file_system_stdlib, server, site::Site};
 use anyhow::Result;
@@ -40,6 +42,21 @@ impl<'a> UploadsConfig<'a> {
     }
 }
 
+pub struct DevServerOptions<'a> {
+    pub root_dir: PathBuf,
+    pub uploads_config: UploadsConfig<'a>,
+    pub mode: DevServerMode,
+    pub change_sender: Option<mpsc::Sender<Vec<PathBuf>>>,
+    pub watch_paths: Option<Vec<String>>,
+    pub quit: Arc<AtomicBool>,
+    #[cfg(feature = "carriers")]
+    pub carriers: CarrierOptions,
+    /// Overrides the `SITE_URL` carriers see. Defaults to this server's address.
+    #[cfg(feature = "carriers")]
+    pub site_url: Option<String>,
+}
+
+// External API
 pub fn watch(
     root_dir: PathBuf,
     uploads_config: UploadsConfig,
@@ -48,6 +65,36 @@ pub fn watch(
     watch_paths: Option<Vec<String>>,
     quit: Arc<AtomicBool>,
 ) -> Result<crate::binary::ExitStatus> {
+    watch_with(DevServerOptions {
+        root_dir,
+        uploads_config,
+        mode,
+        change_sender,
+        watch_paths,
+        quit,
+        #[cfg(feature = "carriers")]
+        carriers: CarrierOptions {
+            disabled: true,
+            ..Default::default()
+        },
+        #[cfg(feature = "carriers")]
+        site_url: None,
+    })
+}
+
+pub fn watch_with(options: DevServerOptions) -> Result<crate::binary::ExitStatus> {
+    let DevServerOptions {
+        root_dir,
+        uploads_config,
+        mode,
+        change_sender,
+        watch_paths,
+        quit,
+        #[cfg(feature = "carriers")]
+            carriers: carrier_options,
+        #[cfg(feature = "carriers")]
+        site_url,
+    } = options;
     let mut term = Term::stdout();
     let is_interactive =
         term.features().is_attended() && !matches!(mode, DevServerMode::NoServeStreamLogs);
@@ -69,6 +116,19 @@ pub fn watch(
     let watcher_queue = change_queue.clone();
     let mut merged_watch_paths = watch_paths.unwrap_or_default();
     merged_watch_paths.append(&mut site.manifest.watched_paths());
+    // Carriers need a running server to be reachable, so with --noserve there
+    // is nothing to attach them to.
+    #[cfg(feature = "carriers")]
+    let carriers = if matches!(mode, DevServerMode::Serve(_)) {
+        CarrierSupervisor::new(&root_dir, carrier_options)
+    } else {
+        None
+    };
+    // watch_paths is an allowlist, not an exclusion list.
+    #[cfg(feature = "carriers")]
+    if carriers.is_some() {
+        merged_watch_paths.push(crate::binary::carriers::discovery::CARRIERS_DIR_NAME.to_string());
+    }
     let kill_watcher = fs.watch(fs.root.to_owned(), merged_watch_paths, move |paths| {
         for path in paths {
             if queue_changes {
@@ -80,22 +140,44 @@ pub fn watch(
         }
     })?;
     let path = root_dir.join(&site.manifest.build_dir);
+    #[cfg(feature = "carriers")]
+    let mut carrier_site_url = site_url;
     if let DevServerMode::Serve(port) = mode {
         let mut sb = server::ServerBuilder::new(&path, Some("404.html"));
         if let Some(port) = port {
             sb.port(port);
         }
+        #[cfg(feature = "carriers")]
+        if let Some(carriers) = &carriers {
+            sb.handler(carriers.proxy());
+        }
         let server = sb.build();
         init_message += &format!("Serving {}\n", path.display());
         init_message += &format!("See http://{}\n", server.addr());
         init_message += "Hit CTRL-C to stop\n";
+        // Locally the site is the dev server, so this is where a carrier's
+        // fetch of its own site should land - not the deployed site_url.
+        #[cfg(feature = "carriers")]
+        {
+            carrier_site_url.get_or_insert_with(|| format!("http://{}", server.addr()));
+        }
         thread::spawn(move || {
             server.serve().unwrap();
         });
     }
     let quit_clone = quit.clone();
+    // exit() runs no destructors, so the sidecar has to be killed here. Its
+    // stdin pipe closing on process death is the backstop for everything else.
+    #[cfg(feature = "carriers")]
+    let carrier_child = carriers.as_ref().map(|c| c.child());
     ctrlc::set_handler(move || {
         quit_clone.store(true, Ordering::SeqCst);
+        #[cfg(feature = "carriers")]
+        if let Some(child) = &carrier_child {
+            if let Some(sidecar) = child.lock().unwrap().as_mut() {
+                sidecar.shutdown();
+            }
+        }
         exit(0);
     })?;
     let mut last_build = Instant::now();
@@ -107,6 +189,11 @@ pub fn watch(
     // Static files are synced at startup, so rebuilds only need to re-sync
     // them when a file inside the static dir actually changed.
     let mut static_files_changed = false;
+    #[cfg(feature = "carriers")]
+    let mut carriers_changed = false;
+    // The first payload is pushed once, whether or not anything rebuilds.
+    #[cfg(feature = "carriers")]
+    let mut carrier_objects_stale = true;
     term.write(init_message.as_bytes())?;
     if let Err(e) = initial_build {
         let bar = ProgressBar::new_spinner();
@@ -118,6 +205,15 @@ pub fn watch(
         match rx.recv_timeout(Duration::from_millis(50)) {
             Ok(path) => {
                 let changed_file = path.strip_prefix(&root_dir).unwrap();
+                #[cfg(feature = "carriers")]
+                if let Some(carriers) = &carriers {
+                    if carriers.claims(changed_file) {
+                        if carriers.should_rebuild(&root_dir, changed_file) {
+                            carriers_changed = true;
+                        }
+                        continue;
+                    }
+                }
                 if changed_file == site.manifest.object_definition_file {
                     object_definitions_changed = true;
                 }
@@ -135,6 +231,31 @@ pub fn watch(
         if quit.load(Ordering::SeqCst) {
             kill_watcher();
             exit(0);
+        }
+        #[cfg(feature = "carriers")]
+        if carriers_changed && Instant::now() - last_build > Duration::from_millis(200) {
+            carriers_changed = false;
+            if let Some(carriers) = &carriers {
+                carriers.rebuild();
+            }
+        }
+        #[cfg(feature = "carriers")]
+        if carrier_objects_stale {
+            if let Some(carriers) = &carriers {
+                let fs = file_system_stdlib::NativeFileSystem::new(&root_dir);
+                match build_payload(&site, &fs, carrier_site_url.as_deref().unwrap_or_default()) {
+                    Ok(payload) => {
+                        carriers.set_objects(payload);
+                        carrier_objects_stale = false;
+                    }
+                    Err(e) => {
+                        warn!("couldn't read this site's objects for carriers: {}", e);
+                        carrier_objects_stale = false;
+                    }
+                }
+            } else {
+                carrier_objects_stale = false;
+            }
         }
         // Batch changes every 200ms
         if changed && Instant::now() - last_build > Duration::from_millis(200) {
@@ -184,6 +305,10 @@ pub fn watch(
                 if let Err(e) = site.build(&mut fs, BuildOptions::default()) {
                     format!("{} {}", style("Build failed:").red(), style(e).red())
                 } else {
+                    #[cfg(feature = "carriers")]
+                    {
+                        carrier_objects_stale = true;
+                    }
                     format!(
                         "{} {:?}",
                         style("Rebuilt in").green(),

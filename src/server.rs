@@ -1,14 +1,22 @@
+#[cfg(feature = "carriers")]
+use std::sync::Arc;
 use std::{
     str::FromStr,
     sync::{RwLock, TryLockError},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg(feature = "carriers")]
+pub trait DynamicHandler: Send + Sync + 'static {
+    fn handle(&self, request: tiny_http::Request) -> Option<tiny_http::Request>;
+}
+
 pub struct ServerBuilder {
     source: std::path::PathBuf,
     hostname: Option<String>,
     port: Option<u16>,
     not_found_path: Option<std::path::PathBuf>,
+    #[cfg(feature = "carriers")]
+    handler: Option<Arc<dyn DynamicHandler>>,
 }
 
 impl ServerBuilder {
@@ -19,7 +27,15 @@ impl ServerBuilder {
             source,
             hostname: None,
             port: None,
+            #[cfg(feature = "carriers")]
+            handler: None,
         }
+    }
+
+    #[cfg(feature = "carriers")]
+    pub fn handler(&mut self, handler: Arc<dyn DynamicHandler>) -> &mut Self {
+        self.handler = Some(handler);
+        self
     }
 
     // Override the hostname
@@ -53,6 +69,8 @@ impl ServerBuilder {
             addr: format!("{}:{}", hostname, port),
             server: RwLock::new(None),
             not_found_path: self.not_found_path.as_ref().map(|p| p.to_path_buf()),
+            #[cfg(feature = "carriers")]
+            handler: self.handler.clone(),
         }
     }
 
@@ -67,6 +85,8 @@ pub struct Server {
     addr: String,
     server: RwLock<Option<tiny_http::Server>>,
     not_found_path: Option<std::path::PathBuf>,
+    #[cfg(feature = "carriers")]
+    handler: Option<Arc<dyn DynamicHandler>>,
 }
 
 impl Server {
@@ -110,6 +130,14 @@ impl Server {
             let server = self.server.read().map_err(Error::new)?;
             // unwrap is safe here
             for request in server.as_ref().unwrap().incoming_requests() {
+                #[cfg(feature = "carriers")]
+                let request = match &self.handler {
+                    Some(handler) => match handler.handle(request) {
+                        Some(request) => request,
+                        None => continue,
+                    },
+                    None => request,
+                };
                 // handles the request
                 if let Err(e) = static_file_handler(self.source(), request, &self.not_found_path) {
                     tracing::error!("{}", e);

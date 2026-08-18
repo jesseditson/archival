@@ -5,22 +5,28 @@ use crate::{
 use liquid::model::{KString, ObjectIndex};
 use liquid_core::{Value, ValueView};
 
-pub fn object_to_liquid(
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ToLiquidOptions {
+    pub include_secrets: bool,
+}
+
+pub fn object_to_liquid_with(
     object_values: &ObjectValues,
     definition: &ObjectDefinition,
     field_config: &FieldConfig,
+    options: ToLiquidOptions,
 ) -> liquid::model::Object {
     let mut values: Vec<(KString, Value)> = definition
         .fields
         .iter()
         // Secret fields are never added to template contexts.
-        .filter(|(_, field)| !field.r#type.is_secret())
+        .filter(|(_, field)| options.include_secrets || !field.r#type.is_secret())
         .map(|(k, _)| {
             (
                 KString::from_ref(k.as_index()),
                 object_values
                     .get(k)
-                    .map(|v| v.to_liquid(field_config))
+                    .map(|v| v.to_liquid_with(field_config, options))
                     .unwrap_or_else(|| Value::Nil),
             )
         })
@@ -33,7 +39,7 @@ pub fn object_to_liquid(
                 KString::from_ref(k.as_index()),
                 object_values
                     .get(k)
-                    .map(|v| v.typed_objects(child_def, field_config))
+                    .map(|v| v.typed_objects_with(child_def, field_config, options))
                     .unwrap_or_else(|| Value::Array(vec![])),
             )
         })
@@ -55,15 +61,29 @@ pub fn object_to_liquid(
 
 impl FieldValue {
     pub fn to_liquid(&self, field_config: &FieldConfig) -> liquid::model::Value {
+        self.to_liquid_with(field_config, ToLiquidOptions::default())
+    }
+
+    pub fn to_liquid_with(
+        &self,
+        field_config: &FieldConfig,
+        options: ToLiquidOptions,
+    ) -> liquid::model::Value {
         match self {
             // Belt and braces: secret-typed fields are dropped from contexts
             // above, but a secret value can never render regardless.
-            FieldValue::Secret(_) => liquid::model::Value::Nil,
+            FieldValue::Secret(s) => {
+                if options.include_secrets {
+                    liquid::model::Value::scalar(s.to_owned())
+                } else {
+                    liquid::model::Value::Nil
+                }
+            }
             FieldValue::File(file) => file.to_liquid(field_config),
             FieldValue::Oneof((t, v)) => match v.as_ref() {
                 Some(v) => liquid::object!({
                     "type": t,
-                    "value": v.to_liquid(field_config)
+                    "value": v.to_liquid_with(field_config, options)
                 })
                 .into(),
                 None => liquid::model::Value::Nil,
@@ -167,10 +187,19 @@ mod secret_tests {
         assert_eq!(reparsed.values, object.values);
     }
 
+    fn liquid_values(options: ToLiquidOptions) -> liquid::model::Object {
+        let (definition, object) = artist();
+        object_to_liquid_with(
+            &object.values,
+            &definition,
+            &FieldConfig::default(),
+            options,
+        )
+    }
+
     #[test]
     fn secrets_are_omitted_from_liquid_objects() {
-        let (definition, object) = artist();
-        let values = object_to_liquid(&object.values, &definition, &FieldConfig::default());
+        let values = liquid_values(ToLiquidOptions::default());
         assert!(values.contains_key("name"));
         assert!(
             !values.contains_key("api_key"),
@@ -182,6 +211,39 @@ mod secret_tests {
         let child = children.values().next().unwrap();
         let child = child.as_object().unwrap();
         assert!(!child.contains_key("child_key"));
+    }
+
+    #[test]
+    fn secrets_are_included_when_requested() {
+        let values = liquid_values(ToLiquidOptions {
+            include_secrets: true,
+        });
+        assert_eq!(values.get("api_key").unwrap().to_kstr(), "hunter2");
+        let children = values.get("keys").unwrap().as_array().unwrap();
+        let child = children.values().next().unwrap();
+        let child = child.as_object().unwrap();
+        assert_eq!(child.get("child_key").unwrap().to_kstr(), "child-secret");
+    }
+
+    #[test]
+    fn secrets_inside_a_oneof_follow_the_same_rule() {
+        let secret = FieldValue::Oneof((
+            "key".to_string(),
+            Box::new(Some(FieldValue::Secret("hunter2".to_string()))),
+        ));
+        let config = FieldConfig::default();
+        let hidden = secret.to_liquid(&config);
+        assert!(hidden.as_object().unwrap().get("value").unwrap().is_nil());
+        let shown = secret.to_liquid_with(
+            &config,
+            ToLiquidOptions {
+                include_secrets: true,
+            },
+        );
+        assert_eq!(
+            shown.as_object().unwrap().get("value").unwrap().to_kstr(),
+            "hunter2"
+        );
     }
 
     #[test]

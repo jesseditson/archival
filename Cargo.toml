@@ -43,6 +43,7 @@ binary = [
 ]
 import-csv = ["dep:csv"]
 json-schema = []
+carriers = ["binary"]
 lsp = ["binary", "dep:lsp-server", "dep:lsp-types"]
 stdlib-fs = ["dep:notify", "dep:walkdir"]
 verbose-logging = []

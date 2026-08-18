@@ -6,6 +6,8 @@ use std::{
     sync::{atomic::AtomicBool, Arc, LazyLock},
 };
 mod build;
+#[cfg(feature = "carriers")]
+mod carriers;
 mod compat;
 mod format;
 mod import;
@@ -114,6 +116,8 @@ pub const COMMANDS: &[&'static dyn BinaryCommand] = &[
     &import::Command {},
     &objects::Command {},
     &types::Command {},
+    #[cfg(feature = "carriers")]
+    &carriers::Command {},
     #[cfg(feature = "json-schema")]
     &schemas::Command {},
     #[cfg(feature = "lsp")]

@@ -160,8 +160,11 @@ mod binary_tests {
                 .collect::<Vec<String>>()
                 .join("\n")
         );
-        let mut run_cmd = Command::new("cargo")
-            .args(["run", "run", &site_path, "--upload-prefix", "test"])
+        // The already-built binary, not `cargo run`: a nested cargo invocation
+        // rebuilds this path with whatever features it defaults to, which other
+        // test binaries then run.
+        let mut run_cmd = Command::new(env!("CARGO_BIN_EXE_archival"))
+            .args(["run", &site_path, "--upload-prefix", "test"])
             .current_dir(std::env::current_dir().unwrap())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

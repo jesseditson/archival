@@ -20,7 +20,7 @@ use std::{
     hash::Hash,
     path::{Path, PathBuf},
 };
-use to_liquid::object_to_liquid;
+use to_liquid::{object_to_liquid_with, ToLiquidOptions};
 use toml::Table;
 use tracing::{instrument, warn};
 mod object_entry;
@@ -285,7 +285,16 @@ impl Object {
         definition: &ObjectDefinition,
         field_config: &FieldConfig,
     ) -> Value {
-        let mut values = object_to_liquid(&self.values, definition, field_config);
+        self.liquid_object_with(definition, field_config, ToLiquidOptions::default())
+    }
+
+    pub fn liquid_object_with(
+        &self,
+        definition: &ObjectDefinition,
+        field_config: &FieldConfig,
+        options: ToLiquidOptions,
+    ) -> Value {
+        let mut values = object_to_liquid_with(&self.values, definition, field_config, options);
         // Reserved/special
         if values.contains_key("path") {
             panic!("Objects may not define path key.");

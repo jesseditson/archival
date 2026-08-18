@@ -1,0 +1,5 @@
+# Archival
+dist
+
+# npm
+node_modules

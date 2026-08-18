@@ -1,0 +1,341 @@
+//! End to end coverage for carriers in `archival run`.
+//!
+//! Everything here needs node, so the whole module skips when it is missing or
+//! too old rather than failing a machine that simply doesn't have it.
+
+#![cfg(feature = "carriers")]
+
+mod carrier_tests {
+    use nanoid::nanoid;
+    use std::{
+        fs,
+        io::{BufRead, BufReader},
+        net::TcpListener,
+        path::{Path, PathBuf},
+        process::{Child, Command, Stdio},
+        thread,
+        time::{Duration, Instant},
+    };
+
+    const FIXTURE: &str = "tests/fixtures/carriers-site";
+    const READY_TIMEOUT: Duration = Duration::from_secs(60);
+
+    /// Carriers need a node with stable `fetch`/`Blob`/`FormData` and a global
+    /// `File`. Below that, or with no node at all, there is nothing to test.
+    fn node_ok() -> bool {
+        let Ok(output) = Command::new("node").arg("--version").output() else {
+            println!("skipping: `node` is not on PATH");
+            return false;
+        };
+        let printed = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let major: u64 = printed
+            .trim_start_matches('v')
+            .split('.')
+            .next()
+            .and_then(|m| m.parse().ok())
+            .unwrap_or(0);
+        if major < 20 {
+            println!("skipping: node {} is older than 20", printed);
+            return false;
+        }
+        true
+    }
+
+    /// Turns "nothing ever answered" into a diagnosis: the binary under test is
+    /// shared, and anything that rebuilds it without this feature makes every
+    /// carrier route a plain 404.
+    fn assert_binary_has_carriers() {
+        let help = Command::new(env!("CARGO_BIN_EXE_archival"))
+            .args(["run", "--help"])
+            .output()
+            .expect("archival --help runs");
+        let help = String::from_utf8_lossy(&help.stdout);
+        assert!(
+            help.contains("--no-carriers"),
+            "{} was built without the carriers feature",
+            env!("CARGO_BIN_EXE_archival")
+        );
+    }
+
+    fn free_port() -> u16 {
+        TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port()
+    }
+
+    fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+        fs::create_dir_all(&dst)?;
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let to = dst.as_ref().join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                copy_dir_all(entry.path(), to)?;
+            } else {
+                fs::copy(entry.path(), to)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// A copy of the fixture site, so a test never writes into the checked-in one.
+    fn site_copy() -> PathBuf {
+        assert!(Path::new(FIXTURE).exists(), "missing fixture {}", FIXTURE);
+        let _ = fs::create_dir("tests/fixtures/tmp");
+        let path = PathBuf::from(format!("tests/fixtures/tmp/{}", nanoid!()));
+        copy_dir_all(FIXTURE, &path).unwrap();
+        path
+    }
+
+    struct DevServer {
+        child: Child,
+        port: u16,
+        root: PathBuf,
+    }
+
+    impl DevServer {
+        fn start(root: PathBuf) -> Self {
+            assert_binary_has_carriers();
+            let port = free_port();
+            let mut child = Command::new(env!("CARGO_BIN_EXE_archival"))
+                .args(["run", &root.to_string_lossy(), "--port", &port.to_string()])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("archival run starts");
+            // Otherwise a full pipe buffer stalls the dev server mid-test.
+            for stream in [
+                Box::new(child.stdout.take().unwrap()) as Box<dyn std::io::Read + Send>,
+                Box::new(child.stderr.take().unwrap()),
+            ] {
+                thread::spawn(move || {
+                    for line in BufReader::new(stream).lines().map_while(Result::ok) {
+                        println!("[archival] {}", line);
+                    }
+                });
+            }
+            let server = Self { child, port, root };
+            server.wait_until_ready();
+            server
+        }
+
+        fn url(&self, path: &str) -> String {
+            format!("http://localhost:{}{}", self.port, path)
+        }
+
+        fn client() -> reqwest::blocking::Client {
+            reqwest::blocking::Client::builder()
+                // A carrier's "redirect:" return is a 302 the caller must see.
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(Duration::from_secs(30))
+                .build()
+                .unwrap()
+        }
+
+        fn get(&self, path: &str) -> reqwest::blocking::Response {
+            Self::client().get(self.url(path)).send().unwrap()
+        }
+
+        fn wait_until_ready(&self) {
+            let deadline = Instant::now() + READY_TIMEOUT;
+            let mut last = String::new();
+            while Instant::now() < deadline {
+                match Self::client().get(self.url("/carriers/echo")).send() {
+                    Ok(response) if response.status().is_success() => return,
+                    Ok(response) => last = response.status().to_string(),
+                    Err(e) => last = e.to_string(),
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+            panic!("carriers never came up: {}", last);
+        }
+
+        /// Waits for a carrier response to change, since a rebuild is batched
+        /// and a restart is not instant.
+        fn get_until(&self, path: &str, contains: &str) -> String {
+            let deadline = Instant::now() + READY_TIMEOUT;
+            let mut last = String::new();
+            while Instant::now() < deadline {
+                if let Ok(response) = Self::client().get(self.url(path)).send() {
+                    last = response.text().unwrap_or_default();
+                    if last.contains(contains) {
+                        return last;
+                    }
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+            panic!("{} never contained {}: {}", path, contains, last);
+        }
+    }
+
+    impl Drop for DevServer {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn carriers_answer_requests_the_way_a_deployed_one_does() {
+        if !node_ok() {
+            return;
+        }
+        let server = DevServer::start(site_copy());
+        let client = DevServer::client();
+
+        let response = server.get("/carriers/echo?name=tormenta");
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            response.headers()["content-type"],
+            "application/json",
+            "an object return is sent as json"
+        );
+        let body: serde_json::Value = response.json().unwrap();
+        assert_eq!(body["name"], "tormenta");
+        assert_eq!(body["body"], serde_json::Value::Null, "a GET has no body");
+        assert_eq!(body["artist"], "Tormenta Rey", "objects reach the carrier");
+        assert_eq!(body["site"], server.url(""), "SITE_URL is the dev server");
+
+        let body: serde_json::Value = client
+            .post(server.url("/carriers/echo"))
+            .json(&serde_json::json!({ "hello": "world" }))
+            .send()
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(body["body"]["hello"], "world", "json bodies are parsed");
+
+        let body: serde_json::Value = client
+            .post(server.url("/carriers/echo"))
+            .form(&[("a", "1"), ("b", "2")])
+            .send()
+            .unwrap()
+            .json()
+            .unwrap();
+        assert_eq!(body["body"]["a"], "1", "form fields arrive as strings");
+
+        let response = server.get("/carriers/redir");
+        assert_eq!(response.status(), 302, "a `redirect:` return is a 302");
+        assert_eq!(response.headers()["location"], "/login");
+
+        let response = server.get("/carriers/boom");
+        assert_eq!(response.status(), 500);
+        assert!(
+            response
+                .text()
+                .unwrap()
+                .starts_with("Carrier threw an error:"),
+            "a throw is reported, not swallowed"
+        );
+
+        assert_eq!(server.get("/carriers/nope").status(), 404);
+        assert_eq!(
+            server.get("/carriers/..%2f__control/state").status(),
+            404,
+            "nothing can address the sidecar's control plane"
+        );
+
+        assert!(
+            server
+                .get("/index.html")
+                .text()
+                .unwrap()
+                .contains("menu.pdf"),
+            "the static server still serves the built site"
+        );
+    }
+
+    #[test]
+    fn a_carrier_reads_a_secret_the_built_site_never_sees() {
+        if !node_ok() {
+            return;
+        }
+        let server = DevServer::start(site_copy());
+        // A TypeScript carrier, so this also covers node's type stripping.
+        let response = server.get("/carriers/typed");
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            response.text().unwrap(),
+            "hunter2",
+            "carriers run on the server and read the real secret"
+        );
+
+        let built = fs::read_to_string(server.root.join("dist/index.html")).unwrap();
+        assert!(
+            !built.contains("hunter2"),
+            "the same field must not reach the built site: {}",
+            built
+        );
+    }
+
+    #[test]
+    fn editing_an_object_reaches_carriers_without_a_restart() {
+        if !node_ok() {
+            return;
+        }
+        let server = DevServer::start(site_copy());
+        let object = server.root.join("objects/artist/tormenta-rey.toml");
+        fs::write(&object, "name = \"Renamed Artist\"\n").unwrap();
+        let body = server.get_until("/carriers/echo", "Renamed Artist");
+        assert!(body.contains("Renamed Artist"), "{}", body);
+    }
+
+    #[test]
+    fn editing_a_carrier_reloads_it() {
+        if !node_ok() {
+            return;
+        }
+        let server = DevServer::start(site_copy());
+        let entry = server.root.join("carriers/echo/index.js");
+        fs::write(&entry, "export default () => ({ reloaded: true });\n").unwrap();
+        let body = server.get_until("/carriers/echo", "reloaded");
+        assert!(body.contains("\"reloaded\":true"), "{}", body);
+    }
+
+    #[test]
+    fn uploads_are_readable_over_http() {
+        if !node_ok() {
+            return;
+        }
+        // Stands in for the uploads CDN a deployed carrier reads through R2.
+        let uploads = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let uploads_url = format!("http://{}", uploads.server_addr());
+        thread::spawn(move || {
+            for request in uploads.incoming_requests() {
+                let found = request.url().contains("menu.pdf");
+                let response = if found {
+                    tiny_http::Response::from_string("a menu").with_status_code(200)
+                } else {
+                    tiny_http::Response::from_string("nope").with_status_code(404)
+                };
+                let _ = request.respond(response);
+            }
+        });
+
+        let root = site_copy();
+        let manifest = root.join("archival.toml");
+        let existing = fs::read_to_string(&manifest).unwrap();
+        fs::write(
+            &manifest,
+            format!("{}uploads_url = \"{}\"\n", existing, uploads_url),
+        )
+        .unwrap();
+
+        let server = DevServer::start(root);
+        let body: serde_json::Value = server.get("/carriers/upload").json().unwrap();
+        assert_eq!(
+            body["list"][0]["filename"], "menu.pdf",
+            "list() is derived from the files objects point at"
+        );
+        assert_eq!(
+            body["byValue"], "carriers-test/0000000000000000000000000000000000000000000000000000000000000001/menu.pdf",
+            "a file value off objects carries its own sha"
+        );
+        assert_eq!(
+            body["contents"], "a menu",
+            "the upload's bytes are readable"
+        );
+    }
+}
