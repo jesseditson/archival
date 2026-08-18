@@ -205,23 +205,32 @@ pub fn watch_with(options: DevServerOptions) -> Result<crate::binary::ExitStatus
         match rx.recv_timeout(Duration::from_millis(50)) {
             Ok(path) => {
                 let changed_file = path.strip_prefix(&root_dir).unwrap();
+                // Carrier files are none of the site's business. Handing them
+                // to invalidate_file would make every file an `npm install`
+                // writes trigger a full site rebuild.
+                //
+                // Handled without `continue`, so that a burst of carrier events
+                // arriving faster than this loop drains them cannot starve the
+                // rebuild below.
+                #[allow(unused_mut)]
+                let mut claimed = false;
                 #[cfg(feature = "carriers")]
                 if let Some(carriers) = &carriers {
-                    if carriers.claims(changed_file) {
-                        if carriers.should_rebuild(&root_dir, changed_file) {
-                            carriers_changed = true;
-                        }
-                        continue;
+                    claimed = carriers.claims(changed_file);
+                    if claimed && carriers.should_rebuild(&root_dir, changed_file) {
+                        carriers_changed = true;
                     }
                 }
-                if changed_file == site.manifest.object_definition_file {
-                    object_definitions_changed = true;
+                if !claimed {
+                    if changed_file == site.manifest.object_definition_file {
+                        object_definitions_changed = true;
+                    }
+                    if changed_file.starts_with(&site.manifest.static_dir) {
+                        static_files_changed = true;
+                    }
+                    site.invalidate_file(changed_file);
+                    changed = true;
                 }
-                if changed_file.starts_with(&site.manifest.static_dir) {
-                    static_files_changed = true;
-                }
-                site.invalidate_file(changed_file);
-                changed = true;
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {

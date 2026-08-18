@@ -28,7 +28,7 @@ use std::{
     sync::{mpsc, Arc, Mutex, RwLock},
     thread,
 };
-use tracing::warn;
+use tracing::{debug, warn};
 
 /// Tracks what each watched carrier file last contained.
 ///
@@ -41,12 +41,24 @@ struct SeenContents(BTreeMap<PathBuf, u64>);
 
 impl SeenContents {
     /// True the first time a path is seen, and whenever its contents differ
-    /// from last time. A file that has gone away counts as changed.
+    /// from last time.
+    ///
+    /// Only a regular file has contents to compare. Everything else - a
+    /// directory, which is what a watcher reports when a carrier is added,
+    /// moved, or renamed, or a file that cannot be read right now - reports a
+    /// change: an extra rebuild costs a restart, while a missed one leaves the
+    /// sidecar serving stale code with nothing to correct it.
     fn changed(&mut self, path: &Path) -> bool {
-        let hash = std::fs::read(path).map(|bytes| seahash::hash(&bytes)).ok();
-        match hash {
-            Some(hash) => self.0.insert(path.to_path_buf(), hash) != Some(hash),
-            None => self.0.remove(path).is_some(),
+        match std::fs::symlink_metadata(path) {
+            Err(_) => self.0.remove(path).is_some(),
+            Ok(metadata) if !metadata.is_file() => true,
+            Ok(_) => match std::fs::read(path) {
+                Ok(bytes) => {
+                    let hash = seahash::hash(&bytes);
+                    self.0.insert(path.to_path_buf(), hash) != Some(hash)
+                }
+                Err(_) => true,
+            },
         }
     }
 }
@@ -144,10 +156,13 @@ impl CarrierSupervisor {
             let name = c.as_os_str().to_string_lossy();
             name == "node_modules" || name.starts_with('.')
         });
-        if ignored {
-            return false;
-        }
-        self.seen.lock().unwrap().changed(&root.join(changed))
+        let rebuild = !ignored && self.seen.lock().unwrap().changed(&root.join(changed));
+        debug!(
+            "carrier change {} -> rebuild={}",
+            changed.display(),
+            rebuild
+        );
+        rebuild
     }
 
     pub fn rebuild(&self) {
@@ -324,6 +339,38 @@ mod tests {
         assert!(!seen.changed(&file));
         write(&file, "b").unwrap();
         assert!(seen.changed(&file), "a real edit always rebuilds");
+    }
+
+    #[test]
+    fn a_directory_always_counts_as_changed() {
+        // Watchers report the directory, not the file, for some events - and a
+        // directory has no contents to compare. Reporting "unchanged" here
+        // dropped the edit for good.
+        let dir = TempDir::new().unwrap();
+        let mut seen = SeenContents::default();
+        assert!(seen.changed(dir.path()));
+        assert!(seen.changed(dir.path()));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn an_unreadable_file_counts_as_changed() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("index.js");
+        write(&file, "a").unwrap();
+        let mut seen = SeenContents::default();
+        assert!(seen.changed(&file));
+
+        let mut permissions = std::fs::metadata(&file).unwrap().permissions();
+        permissions.set_mode(0o000);
+        std::fs::set_permissions(&file, permissions.clone()).unwrap();
+        // Root reads anything, so only assert where the mode applies.
+        if std::fs::read(&file).is_err() {
+            assert!(seen.changed(&file));
+        }
+        permissions.set_mode(0o644);
+        std::fs::set_permissions(&file, permissions).unwrap();
     }
 
     #[test]

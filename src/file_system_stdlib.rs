@@ -145,6 +145,23 @@ impl FileSystemAPI for NativeFileSystem {
     }
 }
 
+/// Reading a file is not a change to it.
+///
+/// inotify reports opens and reads, so on linux anything that reads a watched
+/// file - the build itself, or a carrier being imported - otherwise looks like
+/// an edit, and reacting to it performs the read that reports the next one. A
+/// finished write (`Close(Write)`) is a real change and is kept. Other backends
+/// do not report accesses at all, so this is a no-op for them.
+fn is_read_only_access(kind: &notify::EventKind) -> bool {
+    use notify::event::{AccessKind, AccessMode};
+    matches!(
+        kind,
+        notify::EventKind::Access(
+            AccessKind::Open(_) | AccessKind::Read | AccessKind::Close(AccessMode::Read)
+        )
+    )
+}
+
 impl WatchableFileSystemAPI for NativeFileSystem {
     fn watch(
         &self,
@@ -158,6 +175,9 @@ impl WatchableFileSystemAPI for NativeFileSystem {
         let mut watcher = notify::recommended_watcher(
             move |res: Result<notify::Event, notify::Error>| match res {
                 Ok(event) => {
+                    if is_read_only_access(&event.kind) {
+                        return;
+                    }
                     let changed_paths: Vec<PathBuf> = event
                         .paths
                         .into_iter()
@@ -223,5 +243,38 @@ impl std::fmt::Display for NativeFileSystem {
             }
             Err(e) => write!(f, "{}: {}", self.root_dir().display(), e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_read_only_access;
+    use notify::{
+        event::{AccessKind, AccessMode, DataChange, ModifyKind, RemoveKind},
+        EventKind,
+    };
+
+    #[test]
+    fn reads_are_not_changes() {
+        assert!(is_read_only_access(&EventKind::Access(AccessKind::Open(
+            AccessMode::Any
+        ))));
+        assert!(is_read_only_access(&EventKind::Access(AccessKind::Read)));
+        assert!(is_read_only_access(&EventKind::Access(AccessKind::Close(
+            AccessMode::Read
+        ))));
+    }
+
+    #[test]
+    fn writes_are_changes() {
+        // A finished write arrives as a Close(Write) access, not a Modify.
+        assert!(!is_read_only_access(&EventKind::Access(AccessKind::Close(
+            AccessMode::Write
+        ))));
+        assert!(!is_read_only_access(&EventKind::Modify(ModifyKind::Data(
+            DataChange::Any
+        ))));
+        assert!(!is_read_only_access(&EventKind::Remove(RemoveKind::File)));
+        assert!(!is_read_only_access(&EventKind::Any));
     }
 }
