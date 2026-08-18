@@ -40,27 +40,38 @@ use tracing::{debug, warn};
 struct SeenContents(BTreeMap<PathBuf, u64>);
 
 impl SeenContents {
-    /// True the first time a path is seen, and whenever its contents differ
+    /// True the first time a path is seen, and whenever what it holds differs
     /// from last time.
     ///
-    /// Only a regular file has contents to compare. Everything else - a
-    /// directory, which is what a watcher reports when a carrier is added,
-    /// moved, or renamed, or a file that cannot be read right now - reports a
-    /// change: an extra rebuild costs a restart, while a missed one leaves the
-    /// sidecar serving stale code with nothing to correct it.
+    /// A directory is compared by its listing rather than skipped: watchers
+    /// report the directory both when a carrier is added or removed - which
+    /// must rebuild - and when a file inside it is merely read, which must not.
     fn changed(&mut self, path: &Path) -> bool {
-        match std::fs::symlink_metadata(path) {
-            Err(_) => self.0.remove(path).is_some(),
-            Ok(metadata) if !metadata.is_file() => true,
-            Ok(_) => match std::fs::read(path) {
-                Ok(bytes) => {
-                    let hash = seahash::hash(&bytes);
-                    self.0.insert(path.to_path_buf(), hash) != Some(hash)
-                }
-                Err(_) => true,
-            },
+        let fingerprint = match std::fs::symlink_metadata(path) {
+            Err(_) => return self.0.remove(path).is_some(),
+            Ok(metadata) if metadata.is_dir() => listing(path),
+            Ok(_) => std::fs::read(path).map(|bytes| seahash::hash(&bytes)).ok(),
+        };
+        match fingerprint {
+            Some(hash) => self.0.insert(path.to_path_buf(), hash) != Some(hash),
+            // Unreadable right now, so assume an edit rather than lose one.
+            None => true,
         }
     }
+}
+
+fn listing(dir: &Path) -> Option<u64> {
+    let mut names: Vec<_> = std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.file_name())
+        .collect();
+    names.sort();
+    let mut hash = 0u64;
+    for name in names {
+        hash = seahash::hash(format!("{}{}", hash, name.to_string_lossy()).as_bytes());
+    }
+    Some(hash)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -262,6 +273,10 @@ impl Worker {
         let harness = host::write_harness(&host::harness_dir(&self.site_root))?;
         // Node's module cache cannot be invalidated, so changed code means a
         // new process. Booting one costs about as much as an import.
+        //
+        // Flagged before the old one dies, so a request arriving mid-restart
+        // waits for the replacement instead of being sent to a dead port.
+        *self.state.write().unwrap() = ProxyState::Starting;
         *self.sidecar.lock().unwrap() = None;
         let sidecar = Sidecar::spawn(&node, &harness, &self.options.node_args, self.options.port)?;
         sidecar.wait_until_healthy()?;
@@ -342,13 +357,24 @@ mod tests {
     }
 
     #[test]
-    fn a_directory_always_counts_as_changed() {
-        // Watchers report the directory, not the file, for some events - and a
-        // directory has no contents to compare. Reporting "unchanged" here
-        // dropped the edit for good.
+    fn a_directory_changes_only_when_its_listing_does() {
+        // Windows reports the directory when a file inside it is merely read,
+        // so treating every directory event as a change restarts the sidecar
+        // out from under the request that caused the read.
         let dir = TempDir::new().unwrap();
+        write(dir.path().join("index.js"), "a").unwrap();
         let mut seen = SeenContents::default();
+        assert!(seen.changed(dir.path()), "first sight is a change");
+        assert!(!seen.changed(dir.path()), "reading it is not");
+
+        // Editing a file inside it is that file's event, not the directory's.
+        write(dir.path().join("index.js"), "b").unwrap();
+        assert!(!seen.changed(dir.path()));
+
+        // Adding or removing a carrier is a change to the listing.
+        write(dir.path().join("other.js"), "c").unwrap();
         assert!(seen.changed(dir.path()));
+        std::fs::remove_file(dir.path().join("other.js")).unwrap();
         assert!(seen.changed(dir.path()));
     }
 

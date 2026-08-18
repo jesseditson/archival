@@ -10,7 +10,7 @@ use std::{
         Arc, RwLock,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tiny_http::{Header, Request, Response, StatusCode};
 use tracing::warn;
@@ -21,6 +21,10 @@ const MAX_BODY: usize = 100 * 1024 * 1024;
 /// Enough that a page full of parallel carrier calls works, few enough that a
 /// hung carrier cannot exhaust the machine's threads.
 const MAX_CONCURRENT: usize = 32;
+/// How long a request waits for a sidecar that is starting or restarting. A
+/// restart is a process spawn plus an import, so this only expires when
+/// something is actually wrong.
+const STARTUP_GRACE: Duration = Duration::from_secs(30);
 
 /// Headers that describe one hop and must not be forwarded to the next.
 const HOP_BY_HOP: &[&str] = &[
@@ -115,23 +119,32 @@ impl CarrierProxy {
         }
     }
 
-    fn forward(&self, mut request: Request, upstream: String) {
-        let port = match &*self.state.read().unwrap() {
-            ProxyState::Ready { port } => *port,
-            ProxyState::Starting => {
-                return respond(
-                    request,
-                    Response::from_string("Carriers are still starting")
+    /// The sidecar's port, waiting while it is being (re)started. A carrier
+    /// edit restarts it, and a request that arrives mid-restart should be
+    /// answered by the new one rather than fail against the old one's port.
+    fn port(&self) -> Result<u16, Response<std::io::Cursor<Vec<u8>>>> {
+        let deadline = Instant::now() + STARTUP_GRACE;
+        loop {
+            match &*self.state.read().unwrap() {
+                ProxyState::Ready { port } => return Ok(*port),
+                ProxyState::Failed(message) => {
+                    return Err(Response::from_string(message.to_owned()).with_status_code(502))
+                }
+                ProxyState::Starting if Instant::now() >= deadline => {
+                    return Err(Response::from_string("Carriers are still starting")
                         .with_status_code(503)
-                        .with_header(header("Retry-After: 1")),
-                );
+                        .with_header(header("Retry-After: 1")))
+                }
+                ProxyState::Starting => {}
             }
-            ProxyState::Failed(message) => {
-                return respond(
-                    request,
-                    Response::from_string(message.to_owned()).with_status_code(502),
-                );
-            }
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    fn forward(&self, mut request: Request, upstream: String) {
+        let port = match self.port() {
+            Ok(port) => port,
+            Err(response) => return respond(request, response),
         };
 
         let method = match reqwest::Method::from_str(request.method().as_str()) {

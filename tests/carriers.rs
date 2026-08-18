@@ -296,6 +296,35 @@ mod carrier_tests {
     }
 
     #[test]
+    fn a_reload_does_not_break_requests_in_flight() {
+        if !node_ok() {
+            return;
+        }
+        // Restarting the sidecar swaps the port every carrier request is sent
+        // to. A request that arrives mid-restart must wait for the replacement
+        // rather than be sent to the process that just died.
+        let server = DevServer::start(site_copy());
+        let entry = server.root.join("carriers/echo/index.js");
+        for round in 0..3 {
+            fs::write(
+                &entry,
+                format!("export default () => ({{ round: {} }});\n", round),
+            )
+            .unwrap();
+            for _ in 0..10 {
+                let response = server.get("/carriers/echo");
+                assert!(
+                    !response.status().is_server_error(),
+                    "a reload must not fail a request: [{}] {}",
+                    response.status(),
+                    response.text().unwrap_or_default()
+                );
+                thread::sleep(Duration::from_millis(25));
+            }
+        }
+    }
+
+    #[test]
     fn editing_a_carrier_reloads_it() {
         if !node_ok() {
             return;
