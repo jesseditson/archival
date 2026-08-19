@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tiny_http::{Header, Request, Response, StatusCode};
-use tracing::warn;
+use tracing::{debug, warn};
 
 /// A dev server is not a load balancer, so bodies are buffered rather than
 /// streamed. This only bounds what one request may hand a carrier.
@@ -25,6 +25,10 @@ const MAX_CONCURRENT: usize = 32;
 /// restart is a process spawn plus an import, so this only expires when
 /// something is actually wrong.
 const STARTUP_GRACE: Duration = Duration::from_secs(30);
+/// Sends per request. More than one only happens when a restart moved the
+/// sidecar out from under it; the bound stops a restart loop from holding a
+/// request open indefinitely.
+const MAX_ATTEMPTS: u8 = 3;
 
 /// Headers that describe one hop and must not be forwarded to the next.
 const HOP_BY_HOP: &[&str] = &[
@@ -202,24 +206,43 @@ impl CarrierProxy {
             );
         }
 
-        let url = format!("http://127.0.0.1:{}{}", port, upstream);
-        let response = match self
-            .client
-            .request(method, &url)
-            .headers(headers)
-            .body(body)
-            .send()
-        {
-            Ok(response) => response,
-            Err(e) => {
-                // Also logged: the body reaches whoever made the request, but
-                // the reason belongs in the dev server's own output too.
-                warn!("carrier request to {} failed: {}", url, e);
-                return respond(
-                    request,
-                    Response::from_string(format!("The carrier sidecar didn't answer: {}", e))
-                        .with_status_code(502),
-                );
+        // A restart can begin between resolving the port and sending, so a
+        // failure against a port that is no longer current is retried against
+        // the replacement rather than reported. The sidecar that died never ran
+        // the request.
+        let mut port = port;
+        let mut attempts_left = MAX_ATTEMPTS;
+        let response = loop {
+            let url = format!("http://127.0.0.1:{}{}", port, upstream);
+            let attempt = self
+                .client
+                .request(method.clone(), &url)
+                .headers(headers.clone())
+                .body(body.clone())
+                .send();
+            match attempt {
+                Ok(response) => break response,
+                Err(e) => match self.port() {
+                    Ok(current) if current != port && attempts_left > 1 => {
+                        attempts_left -= 1;
+                        debug!("carrier moved from {} to {}, retrying", port, current);
+                        port = current;
+                    }
+                    _ => {
+                        // Also logged: the body reaches whoever made the
+                        // request, but the reason belongs in the dev server's
+                        // own output too.
+                        warn!("carrier request to {} failed: {}", url, e);
+                        return respond(
+                            request,
+                            Response::from_string(format!(
+                                "The carrier sidecar didn't answer: {}",
+                                e
+                            ))
+                            .with_status_code(502),
+                        );
+                    }
+                },
             }
         };
 

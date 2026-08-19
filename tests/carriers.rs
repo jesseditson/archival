@@ -13,6 +13,7 @@ mod carrier_tests {
         net::TcpListener,
         path::{Path, PathBuf},
         process::{Child, Command, Stdio},
+        sync::{Arc, Mutex},
         thread,
         time::{Duration, Instant},
     };
@@ -92,6 +93,7 @@ mod carrier_tests {
         child: Child,
         port: u16,
         root: PathBuf,
+        output: Arc<Mutex<Vec<String>>>,
     }
 
     impl DevServer {
@@ -104,20 +106,39 @@ mod carrier_tests {
                 .stderr(Stdio::piped())
                 .spawn()
                 .expect("archival run starts");
+            let output = Arc::new(Mutex::new(vec![]));
             // Otherwise a full pipe buffer stalls the dev server mid-test.
             for stream in [
                 Box::new(child.stdout.take().unwrap()) as Box<dyn std::io::Read + Send>,
                 Box::new(child.stderr.take().unwrap()),
             ] {
+                let collected = output.clone();
                 thread::spawn(move || {
                     for line in BufReader::new(stream).lines().map_while(Result::ok) {
                         println!("[archival] {}", line);
+                        collected.lock().unwrap().push(line);
                     }
                 });
             }
-            let server = Self { child, port, root };
+            let server = Self {
+                child,
+                port,
+                root,
+                output,
+            };
             server.wait_until_ready();
             server
+        }
+
+        /// How many times the sidecar has come up. More than one without an
+        /// edit means something restarted it for no reason.
+        fn starts(&self) -> usize {
+            self.output
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|line| line.contains("Carriers ready"))
+                .count()
         }
 
         fn url(&self, path: &str) -> String {
@@ -293,6 +314,35 @@ mod carrier_tests {
         fs::write(&object, "name = \"Renamed Artist\"\n").unwrap();
         let body = server.get_until("/carriers/echo", "Renamed Artist");
         assert!(body.contains("Renamed Artist"), "{}", body);
+    }
+
+    #[test]
+    fn reading_carriers_does_not_restart_the_sidecar() {
+        if !node_ok() {
+            return;
+        }
+        // The sidecar reads each carrier as it imports it, and windows reports
+        // that read as a change to the carrier's directory. Acting on it
+        // restarts the sidecar out from under the request that caused it.
+        let server = DevServer::start(site_copy());
+        // Carriers that answer without reaching anything outside the process.
+        for path in ["/carriers/echo", "/carriers/typed", "/carriers/redir"] {
+            let response = server.get(path);
+            assert!(
+                !response.status().is_server_error(),
+                "{} failed: [{}] {}",
+                path,
+                response.status(),
+                response.text().unwrap_or_default()
+            );
+        }
+        // Long enough for a change to have been batched and acted on.
+        thread::sleep(Duration::from_millis(500));
+        assert_eq!(
+            server.starts(),
+            1,
+            "nothing was edited, so the sidecar should have started once"
+        );
     }
 
     #[test]

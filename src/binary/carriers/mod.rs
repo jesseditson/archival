@@ -29,6 +29,7 @@ use std::{
     thread,
 };
 use tracing::{debug, warn};
+use walkdir::WalkDir;
 
 /// Tracks what each watched carrier file last contained.
 ///
@@ -56,6 +57,27 @@ impl SeenContents {
             Some(hash) => self.0.insert(path.to_path_buf(), hash) != Some(hash),
             // Unreadable right now, so assume an edit rather than lose one.
             None => true,
+        }
+    }
+
+    /// Records what the sidecar was just built from, so the first event for a
+    /// path is compared against that rather than counting as new.
+    ///
+    /// Windows reports a directory when a file inside it is read, and the
+    /// sidecar reads every carrier as it imports them - which without a
+    /// baseline looks like a change and restarts it mid-request.
+    fn prime(&mut self, site_root: &Path) {
+        let carriers = site_root.join(CARRIERS_DIR_NAME);
+        for entry in WalkDir::new(&carriers)
+            .follow_links(false)
+            .into_iter()
+            .filter_entry(|e| {
+                let name = e.file_name().to_string_lossy();
+                name != "node_modules" && !name.starts_with('.')
+            })
+            .filter_map(|e| e.ok())
+        {
+            self.changed(entry.path());
         }
     }
 }
@@ -126,6 +148,7 @@ impl CarrierSupervisor {
             options,
             state: state.clone(),
             sidecar: sidecar.clone(),
+            seen: seen.clone(),
             fingerprints: Fingerprints::default(),
             entries: BTreeMap::new(),
             payload: None,
@@ -214,6 +237,7 @@ struct Worker {
     options: CarrierOptions,
     state: Arc<RwLock<ProxyState>>,
     sidecar: Arc<Mutex<Option<Sidecar>>>,
+    seen: Arc<Mutex<SeenContents>>,
     fingerprints: Fingerprints,
     entries: BTreeMap<String, PathBuf>,
     payload: Option<CarrierPayload>,
@@ -271,6 +295,9 @@ impl Worker {
             }
         }
         let harness = host::write_harness(&host::harness_dir(&self.site_root))?;
+        // Before the sidecar reads a single carrier, so that its own reads are
+        // measured against what it is about to run.
+        self.seen.lock().unwrap().prime(&self.site_root);
         // Node's module cache cannot be invalidated, so changed code means a
         // new process. Booting one costs about as much as an import.
         //
@@ -354,6 +381,43 @@ mod tests {
         assert!(!seen.changed(&file));
         write(&file, "b").unwrap();
         assert!(seen.changed(&file), "a real edit always rebuilds");
+    }
+
+    #[test]
+    fn priming_makes_a_read_of_an_untouched_carrier_a_non_event() {
+        // Windows reports carriers/<name> when the sidecar imports the file
+        // inside it. Without a baseline that first report looks like a change
+        // and restarts the sidecar out from under the request that caused it.
+        let site = TempDir::new().unwrap();
+        let carrier = site.path().join("carriers/echo");
+        std::fs::create_dir_all(&carrier).unwrap();
+        write(carrier.join("index.js"), "a").unwrap();
+
+        let mut seen = SeenContents::default();
+        seen.prime(site.path());
+        assert!(!seen.changed(&site.path().join("carriers")));
+        assert!(!seen.changed(&carrier));
+        assert!(!seen.changed(&carrier.join("index.js")));
+
+        write(carrier.join("index.js"), "b").unwrap();
+        assert!(
+            seen.changed(&carrier.join("index.js")),
+            "a real edit still rebuilds"
+        );
+    }
+
+    #[test]
+    fn priming_ignores_dependencies() {
+        let site = TempDir::new().unwrap();
+        let modules = site.path().join("carriers/echo/node_modules/dep");
+        std::fs::create_dir_all(&modules).unwrap();
+        write(modules.join("index.js"), "a").unwrap();
+
+        let mut seen = SeenContents::default();
+        seen.prime(site.path());
+        // Not primed, so not tracked - the change loop drops these before it
+        // ever asks.
+        assert!(seen.changed(&modules.join("index.js")));
     }
 
     #[test]
