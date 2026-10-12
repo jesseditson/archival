@@ -19,9 +19,11 @@ import {
   buildAndLoad,
   carrierApiVersion,
   closeDatabases,
+  emailPage,
   invokeCarrier,
   parseRequestBody,
   readCarrierFiles,
+  sentEmail,
   toResponse,
 } from "./harness.mjs";
 import * as toolchain from "./toolchain.mjs";
@@ -155,10 +157,7 @@ test("each carrier API version is called its own way", async () => {
   assert.equal(site.url, "http://localhost:1234");
   assert.ok(Object.isFrozen(site));
   assert.throws(() => site.uploads.list(), /site\.uploads is not available/);
-  await assert.rejects(
-    site.email.send({ to: "a@b.test", subject: "x", text: "y" }),
-    /site\.email is not available in archival run/,
-  );
+  assert.equal(typeof site.email.send, "function");
   await assert.rejects(
     site.sql.exec("SELECT 1"),
     /site\.sql is not available in archival run/,
@@ -306,4 +305,74 @@ test("what a deploy would refuse is refused here, by name", async () => {
     buildAndLoad("value", value.root, value.out),
     /default-export a function/,
   );
+});
+
+test("site.email keeps what a deploy would send, to show rather than deliver", async () => {
+  const [, , , site] = await invokeCarrier(
+    { carrier: (...args) => args, api: 2 },
+    new URLSearchParams(),
+    null,
+    { objects: {}, siteUrl: "", uploads: [], database: "" },
+    "contact",
+  );
+  const receipt = await site.email.send({
+    to: "ana@example.com",
+    subject: "Thanks, Ana",
+    html: '<p>Hi <script>parent.stolen = 1</script>"Ana"</p>',
+    text: "Hi Ana",
+    replyTo: "owner@example.com",
+  });
+  assert.equal(receipt.from, "", "only a deploy knows the site's addresses");
+  const email = sentEmail(receipt.id);
+  assert.deepEqual(
+    {
+      carrier: email.carrier,
+      from: email.from,
+      to: email.to,
+      subject: email.subject,
+      replyTo: email.replyTo,
+    },
+    {
+      carrier: "contact",
+      from: null,
+      to: ["ana@example.com"],
+      subject: "Thanks, Ana",
+      replyTo: "owner@example.com",
+    },
+  );
+  const page = emailPage(email);
+  assert.match(
+    page,
+    /<iframe class="body" sandbox="allow-popups allow-popups-to-escape-sandbox"/,
+  );
+  assert.ok(!page.includes("<script>"), "the body only ever reaches the sandbox");
+  assert.match(
+    page,
+    /srcdoc="&lt;base target=&quot;_blank&quot;&gt;&lt;p&gt;Hi &lt;script&gt;/,
+  );
+  assert.match(page, /<summary>Plain text<\/summary><pre class="body">Hi Ana<\/pre>/);
+});
+
+test("site.email refuses what a deployed send refuses", async () => {
+  const [, , , site] = await invokeCarrier(
+    { carrier: (...args) => args, api: 2 },
+    new URLSearchParams(),
+    null,
+    { objects: {}, siteUrl: "", uploads: [], database: "" },
+  );
+  for (const [message, reason] of [
+    [{ to: "nope", subject: "x", text: "y" }, /"nope" is not an email address/],
+    [{ to: "a@example.com", subject: "x" }, /text or html is required/],
+    [{ to: "a@example.com", subject: "a\nb", text: "y" }, /line breaks/],
+    [
+      { to: Array(11).fill("a@example.com"), subject: "x", text: "y" },
+      /at most 10 recipients/,
+    ],
+  ]) {
+    await assert.rejects(site.email.send(message), (error) => {
+      assert.match(error.message, /^Sending email failed: /);
+      assert.match(error.message, reason);
+      return true;
+    });
+  }
 });

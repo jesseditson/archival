@@ -12,7 +12,8 @@
 // node_modules.
 
 import http from "node:http";
-import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -169,11 +170,211 @@ const makeUploads = (name, current) => {
   return { list, get };
 };
 
-const makeEmail = (name) => ({
-  send: async () => {
-    throw new Error(name + " is not available in archival run");
+// What a deployed site's mail refuses, before it sends anything.
+const EMAIL_MAX_RECIPIENTS = 10;
+const EMAIL_MAX_SUBJECT_LENGTH = 500;
+const EMAIL_MAX_BODY_BYTES = 256 * 1024;
+const EMAIL_ADDRESS =
+  /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i;
+
+const isEmailAddress = (value) =>
+  typeof value === "string" && value.length <= 254 && EMAIL_ADDRESS.test(value);
+
+/** The message a deployed send would accept, or the reason it would not. */
+const readEmail = (message) => {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return { error: "the message must be an object" };
+  }
+  const to = Array.isArray(message.to) ? message.to : [message.to];
+  if (to.length === 0) {
+    return { error: "to is required" };
+  }
+  if (to.length > EMAIL_MAX_RECIPIENTS) {
+    return {
+      error: `A message can have at most ${EMAIL_MAX_RECIPIENTS} recipients`,
+    };
+  }
+  const invalid = to.find((recipient) => !isEmailAddress(recipient));
+  if (invalid !== undefined) {
+    return { error: `"${String(invalid)}" is not an email address` };
+  }
+  const { subject, text, html, from, replyTo } = message;
+  if (typeof subject !== "string" || !subject.trim()) {
+    return { error: "subject is required" };
+  }
+  if (subject.length > EMAIL_MAX_SUBJECT_LENGTH) {
+    return {
+      error: `subject can be at most ${EMAIL_MAX_SUBJECT_LENGTH} characters`,
+    };
+  }
+  if (/[\r\n]/.test(subject)) {
+    return { error: "subject cannot contain line breaks" };
+  }
+  for (const [field, value] of [
+    ["text", text],
+    ["html", html],
+  ]) {
+    if (value !== undefined && value !== null && typeof value !== "string") {
+      return { error: `${field} must be a string` };
+    }
+  }
+  if ((text ?? undefined) === undefined && (html ?? undefined) === undefined) {
+    return { error: "text or html is required" };
+  }
+  if ((text?.length ?? 0) + (html?.length ?? 0) > EMAIL_MAX_BODY_BYTES) {
+    return { error: `The body can be at most ${EMAIL_MAX_BODY_BYTES} bytes` };
+  }
+  for (const value of [from, replyTo]) {
+    if (value !== undefined && value !== null && !isEmailAddress(value)) {
+      return { error: `"${String(value)}" is not an email address` };
+    }
+  }
+  return {
+    email: {
+      from: from ? from.toLowerCase() : null,
+      to,
+      subject,
+      text: text ?? null,
+      html: html ?? null,
+      replyTo: replyTo ?? null,
+    },
+  };
+};
+
+/** id -> an email a carrier sent, kept until this process exits. */
+const emails = new Map();
+
+const EMAIL_PATH = /^\/__email\/([0-9a-f-]{36})$/;
+
+/** Where the email `id` can be read, once the harness is listening. */
+const emailUrl = (id) => {
+  const address = server.listening ? server.address() : null;
+  return address ? `http://127.0.0.1:${address.port}/__email/${id}` : null;
+};
+
+const openInBrowser = (url) => {
+  if (process.env.ARCHIVAL_OPEN_EMAILS === "0") {
+    return;
+  }
+  const [command, args] =
+    process.platform === "darwin"
+      ? ["open", [url]]
+      : process.platform === "win32"
+        ? ["cmd", ["/c", "start", "", url]]
+        : ["xdg-open", [url]];
+  try {
+    const child = spawn(command, args, { stdio: "ignore", detached: true });
+    child.on("error", () => {});
+    child.unref();
+  } catch {
+    // The url is logged as well, for a machine with no browser to open.
+  }
+};
+
+/**
+ * Builds the email facade, which the carrier calls `name`. A message is
+ * refused as a deployed send refuses it, and opened in a browser window
+ * instead of being sent. Only a deployed site knows its addresses, so with no
+ * `from` named the receipt's `from` is empty.
+ */
+const makeEmail = (name, carrier) => ({
+  send: async (message) => {
+    const read = readEmail(message);
+    if (read.error) {
+      throw new Error("Sending email failed: " + read.error);
+    }
+    const id = randomUUID();
+    emails.set(id, { ...read.email, id, carrier, sentAt: Date.now() });
+    const url = emailUrl(id);
+    if (url) {
+      console.log(
+        `[carrier] ${carrier} sent "${read.email.subject}" (${name}): ${url}`,
+      );
+      openInBrowser(url);
+    }
+    return { id, from: read.email.from ?? "" };
   },
 });
+
+const escapeHtml = (value) =>
+  String(value).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+
+/**
+ * The page an email opens on. The body is the carrier's, so it renders in a
+ * frame sandboxed without scripts, as a mail client would show it.
+ */
+export const emailPage = (email) => {
+  const row = (label, value) =>
+    `<div class="row"><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`;
+  const parts = [];
+  if (email.html !== null) {
+    parts.push(
+      `<iframe class="body" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" title="Email body" srcdoc="${escapeHtml(`<base target="_blank">${email.html}`)}"></iframe>`,
+    );
+  }
+  if (email.text !== null) {
+    parts.push(
+      email.html === null
+        ? `<pre class="body">${escapeHtml(email.text)}</pre>`
+        : `<details><summary>Plain text</summary><pre class="body">${escapeHtml(email.text)}</pre></details>`,
+    );
+  }
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(email.subject)}</title>
+<style>
+:root { color-scheme: light dark; }
+body { margin: 0; padding: 16px; font: 14px/1.5 system-ui, sans-serif; display: flex; flex-direction: column; gap: 12px; min-height: calc(100vh - 32px); box-sizing: border-box; }
+.notice { margin: 0; opacity: 0.7; }
+dl { margin: 0; display: grid; gap: 4px; }
+.row { display: flex; gap: 8px; }
+dt { width: 72px; flex-shrink: 0; opacity: 0.7; }
+dd { margin: 0; overflow-wrap: anywhere; }
+.body { border: 1px solid #8884; border-radius: 8px; }
+iframe.body { flex: 1; min-height: 480px; width: 100%; background: #fff; }
+pre.body { margin: 0; padding: 12px; white-space: pre-wrap; font: inherit; }
+</style>
+</head>
+<body>
+<p class="notice">Preview: the ${escapeHtml(email.carrier)} carrier sent this at ${escapeHtml(new Date(email.sentAt).toLocaleTimeString())}. Nothing was delivered.</p>
+<dl>
+${row("From", email.from ?? "Your site's first email address")}
+${row("To", email.to.join(", "))}
+${email.replyTo ? row("Reply-To", email.replyTo) : ""}
+${row("Subject", email.subject)}
+</dl>
+${parts.join("\n")}
+</body>
+</html>
+`;
+};
+
+const emailResponse = (id) => {
+  const email = emails.get(id);
+  if (!email) {
+    return new Response(
+      "This email is gone: it was kept only while archival run was running.",
+      { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } },
+    );
+  }
+  return new Response(emailPage(email), {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "content-security-policy":
+        "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src * data:; font-src * data:; frame-src 'self'",
+      "cache-control": "no-store",
+    },
+  });
+};
 
 // What a deployed site's database refuses a request for, before it runs one.
 const SQL_MAX_STATEMENTS = 100;
@@ -459,7 +660,7 @@ const CARRIER_CALLS = new Map([
   ],
   [
     2,
-    (carrier, params, body, current) =>
+    (carrier, params, body, current, name) =>
       carrier(
         params,
         body,
@@ -467,7 +668,7 @@ const CARRIER_CALLS = new Map([
         Object.freeze({
           url: current.siteUrl,
           uploads: makeUploads("site.uploads", current),
-          email: makeEmail("site.email"),
+          email: makeEmail("site.email", name),
           sql: makeSql("site.sql", current.database),
           activitypub: makeActivityPub("site.activitypub"),
           webmentions: makeWebmentions("site.webmentions"),
@@ -503,9 +704,20 @@ export const carrierApiVersion = (packageJson) => {
   return version;
 };
 
-/** Calls a carrier `buildAndLoad` answered with a request, against `current`. */
-export const invokeCarrier = ({ carrier, api }, params, body, current) =>
-  CARRIER_CALLS.get(api)(carrier, params, body, current);
+/**
+ * Calls a carrier `buildAndLoad` answered with a request, against `current`.
+ * `name` is the carrier's directory, which an email it sends names.
+ */
+export const invokeCarrier = (
+  { carrier, api },
+  params,
+  body,
+  current,
+  name = "carrier",
+) => CARRIER_CALLS.get(api)(carrier, params, body, current, name);
+
+/** An email a carrier sent while this process has run, as its page serves it. */
+export const sentEmail = (id) => emails.get(id);
 
 const readBody = (req) =>
   new Promise((resolve, reject) => {
@@ -637,7 +849,9 @@ const runCarrier = async (name, req, body) => {
       [["content-type", req.headers["content-type"] || ""]],
       body,
     );
-    return toResponse(await invokeCarrier(loaded, params, parsed, state));
+    return toResponse(
+      await invokeCarrier(loaded, params, parsed, state, name),
+    );
   } catch (e) {
     return new Response("Carrier threw an error: " + e, { status: 500 });
   }
@@ -684,6 +898,10 @@ const server = http.createServer(async (req, res) => {
         return send(res, Response.json({ ok: true }));
       }
       return send(res, new Response("Not Found", { status: 404 }));
+    }
+    const email = EMAIL_PATH.exec(path);
+    if (email && req.method === "GET") {
+      return send(res, emailResponse(email[1]));
     }
     const route = CARRIER_ROUTE.exec(path);
     if (!route) {
