@@ -910,6 +910,9 @@ impl FieldValue {
             serde_json::Value::String(s) => Ok(Some(match field_type {
                 FieldType::Markdown => FieldValue::Markdown(s.to_string()),
                 FieldType::Secret => FieldValue::Secret(s.to_string()),
+                FieldType::Date | FieldType::Enum(_) | FieldType::Number | FieldType::Boolean => {
+                    FieldValue::from_string(&parent_path.to_string(), field_type, s.to_string())?
+                }
                 _ => FieldValue::String(s.to_string()),
             })),
             serde_json::Value::Bool(b) => Ok(Some(FieldValue::Boolean(*b))),
@@ -1467,6 +1470,58 @@ pub mod json_parsing_tests {
         name = "link"
         type = "string"
         "#
+    }
+
+    /// A JSON string on a typed field is read by that field's parser, so the
+    /// value validates against the definition it came from.
+    #[test]
+    fn a_json_string_is_read_by_the_field_type() {
+        let definitions = ObjectDefinition::from_source(
+            "[season]\nstarts = \"date\"\nlanes = \"number\"\nopen = \"boolean\"\nmood = [\"calm\", \"loud\"]\nnote = \"string\"\n",
+            &OrderMap::new(),
+        )
+        .unwrap();
+        let def = definitions.get("season").unwrap();
+        let parse = |field: &str, value: Value| {
+            let path = ValuePath::from_string(field);
+            let value = FieldValue::from_json(&value, &path, def)
+                .map_err(|e| e.to_string())?
+                .expect("the field exists");
+            value
+                .validate(&path, def, &OrderMap::new())
+                .map_err(|e| e.to_string())?;
+            Ok::<_, String>(value)
+        };
+        for text in [
+            "2026-05-18",
+            "5/18/26",
+            "2026-05-18 14:30:00",
+            "2026-08-10T00:00:00.0",
+            "2026-08-10T00:00:00Z",
+            "2026-08-10T00:00:00-07:00",
+        ] {
+            let value = parse("starts", json!(text)).unwrap_or_else(|e| panic!("{text}: {e}"));
+            assert!(matches!(value, FieldValue::Date(_)), "{text}: {value:?}");
+        }
+        assert!(parse("starts", json!("next tuesday")).is_err());
+        assert_eq!(
+            parse("mood", json!("calm")).unwrap(),
+            FieldValue::Enum("calm".to_string())
+        );
+        assert!(parse("mood", json!("angry")).is_err());
+        assert_eq!(
+            parse("lanes", json!("12")).unwrap(),
+            FieldValue::Number(12.0)
+        );
+        assert_eq!(parse("lanes", json!(12)).unwrap(), FieldValue::Number(12.0));
+        assert_eq!(
+            parse("open", json!("true")).unwrap(),
+            FieldValue::Boolean(true)
+        );
+        assert_eq!(
+            parse("note", json!("5/18/26")).unwrap(),
+            FieldValue::String("5/18/26".to_string())
+        );
     }
 
     #[traced_test]
